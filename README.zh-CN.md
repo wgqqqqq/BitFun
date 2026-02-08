@@ -23,6 +23,7 @@ AI时代，我们相信人机协同需要一种全新的软件形态。而当下
 
 BitFun 是一款代理式开发环境（ADE，Agentic Development Environment），在拥有前沿Code Agent体系的同时我们更希望深度探索并定义人机协作方式，并以Rust + TypeScript希望提供极致轻巧、流畅的体验。
 
+![BitFun](./png/first_screen_screenshot-zh-CN.png)
 
 ### 工作模式
 

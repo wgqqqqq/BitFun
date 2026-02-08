@@ -23,6 +23,8 @@ In the age of AI, we believe human–machine collaboration needs a fundamentally
 
 BitFun is an Agentic Development Environment (ADE). While featuring a cutting-edge Code Agent system, we are more committed to deeply exploring and defining human–machine collaboration patterns, built with Rust + TypeScript for an ultra-lightweight and fluid experience.
 
+![BitFun](./png/first_screen_screenshot.png)
+
 
 ### Working Modes
 
