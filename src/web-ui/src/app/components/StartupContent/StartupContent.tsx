@@ -30,7 +30,6 @@ const log = createLogger('StartupContent');
 
 interface StartupContentProps {
   onWorkspaceSelected: (workspacePath: string, projectDescription?: string) => void;
-  onOpenCowork: () => void;
   isTransitioning?: boolean;
 }
 
@@ -40,7 +39,6 @@ interface StartupContentProps {
  */
 const StartupContent: React.FC<StartupContentProps> = ({ 
   onWorkspaceSelected,
-  onOpenCowork,
   isTransitioning = false
 }) => {
   const { t } = useTranslation();
@@ -239,16 +237,6 @@ const StartupContent: React.FC<StartupContentProps> = ({
                   <Plus size={18} />
                   <span>{isSelecting ? t('startup.selecting') : t('startup.openFolder')}</span>
                 </button>
-
-                <button
-                  className="startup-content__open-btn startup-content__open-btn--cowork"
-                  onClick={onOpenCowork}
-                  disabled={loading}
-                  data-testid="startup-open-cowork-btn"
-                >
-                  <ChevronRight size={18} />
-                  <span>Cowork</span>
-                </button>
               </div>
             )}
 
@@ -338,16 +326,6 @@ const StartupContent: React.FC<StartupContentProps> = ({
                   <Plus size={16} />
                   <span>{isSelecting ? t('startup.selecting') : t('startup.openFolder')}</span>
                 </button>
-
-                <button
-                  className="startup-content__empty-btn startup-content__empty-btn--cowork"
-                  onClick={onOpenCowork}
-                  disabled={loading}
-                  data-testid="startup-open-cowork-btn"
-                >
-                  <ChevronRight size={16} />
-                  <span>Cowork</span>
-                </button>
               </div>
             )}
             
@@ -360,3 +338,4 @@ const StartupContent: React.FC<StartupContentProps> = ({
 
 export default StartupContent;
 export { StartupContent };
+

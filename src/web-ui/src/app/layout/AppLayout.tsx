@@ -22,7 +22,6 @@ import { ChatInput, ToolbarMode, useToolbarModeContext } from '../../flow_chat';
 import { appManager } from '../';
 import { createLogger } from '@/shared/utils/logger';
 import { useI18n } from '@/infrastructure/i18n';
-import { CoworkLauncher } from '@/tools/cowork';
 import './AppLayout.scss';
 
 const log = createLogger('AppLayout');
@@ -56,9 +55,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({
   const [isTransitioning, setIsTransitioning] = useState(false);
   // Header sweep effect state
   const [isSweepGlowing, setIsSweepGlowing] = useState(false);
-
-  const [startupView, setStartupView] = useState<'home' | 'cowork'>('home');
-  const [isCoworkModalOpen, setIsCoworkModalOpen] = useState(false);
   
   // Handle workspace selection
   const handleWorkspaceSelected = useCallback(async (workspacePath: string, projectDescription?: string) => {
@@ -108,14 +104,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({
       });
     }
   }, [openWorkspace, isAgenticMode, t]);
-
-  const handleOpenCowork = useCallback(() => {
-    if (hasWorkspace) {
-      setIsCoworkModalOpen(true);
-      return;
-    }
-    setStartupView('cowork');
-  }, [hasWorkspace]);
 
   // Initialize FlowChatManager: load history or create a default session
   React.useEffect(() => {
@@ -397,7 +385,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({
         onMaximize={handleMaximize}
         onClose={handleClose}
         onHome={handleHomeClick}
-        onOpenCowork={handleOpenCowork}
         onToggleLeftPanel={toggleLeftPanel}
         onToggleRightPanel={toggleRightPanel}
         leftPanelCollapsed={state.layout.leftPanelCollapsed}
@@ -414,17 +401,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({
           <WorkspaceLayout isEntering={isTransitioning || className.includes('page-entering') || className.includes('panels-sliding')} />
         ) : (
           // Without workspace: show startup content
-          startupView === 'cowork' ? (
-            <div className="bitfun-app-startup-cowork">
-              <CoworkLauncher variant="page" onBack={() => setStartupView('home')} />
-            </div>
-          ) : (
-            <StartupContent 
-              onWorkspaceSelected={handleWorkspaceSelected}
-              onOpenCowork={() => setStartupView('cowork')}
-              isTransitioning={isTransitioning}
-            />
-          )
+          <StartupContent 
+            onWorkspaceSelected={handleWorkspaceSelected}
+            isTransitioning={isTransitioning}
+          />
         )}
       </main>
 
@@ -443,12 +423,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({
           }}
         />
       )}
-
-      <CoworkLauncher
-        variant="modal"
-        isOpen={isCoworkModalOpen}
-        onClose={() => setIsCoworkModalOpen(false)}
-      />
     </div>
   );
 };
