@@ -6,7 +6,6 @@
 import { FlowChatStore } from '../../store/FlowChatStore';
 import { agentAPI } from '@/infrastructure/api';
 import { CoworkAPI } from '@/infrastructure/api/service-api/CoworkAPI';
-import { workspaceAPI } from '@/infrastructure/api';
 import { aiExperienceConfigService } from '@/infrastructure/config/services';
 import { notificationService } from '../../../shared/notification-system';
 import { stateMachineManager } from '../../state-machine';
@@ -45,19 +44,6 @@ interface CoworkEventLike {
 
 const COWORK_TEXT_SOURCE = 'cowork-main';
 
-interface CoworkMainSummary {
-  coworkSessionId?: string;
-  sessionState?: string;
-  phaseHint?: string;
-  completed: number;
-  total: number;
-  runningTitles: string[];
-  queuedTitles: string[];
-  failedTitles: string[];
-  waitingTaskId?: string | null;
-  questions?: string[];
-}
-
 function openCoworkDagTab(coworkSessionId: string): void {
   const tabInfo = {
     type: 'cowork-dag',
@@ -87,7 +73,6 @@ function buildCoworkMainText(args: {
     completed: number;
     total: number;
     runningTitles: string[];
-    queuedTitles: string[];
     failedTitles: string[];
   };
   tasks?: Array<{ title?: string; assignee?: string }>;
@@ -100,11 +85,6 @@ function buildCoworkMainText(args: {
   lines.push('## Cowork');
   lines.push('');
 
-  if (args.phaseHint) {
-    lines.push(`> ${args.phaseHint}`);
-    lines.push('');
-  }
-
   if (args.progress && args.progress.total > 0) {
     lines.push(`Completed **${args.progress.completed}/${args.progress.total}** tasks.`);
     lines.push('');
@@ -113,12 +93,6 @@ function buildCoworkMainText(args: {
   if (args.progress?.runningTitles?.length) {
     lines.push('### In Progress');
     lines.push(...args.progress.runningTitles.slice(0, 2).map(t => `- ${t}`));
-    lines.push('');
-  }
-
-  if (args.progress?.queuedTitles?.length) {
-    lines.push('### Up Next');
-    lines.push(...args.progress.queuedTitles.slice(0, 2).map(t => `- ${t}`));
     lines.push('');
   }
 
@@ -167,8 +141,7 @@ function upsertCoworkMainText(
   dialogTurnId: string,
   roundId: string,
   markdown: string,
-  status: FlowTextItem['status'],
-  summary?: CoworkMainSummary
+  status: FlowTextItem['status']
 ): void {
   const rt = getCoworkRuntime(flowChatSessionId);
   if (!rt) return;
@@ -181,7 +154,7 @@ function upsertCoworkMainText(
       status,
       isStreaming: false,
       isMarkdown: true,
-      metadata: { source: COWORK_TEXT_SOURCE, coworkSummary: summary },
+      metadata: { source: COWORK_TEXT_SOURCE },
       timestamp: Date.now(),
     } as any);
     return;
@@ -200,7 +173,7 @@ function upsertCoworkMainText(
       isMarkdown: true,
       timestamp: Date.now(),
       status,
-      metadata: { source: COWORK_TEXT_SOURCE, coworkSummary: summary },
+      metadata: { source: COWORK_TEXT_SOURCE },
     } as any,
     roundId
   );
@@ -248,7 +221,6 @@ function getCoworkProgress(runtime: ReturnType<typeof getCoworkRuntime>) {
 
   let completed = 0;
   const runningTitles: string[] = [];
-  const queuedTitles: string[] = [];
   const failedTitles: string[] = [];
 
   for (const taskId of taskIds) {
@@ -258,13 +230,10 @@ function getCoworkProgress(runtime: ReturnType<typeof getCoworkRuntime>) {
     if (state === 'completed') {
       completed += 1;
     }
-    if (state === 'running') {
+    if (state === 'running' || state === 'ready') {
       runningTitles.push(title);
     }
-    if (state === 'ready' || state === 'draft') {
-      queuedTitles.push(title);
-    }
-    if (state === 'failed' || state === 'blocked') {
+    if (state === 'failed') {
       failedTitles.push(title);
     }
   }
@@ -273,7 +242,6 @@ function getCoworkProgress(runtime: ReturnType<typeof getCoworkRuntime>) {
     completed,
     total,
     runningTitles,
-    queuedTitles,
     failedTitles,
   };
 }
@@ -305,7 +273,7 @@ function upsertCoworkTaskCard(
   };
 
   const mappedStatus =
-    taskState === 'failed' || taskState === 'error' || taskState === 'blocked'
+    taskState === 'failed' || taskState === 'error'
       ? 'error'
       : taskState === 'cancelled'
         ? 'cancelled'
@@ -329,7 +297,7 @@ function upsertCoworkTaskCard(
       },
     },
     toolResult:
-      taskState === 'completed' || taskState === 'failed' || taskState === 'error' || taskState === 'blocked'
+      taskState === 'completed' || taskState === 'failed' || taskState === 'error'
         ? {
             success: taskState === 'completed',
             result: {
@@ -570,13 +538,7 @@ async function sendCoworkMessage(
       progress: getCoworkProgress(runtimeAfterInit),
       phaseHint: 'Initializing…',
     }),
-    'running',
-    {
-      coworkSessionId: runtimeAfterInit?.coworkSessionId,
-      sessionState: runtimeAfterInit?.sessionState,
-      phaseHint: 'Initializing…',
-      ...getCoworkProgress(runtimeAfterInit),
-    }
+    'running'
   );
 
   // If we are currently waiting for HITL, treat this message as answers submission.
@@ -598,15 +560,7 @@ async function sendCoworkMessage(
         phaseHint: `Submitting answers for \`${existing.waitingTaskId}\`…`,
         progress: getCoworkProgress(existing),
       }),
-      'running',
-      {
-        coworkSessionId: existing.coworkSessionId,
-        sessionState: existing.sessionState || 'running',
-        phaseHint: `Submitting answers for \`${existing.waitingTaskId}\`…`,
-        waitingTaskId: existing.waitingTaskId,
-        questions: existing.waitingQuestions,
-        ...getCoworkProgress(existing),
-      }
+      'running'
     );
     await CoworkAPI.submitUserInput(existing.coworkSessionId, existing.waitingTaskId, answers);
     const resumedRuntime = {
@@ -630,13 +584,7 @@ async function sendCoworkMessage(
         phaseHint: 'Answers submitted. Continuing…',
         progress: getCoworkProgress(resumedRuntime as any),
       }),
-      'running',
-      {
-        coworkSessionId: existing.coworkSessionId,
-        sessionState: 'running',
-        phaseHint: 'Answers submitted. Continuing…',
-        ...getCoworkProgress(resumedRuntime as any),
-      }
+      'running'
     );
     context.flowChatStore.updateDialogTurn(flowChatSessionId, dialogTurnId, turn => ({
       ...turn,
@@ -649,21 +597,7 @@ async function sendCoworkMessage(
   }
 
   // Start a new cowork session for this message.
-  const { coworkSessionId, workspaceRoot } = await CoworkAPI.createSession({ goal: rawMessage });
-
-  if (workspaceRoot) {
-    try {
-      await workspaceAPI.openWorkspace(workspaceRoot);
-    } catch (e: any) {
-      const message = e instanceof Error ? e.message : String(e);
-      notificationService.error(message, {
-        title: 'Failed to open Cowork workspace',
-        duration: 6000,
-      });
-      throw e;
-    }
-  }
-
+  const { coworkSessionId } = await CoworkAPI.createSession({ goal: rawMessage });
   setCoworkRuntime(flowChatSessionId, {
     coworkSessionId,
     goal: displayMessage,
@@ -690,19 +624,9 @@ async function sendCoworkMessage(
       coworkSessionId,
       sessionState: 'draft',
       phaseHint: 'Generating plan…',
-      progress: { completed: 0, total: 0, runningTitles: [], queuedTitles: [], failedTitles: [] },
+      progress: { completed: 0, total: 0, runningTitles: [], failedTitles: [] },
     }),
-    'running',
-    {
-      coworkSessionId,
-      sessionState: 'draft',
-      phaseHint: 'Generating plan…',
-      completed: 0,
-      total: 0,
-      runningTitles: [],
-      queuedTitles: [],
-      failedTitles: [],
-    }
+    'running'
   );
 
   // Register listeners: append cowork events into the *root* dialog turn.
@@ -787,13 +711,7 @@ async function sendCoworkMessage(
         phaseHint: 'Plan ready. Starting execution…',
         progress,
       }),
-      'completed',
-      {
-        coworkSessionId,
-        sessionState: 'ready',
-        phaseHint: 'Plan ready. Starting execution…',
-        ...progress,
-      }
+      'completed'
     );
   };
 
@@ -921,15 +839,7 @@ async function sendCoworkMessage(
           progress: getCoworkProgress(updatedRt as any),
           phaseHint: updatedRt.sessionState === 'running' ? 'Executing…' : undefined,
         }),
-        'running',
-        {
-          coworkSessionId,
-          sessionState: updatedRt.sessionState || 'running',
-          phaseHint: updatedRt.sessionState === 'running' ? 'Executing…' : undefined,
-          waitingTaskId: updatedRt.waitingTaskId,
-          questions: updatedRt.waitingQuestions,
-          ...getCoworkProgress(updatedRt as any),
-        }
+        'running'
       );
     }),
     CoworkAPI.onTaskOutput((p: CoworkEventLike) => {
@@ -999,15 +909,7 @@ async function sendCoworkMessage(
           progress: getCoworkProgress(updatedRt as any),
           phaseHint: updatedRt.sessionState === 'running' ? 'Executing…' : undefined,
         }),
-        'running',
-        {
-          coworkSessionId,
-          sessionState: updatedRt.sessionState || 'running',
-          phaseHint: updatedRt.sessionState === 'running' ? 'Executing…' : undefined,
-          waitingTaskId: updatedRt.waitingTaskId,
-          questions: updatedRt.waitingQuestions,
-          ...getCoworkProgress(updatedRt as any),
-        }
+        'running'
       );
     }),
     CoworkAPI.onNeedsUserInput((p: CoworkEventLike) => {
@@ -1073,15 +975,7 @@ async function sendCoworkMessage(
           progress: getCoworkProgress(updatedRt),
           phaseHint: 'Waiting for your reply in chat…',
         }),
-        'pending_confirmation',
-        {
-          coworkSessionId,
-          sessionState: updatedRt?.sessionState || 'running',
-          phaseHint: 'Waiting for your reply in chat…',
-          waitingTaskId: p.taskId || null,
-          questions: qs,
-          ...getCoworkProgress(updatedRt),
-        }
+        'pending_confirmation'
       );
 
       notificationService.info('Cowork needs your input. Please reply in chat to continue.', {
@@ -1123,15 +1017,7 @@ async function sendCoworkMessage(
             progress: getCoworkProgress(updatedRt as any),
             phaseHint: st === 'running' ? 'Executing…' : st === 'planning' ? 'Planning…' : undefined,
           }),
-          textStatus,
-          {
-            coworkSessionId,
-            sessionState: st,
-            phaseHint: st === 'running' ? 'Executing…' : st === 'planning' ? 'Planning…' : undefined,
-            waitingTaskId: updatedRt.waitingTaskId,
-            questions: updatedRt.waitingQuestions,
-            ...getCoworkProgress(updatedRt as any),
-          }
+          textStatus
         );
       }
       if (st === 'completed') finalizeRoot(true);

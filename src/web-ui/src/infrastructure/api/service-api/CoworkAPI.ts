@@ -11,7 +11,7 @@ export interface CoworkCreateSessionPayload {
 }
 
 export const CoworkAPI = {
-  async createSession(payload: CoworkCreateSessionPayload): Promise<{ coworkSessionId: string; workspaceRoot?: string | null }> {
+  async createSession(payload: CoworkCreateSessionPayload): Promise<{ coworkSessionId: string }> {
     return api.invoke('cowork_create_session', {
       request: payload,
     });
@@ -71,3 +71,4 @@ export const CoworkAPI = {
     return api.listen('cowork://needs-user-input', callback);
   },
 };
+
