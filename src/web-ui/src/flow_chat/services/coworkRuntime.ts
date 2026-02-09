@@ -10,18 +10,32 @@
 export interface CoworkRuntimeInfo {
   coworkSessionId: string;
   rootDialogTurnId: string;
+  goal?: string;
   waitingTaskId?: string | null;
+  waitingQuestions?: string[];
   mainTextItemId?: string;
+  sessionState?: string;
   rosterById?: Record<string, { role: string; subagentType?: string; agentType?: string }>;
   taskToolItemIds?: Record<string, string>;
   taskMetaById?: Record<string, { title: string; description: string; assignee: string }>;
+  taskStateById?: Record<string, string>;
+  taskOrder?: string[];
   unsubscribers?: Array<() => void>;
 }
 
 const runtimes = new Map<string, CoworkRuntimeInfo>();
 
 export function setCoworkRuntime(flowChatSessionId: string, info: CoworkRuntimeInfo): void {
-  runtimes.set(flowChatSessionId, info);
+  const existing = runtimes.get(flowChatSessionId);
+  if (!existing) {
+    runtimes.set(flowChatSessionId, info);
+    return;
+  }
+
+  runtimes.set(flowChatSessionId, {
+    ...existing,
+    ...info,
+  });
 }
 
 export function getCoworkRuntime(flowChatSessionId: string): CoworkRuntimeInfo | undefined {
