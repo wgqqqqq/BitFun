@@ -8,6 +8,7 @@ import { Button, Textarea, IconButton } from '@/component-library';
 import { PanelHeader } from '@/app/components/panels/base';
 import { createLogger } from '@/shared/utils/logger';
 import { CoworkAPI } from '@/infrastructure/api/service-api/CoworkAPI';
+import { workspaceAPI } from '@/infrastructure/api';
 import { useCoworkStore } from '../../store/coworkStore';
 import type { CoworkTask } from '../../types';
 import { Play, Pause, XCircle, RefreshCw, Save } from 'lucide-react';
@@ -65,6 +66,9 @@ const CoworkPanel: React.FC<{ isActive?: boolean; className?: string }> = ({ isA
     setError(null);
     try {
       const resp = await CoworkAPI.createSession({ goal: goalInput.trim(), roster });
+      if (resp.workspaceRoot) {
+        await workspaceAPI.openWorkspace(resp.workspaceRoot);
+      }
       applySessionCreated({ coworkSessionId: resp.coworkSessionId, goal: goalInput.trim(), roster });
     } catch (e) {
       log.error('Failed to create cowork session', { error: e });

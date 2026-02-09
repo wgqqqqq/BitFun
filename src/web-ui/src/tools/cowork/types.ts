@@ -18,6 +18,8 @@ export type CoworkTaskState =
   | 'failed'
   | 'cancelled';
 
+export type CoworkTaskResourceMode = 'read_only' | 'workspace_write';
+
 export type CoworkAgentType =
   | 'coordinator_agent'
   | 'task_agent'
@@ -44,6 +46,7 @@ export interface CoworkTask {
   deps: string[];
   assignee: string;
   state: CoworkTaskState;
+  resourceMode?: CoworkTaskResourceMode;
   questions: string[];
   userAnswers: string[];
   outputText: string;
@@ -59,6 +62,7 @@ export interface CoworkSession {
   goal: string;
   state: CoworkSessionState;
   roster: CoworkRosterMember[];
+  workspaceRoot?: string | null;
   taskOrder: string[];
   tasks: CoworkTask[];
   createdAtMs: number;
