@@ -5,22 +5,11 @@ use crate::api::dto::WorkspaceInfoDto;
 use bitfun_core::infrastructure::{file_watcher, FileOperationOptions, SearchMatchType};
 use log::{debug, error, info, warn};
 use serde::Deserialize;
-use std::collections::HashMap;
 use tauri::State;
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OpenWorkspaceOptionsRequest {
-    pub add_to_recent: Option<bool>,
-    pub persist: Option<bool>,
-    pub metadata: Option<HashMap<String, serde_json::Value>>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct OpenWorkspaceRequest {
     pub path: String,
-    pub options: Option<OpenWorkspaceOptionsRequest>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -395,22 +384,9 @@ pub async fn open_workspace(
     app: tauri::AppHandle,
     request: OpenWorkspaceRequest,
 ) -> Result<WorkspaceInfoDto, String> {
-    let mut options = bitfun_core::service::workspace::manager::OpenWorkspaceOptions::default();
-    if let Some(o) = request.options {
-        if let Some(add_to_recent) = o.add_to_recent {
-            options.add_to_recent = add_to_recent;
-        }
-        if let Some(persist) = o.persist {
-            options.persist = persist;
-        }
-        if let Some(metadata) = o.metadata {
-            options.metadata = metadata;
-        }
-    }
-
     match state
         .workspace_service
-        .open_workspace_with_options(request.path.clone().into(), options)
+        .open_workspace(request.path.clone().into())
         .await
     {
         Ok(workspace_info) => {

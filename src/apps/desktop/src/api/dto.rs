@@ -36,7 +36,6 @@ pub struct WorkspaceInfoDto {
     pub description: Option<String>,
     pub tags: Vec<String>,
     pub statistics: Option<ProjectStatisticsDto>,
-    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 impl WorkspaceInfoDto {
@@ -57,7 +56,6 @@ impl WorkspaceInfoDto {
                 .statistics
                 .as_ref()
                 .map(ProjectStatisticsDto::from_workspace_statistics),
-            metadata: info.metadata.clone(),
         }
     }
 }

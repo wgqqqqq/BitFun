@@ -8,28 +8,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
-/// Options for opening a workspace.
-#[derive(Debug, Clone)]
-pub struct OpenWorkspaceOptions {
-    /// Whether to add this workspace to the recent-workspaces list.
-    pub add_to_recent: bool,
-    /// Whether to persist this workspace in workspace history.
-    /// Note: The manager does not handle persistence directly; this flag is used by the service layer.
-    pub persist: bool,
-    /// Arbitrary metadata to attach to the workspace record.
-    pub metadata: HashMap<String, serde_json::Value>,
-}
-
-impl Default for OpenWorkspaceOptions {
-    fn default() -> Self {
-        Self {
-            add_to_recent: true,
-            persist: true,
-            metadata: HashMap::new(),
-        }
-    }
-}
-
 /// Workspace type.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum WorkspaceType {
@@ -459,16 +437,6 @@ impl WorkspaceManager {
 
     /// Opens a workspace.
     pub async fn open_workspace(&mut self, path: PathBuf) -> BitFunResult<WorkspaceInfo> {
-        self.open_workspace_with_options(path, OpenWorkspaceOptions::default())
-            .await
-    }
-
-    /// Opens a workspace with options.
-    pub async fn open_workspace_with_options(
-        &mut self,
-        path: PathBuf,
-        options: OpenWorkspaceOptions,
-    ) -> BitFunResult<WorkspaceInfo> {
         if !path.exists() {
             return Err(BitFunError::service(format!(
                 "Workspace path does not exist: {:?}",
@@ -490,24 +458,16 @@ impl WorkspaceManager {
             .map(|w| w.id.clone());
 
         if let Some(workspace_id) = existing_workspace_id {
-            self.set_current_workspace_with_options(workspace_id.clone(), options.add_to_recent)?;
-            if !options.metadata.is_empty() {
-                if let Some(workspace) = self.workspaces.get_mut(&workspace_id) {
-                    workspace.metadata.extend(options.metadata);
-                }
-            }
+            self.set_current_workspace(workspace_id.clone())?;
             return Ok(self.workspaces.get(&workspace_id).unwrap().clone());
         }
 
-        let mut workspace = WorkspaceInfo::new(path, ScanOptions::default()).await?;
-        if !options.metadata.is_empty() {
-            workspace.metadata.extend(options.metadata);
-        }
+        let workspace = WorkspaceInfo::new(path, ScanOptions::default()).await?;
         let workspace_id = workspace.id.clone();
 
         self.workspaces
             .insert(workspace_id.clone(), workspace.clone());
-        self.set_current_workspace_with_options(workspace_id.clone(), options.add_to_recent)?;
+        self.set_current_workspace(workspace_id.clone())?;
 
         Ok(workspace)
     }
@@ -537,15 +497,6 @@ impl WorkspaceManager {
 
     /// Sets the current workspace.
     pub fn set_current_workspace(&mut self, workspace_id: String) -> BitFunResult<()> {
-        self.set_current_workspace_with_options(workspace_id, true)
-    }
-
-    /// Sets the current workspace, optionally updating the recent-workspaces list.
-    pub fn set_current_workspace_with_options(
-        &mut self,
-        workspace_id: String,
-        add_to_recent: bool,
-    ) -> BitFunResult<()> {
         if !self.workspaces.contains_key(&workspace_id) {
             return Err(BitFunError::service(format!(
                 "Workspace not found: {}",
@@ -560,9 +511,7 @@ impl WorkspaceManager {
 
         self.current_workspace_id = Some(workspace_id.clone());
 
-        if add_to_recent {
-            self.update_recent_workspaces(workspace_id);
-        }
+        self.update_recent_workspaces(workspace_id);
 
         Ok(())
     }
