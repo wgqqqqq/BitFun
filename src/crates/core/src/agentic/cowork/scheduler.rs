@@ -399,7 +399,11 @@ fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         return s.to_string();
     }
-    format!("{}...\n[truncated]", &s[..max])
+    let mut cut = std::cmp::min(max, s.len());
+    while cut > 0 && !s.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    format!("{}...\n[truncated]", &s[..cut])
 }
 
 async fn emit_task_state_changed(cowork_session_id: &str, task: &CoworkTask) {
