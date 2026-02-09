@@ -381,7 +381,7 @@ pub async fn update_app_status(
 #[tauri::command]
 pub async fn open_workspace(
     state: State<'_, AppState>,
-    _app: tauri::AppHandle,
+    app: tauri::AppHandle,
     request: OpenWorkspaceRequest,
 ) -> Result<WorkspaceInfoDto, String> {
     match state
@@ -453,7 +453,7 @@ pub async fn open_workspace(
 #[tauri::command]
 pub async fn close_workspace(
     state: State<'_, AppState>,
-    _app: tauri::AppHandle,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
     match state.workspace_service.close_workspace("default").await {
         Ok(_) => {

@@ -6,6 +6,8 @@ pub mod logging;
 pub mod macos_menubar;
 pub mod theme;
 
+use tauri::Emitter;
+
 use bitfun_core::infrastructure::ai::AIClientFactory;
 use bitfun_core::infrastructure::{
     get_path_manager_arc,

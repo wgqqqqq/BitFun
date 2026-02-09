@@ -43,7 +43,7 @@ pub async fn i18n_get_current_language(
 #[tauri::command]
 pub async fn i18n_set_language(
     state: State<'_, AppState>,
-    _app: tauri::AppHandle,
+    app: tauri::AppHandle,
     request: SetLanguageRequest,
 ) -> Result<String, String> {
     let supported = vec!["zh-CN", "en-US"];
