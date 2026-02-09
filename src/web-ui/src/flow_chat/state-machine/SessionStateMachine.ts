@@ -236,11 +236,25 @@ export class SessionStateMachineImpl {
       const sessionId = this.context.taskId;
       const dialogTurnId = this.context.currentDialogTurnId;
       const session = flowChatStore.getState().sessions.get(this.sessionId);
+      const mode = session?.mode;
       
       try {
-        const { agentAPI } = await import('@/infrastructure/api');
-        await agentAPI.cancelDialogTurn(sessionId, dialogTurnId);
-        log.debug('Backend cancellation completed', { sessionId, dialogTurnId });
+        if (mode === 'cowork') {
+          const { getCoworkRuntime, clearCoworkRuntime } = await import('@/flow_chat/services/coworkRuntime');
+          const { CoworkAPI } = await import('@/infrastructure/api/service-api/CoworkAPI');
+          const rt = getCoworkRuntime(this.sessionId);
+          if (rt?.coworkSessionId) {
+            await CoworkAPI.cancel(rt.coworkSessionId);
+            clearCoworkRuntime(this.sessionId);
+            log.debug('Cowork cancellation completed', { sessionId: this.sessionId, coworkSessionId: rt.coworkSessionId });
+          } else {
+            log.debug('Cowork cancellation skipped (no runtime)', { sessionId: this.sessionId });
+          }
+        } else {
+          const { agentAPI } = await import('@/infrastructure/api');
+          await agentAPI.cancelDialogTurn(sessionId, dialogTurnId);
+          log.debug('Backend cancellation completed', { sessionId, dialogTurnId });
+        }
       } catch (error) {
         log.error('Backend cancellation failed', { sessionId, dialogTurnId, error });
       }
@@ -289,3 +303,4 @@ export class SessionStateMachineImpl {
     this.notifyListeners();
   }
 }
+
