@@ -7,16 +7,13 @@ use crate::util::errors::{BitFunError, BitFunResult};
 use dashmap::DashMap;
 use log::{debug, warn};
 use std::sync::{Arc, OnceLock};
-use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone)]
 struct CoworkRuntime {
     cancel_token: CancellationToken,
-    /// Ensures only one scheduler loop is running per session.
-    scheduler_running: Arc<AtomicBool>,
-    /// Serializes start/stop state transitions (best-effort).
+    /// Ensures only one scheduler is running per session.
     scheduler_lock: Arc<Mutex<()>>,
 }
 
@@ -91,7 +88,6 @@ impl CoworkManager {
             goal: req.goal,
             state: CoworkSessionState::Draft,
             roster,
-            workspace_root: None,
             task_order: vec![],
             tasks: vec![],
             created_at_ms: now,
@@ -103,7 +99,6 @@ impl CoworkManager {
             cowork_session_id.clone(),
             CoworkRuntime {
                 cancel_token: CancellationToken::new(),
-                scheduler_running: Arc::new(AtomicBool::new(false)),
                 scheduler_lock: Arc::new(Mutex::new(())),
             },
         );
@@ -119,26 +114,7 @@ impl CoworkManager {
         )
         .await;
 
-        Ok(CoworkCreateSessionResponse {
-            cowork_session_id: session.cowork_session_id,
-            workspace_root: None,
-        })
-    }
-
-    pub async fn set_session_workspace_root(
-        &self,
-        cowork_session_id: &str,
-        workspace_root: String,
-    ) -> BitFunResult<()> {
-        let now = chrono::Utc::now().timestamp_millis();
-        let mut session_ref = self
-            .sessions
-            .get_mut(cowork_session_id)
-            .ok_or_else(|| BitFunError::NotFound(format!("Cowork session not found: {}", cowork_session_id)))?;
-        let session = session_ref.value_mut();
-        session.workspace_root = Some(workspace_root);
-        session.updated_at_ms = now;
-        Ok(())
+        Ok(CoworkCreateSessionResponse { cowork_session_id: session.cowork_session_id })
     }
 
     pub async fn generate_plan(
@@ -191,16 +167,6 @@ impl CoworkManager {
                 let id = format!("task-{}-{}", idx + 1, uuid::Uuid::new_v4());
                 let assignee = resolve_assignee(&session.roster, t.assignee_role.as_deref())
                     .unwrap_or_else(|| "developer".to_string());
-                let resource_mode = match t
-                    .resource_mode
-                    .as_deref()
-                    .unwrap_or("workspace_write")
-                    .to_lowercase()
-                    .as_str()
-                {
-                    "read_only" | "readonly" | "read-only" => CoworkTaskResourceMode::ReadOnly,
-                    _ => CoworkTaskResourceMode::WorkspaceWrite,
-                };
                 CoworkTask {
                     id,
                     title: t.title,
@@ -208,7 +174,6 @@ impl CoworkManager {
                     deps: t.deps, // will be resolved from idx:N -> task ids below
                     assignee,
                     state: CoworkTaskState::Draft,
-                    resource_mode,
                     questions: t.questions.unwrap_or_default(),
                     user_answers: vec![],
                     output_text: String::new(),
@@ -263,6 +228,11 @@ impl CoworkManager {
 
     pub async fn update_plan(&self, req: CoworkUpdatePlanRequest) -> BitFunResult<()> {
         let now = chrono::Utc::now().timestamp_millis();
+        let mut session = self
+            .sessions
+            .get(&req.cowork_session_id)
+            .ok_or_else(|| BitFunError::NotFound(format!("Cowork session not found: {}", req.cowork_session_id)))?
+            .clone();
 
         // Basic validation: deps must reference existing tasks.
         let task_ids: std::collections::HashSet<String> =
@@ -278,31 +248,22 @@ impl CoworkManager {
             }
         }
 
-        let (tasks, task_order) = {
-            let mut session_ref = self
-                .sessions
-                .get_mut(&req.cowork_session_id)
-                .ok_or_else(|| BitFunError::NotFound(format!("Cowork session not found: {}", req.cowork_session_id)))?;
-            let session = session_ref.value_mut();
-
-            session.tasks = req.tasks;
-            session.task_order = if req.task_order.is_empty() {
-                session.tasks.iter().map(|t| t.id.clone()).collect()
-            } else {
-                req.task_order
-            };
-            session.state = CoworkSessionState::Ready;
-            session.updated_at_ms = now;
-
-            (session.tasks.clone(), session.task_order.clone())
+        session.tasks = req.tasks;
+        session.task_order = if req.task_order.is_empty() {
+            session.tasks.iter().map(|t| t.id.clone()).collect()
+        } else {
+            req.task_order
         };
+        session.state = CoworkSessionState::Ready;
+        session.updated_at_ms = now;
+        self.sessions.insert(req.cowork_session_id.clone(), session.clone());
 
         emit_cowork_event(
             "cowork://plan-updated",
             serde_json::json!({
                 "coworkSessionId": req.cowork_session_id,
-                "tasks": tasks,
-                "taskOrder": task_order,
+                "tasks": session.tasks,
+                "taskOrder": session.task_order,
                 "timestamp": now,
             }),
         )
@@ -318,43 +279,30 @@ impl CoworkManager {
             .ok_or_else(|| BitFunError::NotFound(format!("Cowork session runtime not found: {}", req.cowork_session_id)))?
             .clone();
 
+        // Ensure only one scheduler loop runs per cowork session.
+        let _guard = runtime.scheduler_lock.lock().await;
+
         let snapshot = self.get_session_snapshot(&req.cowork_session_id)?;
         if matches!(snapshot.session.state, CoworkSessionState::Running) {
             debug!("Cowork session already running: cowork_session_id={}", req.cowork_session_id);
             return Ok(());
         }
 
-        // Serialize start transitions (best-effort) to reduce races with pause/cancel.
-        let _guard = runtime.scheduler_lock.lock().await;
-
-        self.update_session_state(&req.cowork_session_id, CoworkSessionState::Running).await?;
+        self.update_session_state(&req.cowork_session_id, CoworkSessionState::Running)
+            .await?;
 
         let manager = get_global_cowork_manager();
         let cowork_session_id = req.cowork_session_id.clone();
         let cancel_token = runtime.cancel_token.clone();
-        let scheduler_running = runtime.scheduler_running.clone();
 
-        // Only spawn the scheduler loop once per session.
-        if scheduler_running
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_ok()
-        {
-            tokio::spawn(async move {
-                let result = run_scheduler_loop(manager.as_ref(), coordinator, &cowork_session_id, cancel_token).await;
-                if let Err(e) = result {
-                    warn!("Cowork scheduler failed: cowork_session_id={}, error={}", cowork_session_id, e);
-                    let _ = manager
-                        .update_session_state(&cowork_session_id, CoworkSessionState::Error)
-                        .await;
-                }
-                scheduler_running.store(false, Ordering::Release);
-            });
-        } else {
-            debug!(
-                "Cowork scheduler already running, skipping spawn: cowork_session_id={}",
-                cowork_session_id
-            );
-        }
+        tokio::spawn(async move {
+            if let Err(e) = run_scheduler_loop(manager.as_ref(), coordinator, &cowork_session_id, cancel_token).await {
+                warn!("Cowork scheduler failed: cowork_session_id={}, error={}", cowork_session_id, e);
+                let _ = manager
+                    .update_session_state(&cowork_session_id, CoworkSessionState::Error)
+                    .await;
+            }
+        });
 
         Ok(())
     }
@@ -374,43 +322,41 @@ impl CoworkManager {
 
     pub async fn submit_user_input(&self, req: CoworkSubmitUserInputRequest) -> BitFunResult<()> {
         let now = chrono::Utc::now().timestamp_millis();
-        let (tasks, task_order) = {
-            let mut session_ref = self
-                .sessions
-                .get_mut(&req.cowork_session_id)
-                .ok_or_else(|| BitFunError::NotFound(format!("Cowork session not found: {}", req.cowork_session_id)))?;
-            let session = session_ref.value_mut();
+        let mut session = self
+            .sessions
+            .get(&req.cowork_session_id)
+            .ok_or_else(|| BitFunError::NotFound(format!("Cowork session not found: {}", req.cowork_session_id)))?
+            .clone();
 
-            let mut changed = false;
-            for t in &mut session.tasks {
-                if t.id == req.task_id {
-                    t.user_answers = req.answers.clone();
-                    if t.state == CoworkTaskState::WaitingUserInput {
-                        t.state = CoworkTaskState::Ready;
-                    }
-                    t.updated_at_ms = now;
-                    changed = true;
-                    break;
+        let mut changed = false;
+        for t in &mut session.tasks {
+            if t.id == req.task_id {
+                t.user_answers = req.answers.clone();
+                if t.state == CoworkTaskState::WaitingUserInput {
+                    t.state = CoworkTaskState::Ready;
                 }
+                t.updated_at_ms = now;
+                changed = true;
+                break;
             }
+        }
 
-            if !changed {
-                return Err(BitFunError::NotFound(format!(
-                    "Task not found: {}",
-                    req.task_id
-                )));
-            }
+        if !changed {
+            return Err(BitFunError::NotFound(format!(
+                "Task not found: {}",
+                req.task_id
+            )));
+        }
 
-            session.updated_at_ms = now;
-            (session.tasks.clone(), session.task_order.clone())
-        };
+        session.updated_at_ms = now;
+        self.sessions.insert(req.cowork_session_id.clone(), session.clone());
 
         emit_cowork_event(
             "cowork://plan-updated",
             serde_json::json!({
                 "coworkSessionId": req.cowork_session_id,
-                "tasks": tasks,
-                "taskOrder": task_order,
+                "tasks": session.tasks,
+                "taskOrder": session.task_order,
                 "timestamp": now,
             }),
         )
@@ -422,11 +368,11 @@ impl CoworkManager {
     pub async fn update_task(&self, cowork_session_id: &str, task: CoworkTask) -> BitFunResult<()> {
         let now = chrono::Utc::now().timestamp_millis();
         let task_id = task.id.clone();
-        let mut session_ref = self
+        let mut session = self
             .sessions
-            .get_mut(cowork_session_id)
-            .ok_or_else(|| BitFunError::NotFound(format!("Cowork session not found: {}", cowork_session_id)))?;
-        let session = session_ref.value_mut();
+            .get(cowork_session_id)
+            .ok_or_else(|| BitFunError::NotFound(format!("Cowork session not found: {}", cowork_session_id)))?
+            .clone();
 
         let mut found = false;
         for t in &mut session.tasks {
@@ -445,6 +391,7 @@ impl CoworkManager {
         }
 
         session.updated_at_ms = now;
+        self.sessions.insert(cowork_session_id.to_string(), session);
         Ok(())
     }
 
@@ -454,16 +401,14 @@ impl CoworkManager {
         state: CoworkSessionState,
     ) -> BitFunResult<()> {
         let now = chrono::Utc::now().timestamp_millis();
-        {
-            let mut session_ref = self
-                .sessions
-                .get_mut(cowork_session_id)
-                .ok_or_else(|| BitFunError::NotFound(format!("Cowork session not found: {}", cowork_session_id)))?;
-            let session = session_ref.value_mut();
-
-            session.state = state;
-            session.updated_at_ms = now;
-        }
+        let mut session = self
+            .sessions
+            .get(cowork_session_id)
+            .ok_or_else(|| BitFunError::NotFound(format!("Cowork session not found: {}", cowork_session_id)))?
+            .clone();
+        session.state = state;
+        session.updated_at_ms = now;
+        self.sessions.insert(cowork_session_id.to_string(), session);
 
         emit_cowork_event(
             "cowork://session-state",

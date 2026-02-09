@@ -15,9 +15,6 @@ pub struct PlanTaskDraft {
     pub deps: Vec<String>,
     #[serde(default)]
     pub assignee_role: Option<String>,
-    /// `read_only` or `workspace_write` (optional; defaults to workspace_write)
-    #[serde(default)]
-    pub resource_mode: Option<String>,
     #[serde(default)]
     pub questions: Option<Vec<String>>,
 }
@@ -83,8 +80,6 @@ Available roles (you MUST assign each task to one of these roles by role name):
 Your job:
 - Decompose the goal into a small set of actionable tasks (5-12 tasks).
 - Tasks should be concrete and independently executable.
-- Prefer parallelizable tasks and keep dependencies minimal.
-- Distribute tasks across roles when reasonable.
 - Add dependencies via task indices (0-based) to express ordering constraints.
 - For each task, optionally add questions if human input is needed before running.
 
@@ -96,7 +91,6 @@ Output STRICT JSON ONLY (no markdown, no commentary) with this schema:
       "description": "string",
       "deps": [0, 2],
       "assigneeRole": "Planner|Developer|Reviewer|Researcher|...",
-      "resourceMode": "read_only|workspace_write",
       "questions": ["string", "string"]
     }}
   ]
@@ -134,8 +128,6 @@ fn parse_plan_json(model_text: &str) -> BitFunResult<PlanDraft> {
         #[serde(default)]
         assignee_role: Option<String>,
         #[serde(default)]
-        resource_mode: Option<String>,
-        #[serde(default)]
         questions: Option<Vec<String>>,
     }
 
@@ -160,7 +152,6 @@ fn parse_plan_json(model_text: &str) -> BitFunResult<PlanDraft> {
             description: t.description,
             deps: t.deps.into_iter().map(|i| format!("idx:{}", i)).collect(),
             assignee_role: t.assignee_role,
-            resource_mode: t.resource_mode,
             questions: t.questions,
         })
         .collect::<Vec<_>>();
