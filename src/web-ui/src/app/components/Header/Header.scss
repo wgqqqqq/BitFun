@@ -507,21 +507,6 @@ $_app-icon-size: 20px;
   z-index: tokens.$z-decoration;
 }
 
-.bitfun-cowork-workspace-banner {
-  @include mix.flex-layout(row, center, start, 4px);
-  padding: 2px 6px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  background: var(--color-bg-secondary);
-
-  &__label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--color-text-secondary);
-    user-select: none;
-  }
-}
-
 // macOS native titlebar: add right padding to avoid edge clipping
 .bitfun-app-header--macos-native-titlebar {
   .bitfun-header-right {

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react';
 import { workspaceManager, WorkspaceState, WorkspaceEvent } from '../services/business/workspaceManager';
-import { WorkspaceInfo, type OpenWorkspaceOptions } from '../../shared/types';
+import { WorkspaceInfo } from '../../shared/types';
 import { createLogger } from '@/shared/utils/logger';
 
 const log = createLogger('WorkspaceProvider');
@@ -10,7 +10,7 @@ const log = createLogger('WorkspaceProvider');
 
 interface WorkspaceContextValue extends WorkspaceState {
   
-  openWorkspace: (path: string, options?: OpenWorkspaceOptions) => Promise<WorkspaceInfo>;
+  openWorkspace: (path: string) => Promise<WorkspaceInfo>;
   closeWorkspace: () => Promise<void>;
   switchWorkspace: (workspace: WorkspaceInfo) => Promise<WorkspaceInfo>;
   scanWorkspaceInfo: () => Promise<WorkspaceInfo | null>;
@@ -109,8 +109,8 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   }, []); 
 
   
-  const openWorkspace = useCallback(async (path: string, options?: OpenWorkspaceOptions): Promise<WorkspaceInfo> => {
-    return await workspaceManager.openWorkspace(path, options);
+  const openWorkspace = useCallback(async (path: string): Promise<WorkspaceInfo> => {
+    return await workspaceManager.openWorkspace(path);
   }, []);
 
   const closeWorkspace = useCallback(async (): Promise<void> => {
