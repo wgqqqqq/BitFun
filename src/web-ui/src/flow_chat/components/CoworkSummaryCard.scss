@@ -1,0 +1,76 @@
+.cowork-summary-card {
+  .cowork-summary-card__title {
+    font-weight: 700;
+  }
+
+  .cowork-summary-card__subtitle {
+    color: var(--color-text-secondary);
+    font-size: 12px;
+  }
+
+  .cowork-summary-card__progress {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .cowork-summary-card__progress-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .cowork-summary-card__progress-text {
+    font-size: 13px;
+  }
+
+  .cowork-summary-card__progress-pct {
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+  }
+
+  .cowork-summary-card__progress-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--element-bg-subtle);
+    overflow: hidden;
+  }
+
+  .cowork-summary-card__progress-fill {
+    height: 100%;
+    background: var(--color-accent-500);
+  }
+
+  .cowork-summary-card__section {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .cowork-summary-card__section-title {
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+  }
+
+  .cowork-summary-card__list {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--color-text-primary);
+    font-size: 13px;
+
+    &--danger {
+      color: var(--color-text-danger, #ef4444);
+    }
+  }
+
+  .cowork-summary-card__hint {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+  }
+}
+

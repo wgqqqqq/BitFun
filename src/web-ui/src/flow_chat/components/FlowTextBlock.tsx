@@ -8,6 +8,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MarkdownRenderer } from '@/component-library';
 import type { FlowTextItem } from '../types/flow-chat';
 import { useFlowChatContext } from './modern/FlowChatContext';
+import { CoworkSummaryCard, type CoworkSummary } from './CoworkSummaryCard';
 import './FlowTextBlock.scss';
 
 // Idle timeout (ms) after content stops growing.
@@ -72,22 +73,28 @@ export const FlowTextBlock = React.memo<FlowTextBlockProps>(({
     (textItem.status === 'streaming' || textItem.status === 'running') &&
     isContentGrowing;
   const hasContent = content.length > 0;
+  const coworkSummary = (textItem.metadata as any)?.coworkSummary as CoworkSummary | undefined;
+  const isCoworkMain = textItem.metadata?.source === 'cowork-main';
+
+  const body = isCoworkMain && coworkSummary ? (
+    <CoworkSummaryCard summary={coworkSummary} />
+  ) : textItem.isMarkdown ? (
+    <MarkdownRenderer
+      content={content}
+      isStreaming={isActivelyStreaming}
+      onFileViewRequest={onFileViewRequest}
+      onTabOpen={onTabOpen}
+      onOpenVisualization={onOpenVisualization}
+    />
+  ) : (
+    <div className={`text-content ${isActivelyStreaming && hasContent ? 'text-content--streaming' : ''}`}>
+      {content}
+    </div>
+  );
 
   return (
     <div className={`flow-text-block ${className} ${isActivelyStreaming ? 'streaming' : ''}`}>
-      {textItem.isMarkdown ? (
-        <MarkdownRenderer
-          content={content}
-          isStreaming={isActivelyStreaming}
-          onFileViewRequest={onFileViewRequest}
-          onTabOpen={onTabOpen}
-          onOpenVisualization={onOpenVisualization}
-        />
-      ) : (
-        <div className={`text-content ${isActivelyStreaming && hasContent ? 'text-content--streaming' : ''}`}>
-          {content}
-        </div>
-      )}
+      {body}
     </div>
   );
 }, (prevProps, nextProps) => {

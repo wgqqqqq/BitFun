@@ -73,6 +73,7 @@ function buildCoworkMainText(args: {
     completed: number;
     total: number;
     runningTitles: string[];
+    queuedTitles?: string[];
     failedTitles: string[];
   };
   tasks?: Array<{ title?: string; assignee?: string }>;
@@ -135,13 +136,50 @@ function buildCoworkMainText(args: {
   return lines.join('\n');
 }
 
+function buildCoworkSummary(args: {
+  coworkSessionId?: string;
+  sessionState?: string;
+  phaseHint?: string;
+  progress?: {
+    completed: number;
+    total: number;
+    runningTitles: string[];
+    queuedTitles?: string[];
+    failedTitles: string[];
+  };
+  waitingTaskId?: string | null;
+  questions?: string[];
+}) {
+  const progress = args.progress || {
+    completed: 0,
+    total: 0,
+    runningTitles: [],
+    queuedTitles: [],
+    failedTitles: [],
+  };
+
+  return {
+    coworkSessionId: args.coworkSessionId,
+    sessionState: args.sessionState,
+    phaseHint: args.phaseHint,
+    completed: progress.completed,
+    total: progress.total,
+    runningTitles: progress.runningTitles || [],
+    queuedTitles: progress.queuedTitles || [],
+    failedTitles: progress.failedTitles || [],
+    waitingTaskId: args.waitingTaskId,
+    questions: args.questions || [],
+  };
+}
+
 function upsertCoworkMainText(
   context: FlowChatContext,
   flowChatSessionId: string,
   dialogTurnId: string,
   roundId: string,
   markdown: string,
-  status: FlowTextItem['status']
+  status: FlowTextItem['status'],
+  extraMetadata?: Record<string, any>
 ): void {
   const rt = getCoworkRuntime(flowChatSessionId);
   if (!rt) return;
@@ -154,7 +192,7 @@ function upsertCoworkMainText(
       status,
       isStreaming: false,
       isMarkdown: true,
-      metadata: { source: COWORK_TEXT_SOURCE },
+      metadata: { source: COWORK_TEXT_SOURCE, ...(extraMetadata || {}) },
       timestamp: Date.now(),
     } as any);
     return;
@@ -173,10 +211,32 @@ function upsertCoworkMainText(
       isMarkdown: true,
       timestamp: Date.now(),
       status,
-      metadata: { source: COWORK_TEXT_SOURCE },
+      metadata: { source: COWORK_TEXT_SOURCE, ...(extraMetadata || {}) },
     } as any,
     roundId
   );
+}
+
+function upsertCoworkMainCard(
+  context: FlowChatContext,
+  flowChatSessionId: string,
+  dialogTurnId: string,
+  roundId: string,
+  args: Parameters<typeof buildCoworkMainText>[0],
+  status: FlowTextItem['status']
+): void {
+  const markdown = buildCoworkMainText(args);
+  const summary = buildCoworkSummary({
+    coworkSessionId: args.coworkSessionId,
+    sessionState: args.sessionState,
+    phaseHint: args.phaseHint,
+    progress: args.progress,
+    waitingTaskId: args.waitingTaskId,
+    questions: args.questions,
+  });
+  upsertCoworkMainText(context, flowChatSessionId, dialogTurnId, roundId, markdown, status, {
+    coworkSummary: summary,
+  });
 }
 
 function buildRosterById(
@@ -221,6 +281,7 @@ function getCoworkProgress(runtime: ReturnType<typeof getCoworkRuntime>) {
 
   let completed = 0;
   const runningTitles: string[] = [];
+  const queuedTitles: string[] = [];
   const failedTitles: string[] = [];
 
   for (const taskId of taskIds) {
@@ -230,10 +291,13 @@ function getCoworkProgress(runtime: ReturnType<typeof getCoworkRuntime>) {
     if (state === 'completed') {
       completed += 1;
     }
-    if (state === 'running' || state === 'ready') {
+    if (state === 'running') {
       runningTitles.push(title);
     }
-    if (state === 'failed') {
+    if (state === 'ready' || state === 'draft') {
+      queuedTitles.push(title);
+    }
+    if (state === 'failed' || state === 'blocked') {
       failedTitles.push(title);
     }
   }
@@ -242,6 +306,7 @@ function getCoworkProgress(runtime: ReturnType<typeof getCoworkRuntime>) {
     completed,
     total,
     runningTitles,
+    queuedTitles,
     failedTitles,
   };
 }
@@ -526,18 +591,18 @@ async function sendCoworkMessage(
   } as any);
 
   const runtimeAfterInit = getCoworkRuntime(flowChatSessionId);
-  upsertCoworkMainText(
+  upsertCoworkMainCard(
     context,
     flowChatSessionId,
     dialogTurnId,
     roundId,
-    buildCoworkMainText({
+    {
       goal: runtimeAfterInit?.goal || displayMessage,
       coworkSessionId: runtimeAfterInit?.coworkSessionId,
       sessionState: runtimeAfterInit?.sessionState,
       progress: getCoworkProgress(runtimeAfterInit),
       phaseHint: 'Initializing…',
-    }),
+    },
     'running'
   );
 
@@ -548,18 +613,18 @@ async function sendCoworkMessage(
       .split('\n')
       .map(s => s.trim())
       .filter(Boolean);
-    upsertCoworkMainText(
+    upsertCoworkMainCard(
       context,
       flowChatSessionId,
       dialogTurnId,
       roundId,
-      buildCoworkMainText({
+      {
         goal: existing.goal || displayMessage,
         coworkSessionId: existing.coworkSessionId,
         sessionState: existing.sessionState || 'running',
         phaseHint: `Submitting answers for \`${existing.waitingTaskId}\`…`,
         progress: getCoworkProgress(existing),
-      }),
+      },
       'running'
     );
     await CoworkAPI.submitUserInput(existing.coworkSessionId, existing.waitingTaskId, answers);
@@ -572,18 +637,18 @@ async function sendCoworkMessage(
     setCoworkRuntime(flowChatSessionId, {
       ...resumedRuntime,
     });
-    upsertCoworkMainText(
+    upsertCoworkMainCard(
       context,
       flowChatSessionId,
       dialogTurnId,
       roundId,
-      buildCoworkMainText({
+      {
         goal: existing.goal || displayMessage,
         coworkSessionId: existing.coworkSessionId,
         sessionState: 'running',
         phaseHint: 'Answers submitted. Continuing…',
         progress: getCoworkProgress(resumedRuntime as any),
-      }),
+      },
       'running'
     );
     context.flowChatStore.updateDialogTurn(flowChatSessionId, dialogTurnId, turn => ({
@@ -614,18 +679,18 @@ async function sendCoworkMessage(
   });
   openCoworkDagTab(coworkSessionId);
 
-  upsertCoworkMainText(
+  upsertCoworkMainCard(
     context,
     flowChatSessionId,
     dialogTurnId,
     roundId,
-    buildCoworkMainText({
+    {
       goal: displayMessage,
       coworkSessionId,
       sessionState: 'draft',
       phaseHint: 'Generating plan…',
-      progress: { completed: 0, total: 0, runningTitles: [], failedTitles: [] },
-    }),
+      progress: { completed: 0, total: 0, runningTitles: [], queuedTitles: [], failedTitles: [] },
+    },
     'running'
   );
 
@@ -697,12 +762,12 @@ async function sendCoworkMessage(
       taskOrder,
     } as any);
 
-    upsertCoworkMainText(
+    upsertCoworkMainCard(
       context,
       flowChatSessionId,
       rt.rootDialogTurnId,
       ensureRootRound(),
-      buildCoworkMainText({
+      {
         goal: displayMessage,
         coworkSessionId,
         sessionState: 'ready',
@@ -710,7 +775,7 @@ async function sendCoworkMessage(
         rosterById,
         phaseHint: 'Plan ready. Starting execution…',
         progress,
-      }),
+      },
       'completed'
     );
   };
@@ -825,12 +890,12 @@ async function sendCoworkMessage(
       };
       setCoworkRuntime(flowChatSessionId, updatedRt as any);
 
-      upsertCoworkMainText(
+      upsertCoworkMainCard(
         context,
         flowChatSessionId,
         rt.rootDialogTurnId,
         ensureRootRound(),
-        buildCoworkMainText({
+        {
           goal: updatedRt.goal || displayMessage,
           coworkSessionId,
           sessionState: updatedRt.sessionState || 'running',
@@ -838,7 +903,7 @@ async function sendCoworkMessage(
           questions: updatedRt.waitingQuestions,
           progress: getCoworkProgress(updatedRt as any),
           phaseHint: updatedRt.sessionState === 'running' ? 'Executing…' : undefined,
-        }),
+        },
         'running'
       );
     }),
@@ -895,12 +960,12 @@ async function sendCoworkMessage(
       };
       setCoworkRuntime(flowChatSessionId, updatedRt as any);
 
-      upsertCoworkMainText(
+      upsertCoworkMainCard(
         context,
         flowChatSessionId,
         rt.rootDialogTurnId,
         ensureRootRound(),
-        buildCoworkMainText({
+        {
           goal: updatedRt.goal || displayMessage,
           coworkSessionId,
           sessionState: updatedRt.sessionState || 'running',
@@ -908,7 +973,7 @@ async function sendCoworkMessage(
           questions: updatedRt.waitingQuestions,
           progress: getCoworkProgress(updatedRt as any),
           phaseHint: updatedRt.sessionState === 'running' ? 'Executing…' : undefined,
-        }),
+        },
         'running'
       );
     }),
@@ -960,12 +1025,12 @@ async function sendCoworkMessage(
         );
       }
 
-      upsertCoworkMainText(
+      upsertCoworkMainCard(
         context,
         flowChatSessionId,
         rt.rootDialogTurnId,
         ensureRootRound(),
-        buildCoworkMainText({
+        {
           goal: updatedRt?.goal || displayMessage,
           coworkSessionId,
           sessionState: updatedRt?.sessionState || 'running',
@@ -974,7 +1039,7 @@ async function sendCoworkMessage(
           rosterById: updatedRt?.rosterById || {},
           progress: getCoworkProgress(updatedRt),
           phaseHint: 'Waiting for your reply in chat…',
-        }),
+        },
         'pending_confirmation'
       );
 
@@ -1002,12 +1067,12 @@ async function sendCoworkMessage(
                 : st === 'paused' ? 'pending'
                   : 'running';
 
-        upsertCoworkMainText(
+        upsertCoworkMainCard(
           context,
           flowChatSessionId,
           rt.rootDialogTurnId,
           ensureRootRound(),
-          buildCoworkMainText({
+          {
             goal: updatedRt.goal || displayMessage,
             coworkSessionId,
             sessionState: st,
@@ -1016,7 +1081,7 @@ async function sendCoworkMessage(
             questions: updatedRt.waitingQuestions,
             progress: getCoworkProgress(updatedRt as any),
             phaseHint: st === 'running' ? 'Executing…' : st === 'planning' ? 'Planning…' : undefined,
-          }),
+          },
           textStatus
         );
       }
