@@ -32,6 +32,8 @@ interface CoworkTaskLike {
   deps: string[];
   assignee: string;
   state: CoworkTaskState;
+  questions?: string[];
+  userAnswers?: string[];
   outputText?: string;
   error?: string | null;
 }
@@ -39,6 +41,8 @@ interface CoworkTaskLike {
 interface CoworkDagPanelData {
   coworkSessionId: string;
   autoListen?: boolean;
+  initialSelectedTaskId?: string;
+  flowChatSessionId?: string;
 }
 
 interface LayoutNode {
@@ -77,6 +81,8 @@ function stateClass(state: CoworkTaskState): string {
 export const CoworkDagPanel: React.FC<{ data: CoworkDagPanelData }> = ({ data }) => {
   const coworkSessionId = data?.coworkSessionId;
   const autoListen = data?.autoListen !== false;
+  const initialSelectedTaskId = data?.initialSelectedTaskId;
+  const flowChatSessionId = data?.flowChatSessionId;
 
   const [roster, setRoster] = useState<CoworkRosterMemberLike[]>([]);
   const [tasks, setTasks] = useState<CoworkTaskLike[]>([]);
@@ -86,6 +92,8 @@ export const CoworkDagPanel: React.FC<{ data: CoworkDagPanelData }> = ({ data })
   const [layout, setLayout] = useState<{ nodes: Record<string, LayoutNode>; edges: LayoutEdge[]; width: number; height: number } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [draftAnswersByTaskId, setDraftAnswersByTaskId] = useState<Record<string, string>>({});
+  const [isSubmittingAnswers, setIsSubmittingAnswers] = useState(false);
 
   const rosterById = useMemo(() => {
     const byId: Record<string, CoworkRosterMemberLike> = {};
@@ -131,6 +139,11 @@ export const CoworkDagPanel: React.FC<{ data: CoworkDagPanelData }> = ({ data })
   }, [coworkSessionId]);
 
   useEffect(() => {
+    if (!initialSelectedTaskId) return;
+    setSelectedTaskId(prev => prev || initialSelectedTaskId);
+  }, [initialSelectedTaskId]);
+
+  useEffect(() => {
     if (!coworkSessionId || !autoListen) return;
 
     const unsubs = [
@@ -172,6 +185,13 @@ export const CoworkDagPanel: React.FC<{ data: CoworkDagPanelData }> = ({ data })
       unsubs.forEach(u => u());
     };
   }, [coworkSessionId, autoListen]);
+
+  useEffect(() => {
+    if (!initialSelectedTaskId) return;
+    if (selectedTaskId) return;
+    const exists = tasks.some(t => t.id === initialSelectedTaskId);
+    if (exists) setSelectedTaskId(initialSelectedTaskId);
+  }, [initialSelectedTaskId, selectedTaskId, tasks]);
 
   useEffect(() => {
     if (orderedTasks.length === 0) {
@@ -322,6 +342,7 @@ export const CoworkDagPanel: React.FC<{ data: CoworkDagPanelData }> = ({ data })
                       key={task.id}
                       transform={`translate(${n.x}, ${n.y})`}
                       className={`cowork-dag-node ${stateClass(task.state)} ${isSelected ? 'cowork-dag-node--selected' : ''}`}
+                      style={{ pointerEvents: 'all' }}
                       onClick={() => setSelectedTaskId(task.id)}
                     >
                       <rect className="cowork-dag-node__rect" width={n.width} height={n.height} rx={10} ry={10} />
@@ -363,6 +384,62 @@ export const CoworkDagPanel: React.FC<{ data: CoworkDagPanelData }> = ({ data })
                 <div className="cowork-dag-panel__detail-label">Description</div>
                 <div className="cowork-dag-panel__detail-text">{selectedTask.description}</div>
               </div>
+
+              {selectedTask.state === 'waiting_user_input' && Array.isArray(selectedTask.questions) && selectedTask.questions.length > 0 && (
+                <div className="cowork-dag-panel__detail-section cowork-dag-panel__detail-section--hitl">
+                  <div className="cowork-dag-panel__detail-label">Needs your input</div>
+                  <ul className="cowork-dag-panel__detail-list">
+                    {selectedTask.questions.map((q, idx) => (
+                      <li key={`${idx}-${q}`}>{q}</li>
+                    ))}
+                  </ul>
+                  <div className="cowork-dag-panel__detail-hint">Answer one per line, then submit.</div>
+                  <textarea
+                    className="cowork-dag-panel__detail-textarea"
+                    rows={4}
+                    value={draftAnswersByTaskId[selectedTask.id] || ''}
+                    onChange={e => setDraftAnswersByTaskId(prev => ({ ...prev, [selectedTask.id]: e.target.value }))}
+                    placeholder="Type answers here…"
+                    disabled={isSubmittingAnswers}
+                  />
+                  <div className="cowork-dag-panel__detail-actions">
+                    <Button
+                      size="small"
+                      variant="primary"
+                      disabled={isSubmittingAnswers || !(draftAnswersByTaskId[selectedTask.id] || '').trim()}
+                      onClick={async () => {
+                        if (!coworkSessionId) return;
+                        const raw = (draftAnswersByTaskId[selectedTask.id] || '').trim();
+                        const answers = raw
+                          .split('\n')
+                          .map(s => s.trim())
+                          .filter(Boolean);
+                        if (answers.length === 0) return;
+
+                        setIsSubmittingAnswers(true);
+                        try {
+                          await CoworkAPI.submitUserInput(coworkSessionId, selectedTask.id, answers);
+                          setDraftAnswersByTaskId(prev => ({ ...prev, [selectedTask.id]: '' }));
+                          if (flowChatSessionId) {
+                            import('@/flow_chat/services/coworkRuntime')
+                              .then(({ getCoworkRuntime, setCoworkRuntime }) => {
+                                const rt = getCoworkRuntime(flowChatSessionId);
+                                if (rt?.waitingTaskId === selectedTask.id) {
+                                  setCoworkRuntime(flowChatSessionId, { ...rt, waitingTaskId: null, waitingQuestions: [] });
+                                }
+                              })
+                              .catch(() => {});
+                          }
+                        } finally {
+                          setIsSubmittingAnswers(false);
+                        }
+                      }}
+                    >
+                      {isSubmittingAnswers ? 'Submitting…' : 'Submit answers'}
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {selectedTask.deps?.length > 0 && (
                 <div className="cowork-dag-panel__detail-section">

@@ -154,11 +154,13 @@
   font-size: 13px;
   font-weight: 600;
   fill: rgba(235, 235, 235, 0.98);
+  pointer-events: none;
 }
 
 .cowork-dag-node__meta {
   font-size: 12px;
   fill: rgba(210, 210, 210, 0.85);
+  pointer-events: none;
 }
 
 .cowork-dag-node--selected .cowork-dag-node__rect {
@@ -181,6 +183,44 @@
 
 .cowork-dag-node--waiting_user_input .cowork-dag-node__rect {
   stroke: rgba(251, 146, 60, 0.6);
+}
+
+.cowork-dag-panel__detail-section--hitl {
+  border-top-style: solid;
+  border-top-color: rgba(251, 146, 60, 0.25);
+}
+
+.cowork-dag-panel__detail-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.95;
+}
+
+.cowork-dag-panel__detail-hint {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-top: 6px;
+}
+
+.cowork-dag-panel__detail-textarea {
+  width: 100%;
+  margin-top: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--color-text-primary, #e8e8e8);
+  font-size: 12px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.cowork-dag-panel__detail-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .cowork-dag-panel--empty {
