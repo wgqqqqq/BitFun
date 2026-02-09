@@ -3,7 +3,7 @@
 //! Provides comprehensive workspace management functionality.
 
 use super::manager::{
-    ScanOptions, WorkspaceInfo, WorkspaceManager, WorkspaceManagerConfig,
+    OpenWorkspaceOptions, ScanOptions, WorkspaceInfo, WorkspaceManager, WorkspaceManagerConfig,
     WorkspaceManagerStatistics, WorkspaceStatus, WorkspaceSummary, WorkspaceType,
 };
 use crate::infrastructure::{PathManager, try_get_path_manager_arc};
@@ -106,14 +106,26 @@ impl WorkspaceService {
 
     /// Opens a workspace.
     pub async fn open_workspace(&self, path: PathBuf) -> BitFunResult<WorkspaceInfo> {
+        self.open_workspace_with_options(path, OpenWorkspaceOptions::default())
+            .await
+    }
+
+    /// Opens a workspace with options.
+    pub async fn open_workspace_with_options(
+        &self,
+        path: PathBuf,
+        options: OpenWorkspaceOptions,
+    ) -> BitFunResult<WorkspaceInfo> {
         let result = {
             let mut manager = self.manager.write().await;
-            manager.open_workspace(path).await
+            manager.open_workspace_with_options(path, options.clone()).await
         };
 
         if result.is_ok() {
-            if let Err(e) = self.save_workspace_data().await {
-                warn!("Failed to save workspace data after opening: {}", e);
+            if options.persist {
+                if let Err(e) = self.save_workspace_data().await {
+                    warn!("Failed to save workspace data after opening: {}", e);
+                }
             }
             self.sync_global_workspace_path().await;
         }
