@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { Settings, FolderOpen, Home, FolderPlus, Info, Menu, PanelBottom, ArrowLeft } from 'lucide-react';
+import { Settings, FolderOpen, Home, FolderPlus, Info, Menu, PanelBottom, ArrowLeft, Network } from 'lucide-react';
 import { PanelLeftIcon, PanelRightIcon } from './PanelIcons';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
@@ -27,6 +27,7 @@ interface HeaderProps {
   onMaximize: () => void;
   onClose: () => void;
   onHome: () => void;
+  onOpenCowork: () => void;
   onToggleLeftPanel: () => void;
   onToggleRightPanel: () => void;
   leftPanelCollapsed: boolean;
@@ -45,6 +46,7 @@ const Header: React.FC<HeaderProps> = ({
   onMaximize,
   onClose,
   onHome,
+  onOpenCowork,
   onToggleLeftPanel,
   onToggleRightPanel,
   leftPanelCollapsed,
@@ -404,6 +406,19 @@ const Header: React.FC<HeaderProps> = ({
         </div>
         
         <div className="bitfun-header-right">
+          <div className="bitfun-header-cowork-entry" onMouseDown={(e) => e.stopPropagation()}>
+            <Tooltip content="Cowork">
+              <Button
+                variant="ghost"
+                size="small"
+                iconOnly
+                onClick={onOpenCowork}
+                aria-label="Open Cowork"
+              >
+                <Network size={14} />
+              </Button>
+            </Tooltip>
+          </div>
           {/* Immersive panel toggles: unified icon */}
           <div className="bitfun-immersive-panel-toggles">
             <button

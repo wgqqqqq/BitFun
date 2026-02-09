@@ -56,6 +56,12 @@ $_app-icon-size: 20px;
       opacity: 0;
       pointer-events: none;
     }
+
+    // Keep Cowork entry visible on startup.
+    .bitfun-header-cowork-entry {
+      opacity: 1;
+      pointer-events: auto;
+    }
   }
   
   // Keep window controls visible
@@ -520,6 +526,10 @@ $_app-icon-size: 20px;
     color: var(--color-text-secondary);
     user-select: none;
   }
+}
+
+.bitfun-header-cowork-entry {
+  display: inline-flex;
 }
 
 // macOS native titlebar: add right padding to avoid edge clipping
