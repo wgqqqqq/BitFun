@@ -26,6 +26,19 @@ pub enum CoworkTaskState {
     Cancelled,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CoworkTaskResourceMode {
+    /// Task should not modify workspace (research/review/analysis).
+    ReadOnly,
+    /// Task may modify workspace (coding, file writes, terminal writes).
+    WorkspaceWrite,
+}
+
+fn default_task_resource_mode() -> CoworkTaskResourceMode {
+    CoworkTaskResourceMode::WorkspaceWrite
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CoworkRosterMember {
@@ -56,6 +69,12 @@ pub struct CoworkTask {
     pub assignee: String,
     pub state: CoworkTaskState,
 
+    /// Scheduling/resource hint:
+    /// - read_only tasks can run in parallel with other read_only tasks
+    /// - workspace_write tasks are serialized (at most one at a time)
+    #[serde(default = "default_task_resource_mode")]
+    pub resource_mode: CoworkTaskResourceMode,
+
     #[serde(default)]
     pub questions: Vec<String>,
     #[serde(default)]
@@ -81,6 +100,10 @@ pub struct CoworkSession {
     pub goal: String,
     pub state: CoworkSessionState,
     pub roster: Vec<CoworkRosterMember>,
+
+    /// Workspace root directory used by this cowork session (optional; transport may set it).
+    #[serde(default)]
+    pub workspace_root: Option<String>,
 
     /// Task ids in display order
     pub task_order: Vec<String>,
@@ -109,6 +132,8 @@ pub struct CoworkCreateSessionRequest {
 #[serde(rename_all = "camelCase")]
 pub struct CoworkCreateSessionResponse {
     pub cowork_session_id: String,
+    #[serde(default)]
+    pub workspace_root: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
