@@ -274,21 +274,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       try {
         const { agentAPI } = await import('@/infrastructure/api/service-api/AgentAPI');
         const modes = await agentAPI.getAvailableModes();
-        // Inject 'cowork' as a frontend-integrated mode (not a backend agentic mode).
-        const hasCowork = modes.some(m => m.id === 'cowork');
-        const merged = hasCowork ? modes : [
-          ...modes,
-          {
-            id: 'cowork',
-            name: 'Cowork',
-            description: 'Multi-agent collaboration workflow (decompose -> assign -> execute)',
-            isReadonly: false,
-            toolCount: 0,
-            defaultTools: [],
-            enabled: true,
-          }
-        ];
-        dispatchMode({ type: 'SET_AVAILABLE_MODES', payload: merged });
+        dispatchMode({ type: 'SET_AVAILABLE_MODES', payload: modes });
       } catch (error) {
         log.error('Failed to fetch available modes', { error });
       }
@@ -969,7 +955,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 {modeState.dropdownOpen && (() => {
                   const enabledModes = modeState.available.filter(mode => mode.enabled);
                   
-                  const modeOrder = ['agentic', 'cowork', 'Plan', 'debug'];
+                  const modeOrder = ['agentic', 'Plan', 'debug'];
                   
                   const sortedModes = [...enabledModes].sort((a, b) => {
                     const aIndex = modeOrder.indexOf(a.id);
