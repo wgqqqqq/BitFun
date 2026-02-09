@@ -82,40 +82,11 @@ function buildCoworkMainText(args: {
   phaseHint?: string;
 }): string {
   const lines: string[] = [];
-  lines.push('## Cowork Plan');
-  lines.push('');
-  lines.push('Goal:');
-  lines.push('');
-  lines.push(args.goal);
+  lines.push('## Cowork');
   lines.push('');
 
-  const summaryParts: string[] = [];
-  if (args.sessionState) {
-    const stateLabelMap: Record<string, string> = {
-      draft: 'Draft',
-      planning: 'Planning',
-      ready: 'Ready',
-      running: 'Running',
-      paused: 'Paused',
-      completed: 'Completed',
-      cancelled: 'Cancelled',
-      error: 'Error',
-    };
-    summaryParts.push(`Status: **${stateLabelMap[args.sessionState] || args.sessionState}**`);
-  }
   if (args.progress && args.progress.total > 0) {
-    summaryParts.push(`Progress: **${args.progress.completed}/${args.progress.total}**`);
-  }
-  if (args.phaseHint) {
-    summaryParts.push(`Phase: ${args.phaseHint}`);
-  }
-  if (summaryParts.length > 0) {
-    lines.push(summaryParts.join(' · '));
-    lines.push('');
-  }
-
-  if (args.coworkSessionId) {
-    lines.push(`Session: \`${args.coworkSessionId}\``);
+    lines.push(`Completed **${args.progress.completed}/${args.progress.total}** tasks.`);
     lines.push('');
   }
 
@@ -152,6 +123,12 @@ function buildCoworkMainText(args: {
     lines.push(...args.questions.map(q => `- ${q}`));
     lines.push('');
     lines.push('Reply in chat with your answers (one per line).');
+    lines.push('');
+  }
+
+  if (lines.length <= 2) {
+    lines.push('Working on your request.');
+    lines.push('Open the DAG panel for detailed execution states.');
     lines.push('');
   }
 
