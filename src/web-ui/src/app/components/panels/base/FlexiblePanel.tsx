@@ -64,6 +64,12 @@ const TaskDetailPanel = React.lazy(() =>
   }))
 );
 
+const CoworkDagPanel = React.lazy(() =>
+  import('@/tools/cowork/components/CoworkDagPanel').then(module => ({
+    default: module.CoworkDagPanel
+  }))
+);
+
 // CodePreview, ChartRenderer and CodeNode removed - visualization features disabled
 import { 
   FlexiblePanelProps
@@ -663,6 +669,13 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
           </React.Suspense>
         );
 
+      case 'cowork-dag':
+        return (
+          <React.Suspense fallback={<div className="bitfun-flexible-panel__loading">Loading Cowork DAG...</div>}>
+            <CoworkDagPanel data={content.data || {}} />
+          </React.Suspense>
+        );
+
       case 'plan-viewer':
         const planViewerData = content.data || {};
         const planFilePath = planViewerData.filePath || '';
@@ -796,4 +809,3 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
 FlexiblePanel.displayName = 'FlexiblePanel';
 
 export default FlexiblePanel;
-

@@ -30,6 +30,7 @@ use api::clipboard_file_api::*;
 use api::commands::*;
 use api::config_api::*;
 use api::conversation_api::*;
+use api::cowork_api::*;
 use api::diff_api::*;
 use api::git_agent_api::*;
 use api::git_api::*;
@@ -233,6 +234,14 @@ pub async fn run() {
             api::agentic_api::cancel_tool,
             api::agentic_api::generate_session_title,
             api::agentic_api::get_available_modes,
+            cowork_create_session,
+            cowork_generate_plan,
+            cowork_update_plan,
+            cowork_start,
+            cowork_pause,
+            cowork_cancel,
+            cowork_get_state,
+            cowork_submit_user_input,
             api::image_analysis_api::analyze_images,
             api::image_analysis_api::send_enhanced_message,
             api::context_upload_api::upload_image_contexts,

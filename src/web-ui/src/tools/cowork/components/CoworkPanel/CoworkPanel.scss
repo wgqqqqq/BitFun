@@ -1,0 +1,148 @@
+.bitfun-cowork-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.bitfun-cowork-panel__content {
+  flex: 1;
+  overflow: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bitfun-cowork-panel__section {
+  border: 1px solid rgba(127, 127, 127, 0.2);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.bitfun-cowork-panel__section-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.bitfun-cowork-panel__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  opacity: 0.85;
+  margin-bottom: 8px;
+}
+
+.bitfun-cowork-panel__goal {
+  min-height: 80px;
+}
+
+.bitfun-cowork-panel__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.bitfun-cowork-panel__error {
+  margin-top: 8px;
+  color: var(--color-danger, #e5484d);
+  font-size: 12px;
+}
+
+.bitfun-cowork-panel__empty {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.bitfun-cowork-panel__tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bitfun-cowork-panel__task {
+  border: 1px solid rgba(127, 127, 127, 0.18);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bitfun-cowork-panel__task-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bitfun-cowork-panel__task-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bitfun-cowork-panel__task-assignee {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.bitfun-cowork-panel__task-assignee select {
+  padding: 4px 6px;
+}
+
+.bitfun-cowork-panel__deps {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.bitfun-cowork-panel__hitl {
+  border-top: 1px dashed rgba(127, 127, 127, 0.25);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bitfun-cowork-panel__output pre {
+  white-space: pre-wrap;
+  font-size: 12px;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid rgba(127, 127, 127, 0.18);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.bitfun-cowork-panel__task-error {
+  font-size: 12px;
+  color: var(--color-danger, #e5484d);
+}
+
+.bitfun-cowork-panel__timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.bitfun-cowork-panel__timeline-item {
+  display: flex;
+  justify-content: space-between;
+  opacity: 0.85;
+}
+
+.bitfun-cowork-panel__timeline-type {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.bitfun-cowork-panel__pill {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  opacity: 0.9;
+}
+

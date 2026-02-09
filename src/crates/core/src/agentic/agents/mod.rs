@@ -10,19 +10,29 @@ mod agentic_mode;
 mod debug_mode;
 mod plan_mode;
 // Built-in subagents
+mod browser_agent;
+mod document_agent;
 mod explore_agent;
 mod file_finder_agent;
+mod multi_modal_agent;
+mod question_confirm_agent;
+mod task_summary_agent;
 // Hidden agents
 mod code_review_agent;
 mod generate_doc_agent;
 
 pub use agentic_mode::AgenticMode;
+pub use browser_agent::BrowserAgent;
 pub use code_review_agent::CodeReviewAgent;
 pub use debug_mode::DebugMode;
+pub use document_agent::DocumentAgent;
 pub use explore_agent::ExploreAgent;
 pub use file_finder_agent::FileFinderAgent;
 pub use generate_doc_agent::GenerateDocAgent;
+pub use multi_modal_agent::MultiModalAgent;
 pub use plan_mode::PlanMode;
+pub use question_confirm_agent::QuestionConfirmAgent;
+pub use task_summary_agent::TaskSummaryAgent;
 
 use crate::util::errors::{BitFunError, BitFunResult};
 use async_trait::async_trait;

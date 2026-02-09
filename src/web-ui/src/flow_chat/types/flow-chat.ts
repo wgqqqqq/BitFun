@@ -14,6 +14,7 @@ export interface FlowItem {
   parentTaskToolId?: string; // Parent Task tool ID.
   isSubagentItem?: boolean; // Whether this item is from a subagent.
   subagentSessionId?: string; // Subagent session ID (debug only).
+  metadata?: Record<string, any>;
 }
 
 export interface FlowTextItem extends FlowItem {

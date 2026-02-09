@@ -26,10 +26,7 @@ import { notificationService } from '../../../shared/notification-system/service
 import { BranchQuickSwitch } from './BranchQuickSwitch';
 import { Tooltip } from '@/component-library';
 import { useI18n } from '../../../infrastructure/i18n';
-import { createLogger } from '@/shared/utils/logger';
 import './AppBottomBar.scss';
-
-const log = createLogger('AppBottomBar');
 
 interface AppBottomBarProps {
   className?: string;
@@ -38,7 +35,7 @@ interface AppBottomBarProps {
 const AppBottomBar: React.FC<AppBottomBarProps> = ({
   className = ''
 }) => {
-  const { state, switchLeftPanelTab, toggleRightPanel } = useApp();
+  const { state, switchLeftPanelTab } = useApp();
   const { t } = useI18n('components');
   const [animatingTab, setAnimatingTab] = useState<PanelType | null>(null);
   const notificationButtonRef = useRef<HTMLButtonElement | null>(null);

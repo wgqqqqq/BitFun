@@ -19,6 +19,9 @@ pub mod tools;
 // Coordination module
 pub mod coordination;
 
+// Cowork multi-agent collaboration
+pub mod cowork;
+
 // Image analysis module
 pub mod image_analysis;
 

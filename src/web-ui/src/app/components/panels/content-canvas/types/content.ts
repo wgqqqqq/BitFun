@@ -26,6 +26,7 @@ export type PanelContentType =
   | 'config-center'
   | 'planner'
   | 'task-detail'
+  | 'cowork-dag'
   | 'plan-viewer'
   | 'terminal';
 

@@ -181,6 +181,14 @@ export const PANEL_CONTENT_CONFIGS: Record<PanelContentType, PanelContentConfig>
     supportsDownload: false,
     showHeader: false
   },
+  'cowork-dag': {
+    type: 'cowork-dag',
+    displayName: 'Cowork DAG',
+    icon: Network,
+    supportsCopy: false,
+    supportsDownload: false,
+    showHeader: false
+  },
   'plan-viewer': {
     type: 'plan-viewer',
     displayName: 'Plan Viewer',
@@ -290,4 +298,3 @@ export const generateFileName = (type: PanelContentType, title: string): string 
       return `${baseName}.txt`;
   }
 };
-

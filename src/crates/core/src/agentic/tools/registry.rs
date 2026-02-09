@@ -104,6 +104,13 @@ impl ToolRegistry {
 
         // Web tool
         self.register_tool(Arc::new(WebSearchTool::new()));
+        self.register_tool(Arc::new(WebFetchTool::new()));
+
+        // Structured data file tool
+        self.register_tool(Arc::new(DataFileTool::new()));
+
+        // Office document tool
+        self.register_tool(Arc::new(OfficeDocTool::new()));
 
         // IDE control tool
         self.register_tool(Arc::new(IdeControlTool::new()));

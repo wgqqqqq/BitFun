@@ -1,53 +1,51 @@
-//! Plan Mode
-
 use super::Agent;
 use async_trait::async_trait;
-pub struct PlanMode {
+
+pub struct MultiModalAgent {
     default_tools: Vec<String>,
 }
 
-impl PlanMode {
+impl MultiModalAgent {
     pub fn new() -> Self {
         Self {
             default_tools: vec![
-                "Task".to_string(),
-                "LS".to_string(),
+                "AnalyzeImage".to_string(),
                 "Read".to_string(),
                 "Write".to_string(),
                 "Edit".to_string(),
-                "Grep".to_string(),
                 "Glob".to_string(),
+                "Grep".to_string(),
+                "LS".to_string(),
                 "WebSearch".to_string(),
                 "WebFetch".to_string(),
                 "DataFile".to_string(),
                 "OfficeDoc".to_string(),
                 "AskUserQuestion".to_string(),
-                "CreatePlan".to_string(),
             ],
         }
     }
 }
 
 #[async_trait]
-impl Agent for PlanMode {
+impl Agent for MultiModalAgent {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 
     fn id(&self) -> &str {
-        "Plan"
+        "MultiModal"
     }
 
     fn name(&self) -> &str {
-        "Plan"
+        "MultiModal"
     }
 
     fn description(&self) -> &str {
-        "Clarify request and create an implementation plan before executing the task"
+        "Multi-modal assistant for image-centric analysis and cross-media task support"
     }
 
     fn prompt_template_name(&self) -> &str {
-        "plan_mode"
+        "multi_modal_agent"
     }
 
     fn default_tools(&self) -> Vec<String> {
@@ -55,7 +53,6 @@ impl Agent for PlanMode {
     }
 
     fn is_readonly(&self) -> bool {
-        // only modify plan file, not modify project code
-        true
+        false
     }
 }

@@ -7,6 +7,7 @@ pub mod app_state;
 pub mod clipboard_file_api;
 pub mod commands;
 pub mod config_api;
+pub mod cowork_api;
 pub mod context_upload_api;
 pub mod conversation_api;
 pub mod diff_api;

@@ -711,6 +711,8 @@ impl ExecutionEngine {
                 "Edit",
                 "Write",
                 "Delete",
+                "DataFile",
+                "OfficeDoc",
                 "WebFetch",
                 "WebSearch",
                 "TodoWrite",

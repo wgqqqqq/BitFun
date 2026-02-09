@@ -1,0 +1,195 @@
+.cowork-dag-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-primary, #121214);
+  color: var(--color-text-primary, #e8e8e8);
+}
+
+.cowork-dag-panel__header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cowork-dag-panel__title-main {
+  font-weight: 600;
+}
+
+.cowork-dag-panel__title-sub {
+  font-size: 12px;
+  opacity: 0.8;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.cowork-dag-panel__mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.cowork-dag-panel__error {
+  padding: 8px 12px;
+  color: var(--color-danger, #e5484d);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+}
+
+.cowork-dag-panel__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.cowork-dag-panel__graph {
+  flex: 1;
+  min-width: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--color-bg-flowchat, #121214);
+}
+
+.cowork-dag-panel__graph-scroll {
+  height: 100%;
+  overflow: auto;
+}
+
+.cowork-dag-panel__svg {
+  display: block;
+}
+
+.cowork-dag-panel__edge {
+  fill: none;
+  stroke: rgba(200, 200, 200, 0.35);
+  stroke-width: 1.5;
+}
+
+.cowork-dag-panel__arrow {
+  fill: rgba(200, 200, 200, 0.55);
+}
+
+.cowork-dag-panel__empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+.cowork-dag-panel__detail {
+  width: 320px;
+  flex: 0 0 auto;
+  padding: 12px;
+  overflow: auto;
+}
+
+.cowork-dag-panel__detail-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.cowork-dag-panel__detail-meta {
+  font-size: 12px;
+  opacity: 0.9;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.cowork-dag-panel__detail-section {
+  border-top: 1px dashed rgba(255, 255, 255, 0.12);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+.cowork-dag-panel__detail-label {
+  font-size: 12px;
+  opacity: 0.85;
+  margin-bottom: 6px;
+}
+
+.cowork-dag-panel__detail-text {
+  font-size: 12px;
+  opacity: 0.95;
+  white-space: pre-wrap;
+}
+
+.cowork-dag-panel__detail-pre {
+  font-size: 12px;
+  white-space: pre-wrap;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px;
+  overflow: auto;
+  max-height: 260px;
+}
+
+.cowork-dag-panel__detail-pre--error {
+  border-color: rgba(229, 72, 77, 0.35);
+}
+
+.cowork-dag-panel__detail-empty {
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+.cowork-dag-node {
+  cursor: pointer;
+}
+
+.cowork-dag-node__rect {
+  fill: rgba(255, 255, 255, 0.04);
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 1;
+}
+
+.cowork-dag-node__title {
+  font-size: 13px;
+  font-weight: 600;
+  fill: rgba(235, 235, 235, 0.98);
+}
+
+.cowork-dag-node__meta {
+  font-size: 12px;
+  fill: rgba(210, 210, 210, 0.85);
+}
+
+.cowork-dag-node--selected .cowork-dag-node__rect {
+  stroke: rgba(96, 165, 250, 0.7);
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.35);
+}
+
+.cowork-dag-node--running .cowork-dag-node__rect {
+  stroke: rgba(96, 165, 250, 0.55);
+}
+
+.cowork-dag-node--completed .cowork-dag-node__rect {
+  stroke: rgba(34, 197, 94, 0.55);
+}
+
+.cowork-dag-node--failed .cowork-dag-node__rect,
+.cowork-dag-node--cancelled .cowork-dag-node__rect {
+  stroke: rgba(229, 72, 77, 0.55);
+}
+
+.cowork-dag-node--waiting_user_input .cowork-dag-node__rect {
+  stroke: rgba(251, 146, 60, 0.6);
+}
+
+.cowork-dag-panel--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cowork-dag-panel__empty-text {
+  opacity: 0.7;
+  font-size: 12px;
+}

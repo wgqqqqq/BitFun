@@ -1,53 +1,42 @@
-//! Plan Mode
-
 use super::Agent;
 use async_trait::async_trait;
-pub struct PlanMode {
+
+pub struct TaskSummaryAgent {
     default_tools: Vec<String>,
 }
 
-impl PlanMode {
+impl TaskSummaryAgent {
     pub fn new() -> Self {
         Self {
             default_tools: vec![
-                "Task".to_string(),
-                "LS".to_string(),
                 "Read".to_string(),
-                "Write".to_string(),
-                "Edit".to_string(),
                 "Grep".to_string(),
                 "Glob".to_string(),
-                "WebSearch".to_string(),
-                "WebFetch".to_string(),
-                "DataFile".to_string(),
-                "OfficeDoc".to_string(),
-                "AskUserQuestion".to_string(),
-                "CreatePlan".to_string(),
             ],
         }
     }
 }
 
 #[async_trait]
-impl Agent for PlanMode {
+impl Agent for TaskSummaryAgent {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 
     fn id(&self) -> &str {
-        "Plan"
+        "TaskSummary"
     }
 
     fn name(&self) -> &str {
-        "Plan"
+        "TaskSummary"
     }
 
     fn description(&self) -> &str {
-        "Clarify request and create an implementation plan before executing the task"
+        "Agent specialized in compressing scattered implementation details into concise task summaries and handoff notes"
     }
 
     fn prompt_template_name(&self) -> &str {
-        "plan_mode"
+        "task_summary_agent"
     }
 
     fn default_tools(&self) -> Vec<String> {
@@ -55,7 +44,6 @@ impl Agent for PlanMode {
     }
 
     fn is_readonly(&self) -> bool {
-        // only modify plan file, not modify project code
         true
     }
 }

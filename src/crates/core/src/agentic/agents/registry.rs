@@ -1,6 +1,7 @@
 use super::{
-    Agent, AgenticMode, CodeReviewAgent, DebugMode, ExploreAgent, FileFinderAgent,
-    GenerateDocAgent, PlanMode,
+    Agent, AgenticMode, BrowserAgent, CodeReviewAgent, DebugMode, DocumentAgent, ExploreAgent,
+    FileFinderAgent, GenerateDocAgent, MultiModalAgent, PlanMode, QuestionConfirmAgent,
+    TaskSummaryAgent,
 };
 use crate::agentic::agents::custom_subagents::{
     CustomSubagent, CustomSubagentKind, CustomSubagentLoader,
@@ -187,6 +188,11 @@ impl AgentRegistry {
         let builtin_subagents: Vec<Arc<dyn Agent>> = vec![
             Arc::new(ExploreAgent::new()),
             Arc::new(FileFinderAgent::new()),
+            Arc::new(QuestionConfirmAgent::new()),
+            Arc::new(TaskSummaryAgent::new()),
+            Arc::new(BrowserAgent::new()),
+            Arc::new(DocumentAgent::new()),
+            Arc::new(MultiModalAgent::new()),
         ];
         for subagent in builtin_subagents {
             register(
