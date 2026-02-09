@@ -265,6 +265,78 @@
     gap: 12px;
   }
 
+  .task-expanded-empty {
+    font-size: 12px;
+    opacity: 0.75;
+  }
+
+  .cowork-hitl {
+    border: 1px solid rgba(251, 146, 60, 0.35);
+    background: rgba(251, 146, 60, 0.08);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .cowork-hitl__title {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(251, 146, 60, 0.92);
+  }
+
+  .cowork-hitl__questions {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12px;
+    opacity: 0.95;
+    line-height: 1.45;
+  }
+
+  .cowork-hitl__hint {
+    font-size: 11px;
+    opacity: 0.8;
+  }
+
+  .cowork-hitl__textarea {
+    .bitfun-textarea__field {
+      font-size: 12px;
+      line-height: 1.4;
+    }
+  }
+
+  .cowork-hitl__actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .task-result__label,
+  .task-error__label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.8;
+    margin-bottom: 6px;
+  }
+
+  .task-result__pre,
+  .task-error__pre {
+    font-size: 12px;
+    white-space: pre-wrap;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 10px;
+    overflow: auto;
+    max-height: 260px;
+  }
+
+  .task-error__pre {
+    border-color: rgba(229, 72, 77, 0.35);
+  }
 
   .error-content {
     display: flex;

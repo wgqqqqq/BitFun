@@ -27,7 +27,7 @@ export const FlowTextBlock = React.memo<FlowTextBlockProps>(({
   textItem,
   className = ''
 }) => {
-  const { onFileViewRequest, onTabOpen, onOpenVisualization } = useFlowChatContext();
+  const { onFileViewRequest, onTabOpen, onOpenVisualization, sessionId } = useFlowChatContext();
 
   // Normalize content to a string.
   const content = typeof textItem.content === 'string'
@@ -77,7 +77,7 @@ export const FlowTextBlock = React.memo<FlowTextBlockProps>(({
   const isCoworkMain = textItem.metadata?.source === 'cowork-main';
 
   const body = isCoworkMain && coworkSummary ? (
-    <CoworkSummaryCard summary={coworkSummary} />
+    <CoworkSummaryCard summary={coworkSummary} flowChatSessionId={sessionId} />
   ) : textItem.isMarkdown ? (
     <MarkdownRenderer
       content={content}

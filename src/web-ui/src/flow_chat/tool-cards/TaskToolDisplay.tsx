@@ -12,10 +12,12 @@ import {
   PanelRightOpen
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { CubeLoading, Tooltip, Button, IconButton } from '../../component-library';
+import { CubeLoading, Button, IconButton, Textarea } from '../../component-library';
 import type { ToolCardProps } from '../types/flow-chat';
 import { BaseToolCard } from './BaseToolCard';
 import { taskCollapseStateManager } from '../store/TaskCollapseStateManager';
+import { CoworkAPI } from '@/infrastructure/api/service-api/CoworkAPI';
+import { getCoworkRuntime, setCoworkRuntime } from '../services/coworkRuntime';
 import './TaskToolDisplay.scss';
 
 export const TaskToolDisplay: React.FC<ToolCardProps> = ({
@@ -34,7 +36,7 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
     if (savedState !== undefined) {
       return !savedState;
     }
-    return false;
+    return status === 'pending_confirmation';
   });
   
   const isRunning = status === 'preparing' || status === 'streaming' || status === 'running';
@@ -53,6 +55,8 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
       
       if (status === 'completed') {
         setIsExpanded(false);
+      } else if (status === 'pending_confirmation') {
+        setIsExpanded(true);
       } else if (isRunning) {
         setIsExpanded(true);
       }
@@ -130,6 +134,21 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
   const taskInput = getTaskInput();
 
   const isFailed = status === 'error';
+  const coworkTaskId = (toolItem.metadata as any)?.coworkTaskId as string | undefined;
+  const coworkQuestions = (toolItem.metadata as any)?.coworkQuestions as string[] | undefined;
+  const coworkRuntime = sessionId ? getCoworkRuntime(sessionId) : undefined;
+  const isCoworkTask = Boolean(coworkTaskId && toolItem.metadata?.source === 'cowork-main');
+  const toolResultOutputText = (toolResult as any)?.result?.output as string | undefined;
+  const toolResultErrorText = (toolResult as any)?.result?.error as string | undefined;
+  const effectiveQuestions =
+    Array.isArray(coworkQuestions) && coworkQuestions.length > 0
+      ? coworkQuestions
+      : (coworkRuntime?.waitingTaskId && coworkRuntime.waitingTaskId === coworkTaskId
+        ? coworkRuntime.waitingQuestions
+        : undefined);
+
+  const [coworkAnswerText, setCoworkAnswerText] = useState('');
+  const [isSubmittingCoworkAnswers, setIsSubmittingCoworkAnswers] = useState(false);
 
   const handleCardClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -289,14 +308,70 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
   };
 
   const renderExpandedContent = () => {
-    const needsConfirmation = requiresConfirmation && !userConfirmed && status !== 'completed';
-    
-    if (!needsConfirmation) {
-      return null;
-    }
-    
+    const needsConfirmation = requiresConfirmation && !userConfirmed && status !== 'completed' && !isCoworkTask;
+
+    const hasCoworkQuestions = status === 'pending_confirmation' && isCoworkTask && Array.isArray(effectiveQuestions) && effectiveQuestions.length > 0;
+
+    const hasResult = Boolean(toolResultOutputText || toolResultErrorText || (toolResult && (toolResult as any).result));
+
+    const submitCoworkAnswers = async () => {
+      if (!sessionId) return;
+      const rt = getCoworkRuntime(sessionId);
+      if (!rt?.coworkSessionId || !coworkTaskId) return;
+
+      const answers = coworkAnswerText
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      if (answers.length === 0) return;
+
+      setIsSubmittingCoworkAnswers(true);
+      try {
+        await CoworkAPI.submitUserInput(rt.coworkSessionId, coworkTaskId, answers);
+        // Prevent the next chat message from being misinterpreted as answers.
+        if (rt.waitingTaskId === coworkTaskId) {
+          setCoworkRuntime(sessionId, { ...rt, waitingTaskId: null, waitingQuestions: [] });
+        }
+        setCoworkAnswerText('');
+      } finally {
+        setIsSubmittingCoworkAnswers(false);
+      }
+    };
+
     return (
       <div className="task-expanded-content">
+        {hasCoworkQuestions && (
+          <div className="cowork-hitl">
+            <div className="cowork-hitl__title">Needs your input</div>
+            <ul className="cowork-hitl__questions">
+              {effectiveQuestions!.map((q, idx) => (
+                <li key={`${idx}-${q}`}>{q}</li>
+              ))}
+            </ul>
+            <div className="cowork-hitl__hint">Answer one per line, then submit.</div>
+            <Textarea
+              className="cowork-hitl__textarea"
+              value={coworkAnswerText}
+              onChange={e => setCoworkAnswerText(e.target.value)}
+              placeholder="Type answers here…"
+              autoResize={true}
+              rows={3}
+              disabled={isSubmittingCoworkAnswers}
+            />
+            <div className="cowork-hitl__actions">
+              <Button
+                variant="primary"
+                size="small"
+                onClick={submitCoworkAnswers}
+                disabled={isSubmittingCoworkAnswers || coworkAnswerText.trim().length === 0}
+              >
+                {isSubmittingCoworkAnswers ? 'Submitting…' : 'Submit answers'}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {needsConfirmation && (
           <div className="tool-actions">
             <Button 
@@ -318,6 +393,23 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
               {t('toolCards.taskTool.cancel')}
             </Button>
           </div>
+        )}
+
+        {!isFailed && hasResult && (
+          <div className="task-result">
+            <div className="task-result__label">Result</div>
+            <pre className="task-result__pre">
+              {toolResultOutputText
+                ? toolResultOutputText
+                : toolResultErrorText
+                  ? toolResultErrorText
+                  : JSON.stringify((toolResult as any)?.result ?? toolResult, null, 2)}
+            </pre>
+          </div>
+        )}
+
+        {!hasCoworkQuestions && !needsConfirmation && !hasResult && (
+          <div className="task-expanded-empty">No additional details yet.</div>
         )}
       </div>
     );
@@ -342,6 +434,16 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
       expandedContent={renderExpandedContent()}
       isFailed={isFailed}
       requiresConfirmation={requiresConfirmation && !userConfirmed}
+      errorContent={
+        isFailed ? (
+          <div className="task-error">
+            <div className="task-error__label">Error</div>
+            <pre className="task-error__pre">
+              {toolResultErrorText || (toolResult as any)?.error || (toolResult as any)?.result?.error || 'Task failed.'}
+            </pre>
+          </div>
+        ) : undefined
+      }
     />
   );
 };

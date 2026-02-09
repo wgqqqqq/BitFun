@@ -27,6 +27,8 @@ interface CoworkTaskLike {
   deps?: string[];
   outputText?: string;
   error?: string | null;
+  questions?: string[];
+  userAnswers?: string[];
 }
 
 interface CoworkEventLike {
@@ -44,20 +46,22 @@ interface CoworkEventLike {
 
 const COWORK_TEXT_SOURCE = 'cowork-main';
 
-function openCoworkDagTab(coworkSessionId: string): void {
+function openCoworkDagTab(args: { coworkSessionId: string; flowChatSessionId?: string; initialSelectedTaskId?: string }): void {
   const tabInfo = {
     type: 'cowork-dag',
     title: 'Cowork DAG',
     data: {
-      coworkSessionId,
+      coworkSessionId: args.coworkSessionId,
       autoListen: true,
+      flowChatSessionId: args.flowChatSessionId,
+      initialSelectedTaskId: args.initialSelectedTaskId,
     },
     metadata: {
-      duplicateCheckKey: `cowork-dag:${coworkSessionId}`,
-      coworkSessionId,
+      duplicateCheckKey: `cowork-dag:${args.coworkSessionId}`,
+      coworkSessionId: args.coworkSessionId,
     },
     checkDuplicate: true,
-    duplicateCheckKey: `cowork-dag:${coworkSessionId}`,
+    duplicateCheckKey: `cowork-dag:${args.coworkSessionId}`,
     replaceExisting: true,
   };
 
@@ -353,6 +357,7 @@ function upsertCoworkTaskCard(
     toolName: 'Task',
     timestamp: Date.now(),
     status: mappedStatus,
+    requiresConfirmation: taskState === 'waiting_user_input',
     toolCall: {
       id: `cowork-task-call-${task.id}`,
       input: {
@@ -377,6 +382,7 @@ function upsertCoworkTaskCard(
       coworkTaskId: task.id,
       assignee,
       assigneeLabel: formatAssigneeLabel(assignee, runtimeData.rosterById),
+      coworkQuestions: Array.isArray(task.questions) && task.questions.length > 0 ? task.questions : undefined,
     },
   };
 
@@ -677,7 +683,7 @@ async function sendCoworkMessage(
     taskOrder: [],
     unsubscribers: [],
   });
-  openCoworkDagTab(coworkSessionId);
+  openCoworkDagTab({ coworkSessionId, flowChatSessionId });
 
   upsertCoworkMainCard(
     context,
@@ -1015,6 +1021,7 @@ async function sendCoworkMessage(
             description: meta.description,
             assignee: meta.assignee,
             state: 'waiting_user_input',
+            questions: qs,
           },
           'waiting_user_input',
           {

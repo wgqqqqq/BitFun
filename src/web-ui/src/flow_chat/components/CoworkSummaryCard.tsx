@@ -15,20 +15,26 @@ export interface CoworkSummary {
   questions?: string[];
 }
 
-function openCoworkDagTab(coworkSessionId: string): void {
+function openCoworkDagTabFromFlowChat(args: {
+  coworkSessionId: string;
+  flowChatSessionId?: string;
+  initialSelectedTaskId?: string;
+}): void {
   const tabInfo = {
     type: 'cowork-dag',
     title: 'Cowork DAG',
     data: {
-      coworkSessionId,
+      coworkSessionId: args.coworkSessionId,
       autoListen: true,
+      initialSelectedTaskId: args.initialSelectedTaskId,
+      flowChatSessionId: args.flowChatSessionId,
     },
     metadata: {
-      duplicateCheckKey: `cowork-dag:${coworkSessionId}`,
-      coworkSessionId,
+      duplicateCheckKey: `cowork-dag:${args.coworkSessionId}`,
+      coworkSessionId: args.coworkSessionId,
     },
     checkDuplicate: true,
-    duplicateCheckKey: `cowork-dag:${coworkSessionId}`,
+    duplicateCheckKey: `cowork-dag:${args.coworkSessionId}`,
     replaceExisting: true,
   };
 
@@ -36,8 +42,8 @@ function openCoworkDagTab(coworkSessionId: string): void {
   window.dispatchEvent(new CustomEvent('expand-right-panel'));
 }
 
-export function CoworkSummaryCard(props: { summary: CoworkSummary }): React.ReactElement {
-  const { summary } = props;
+export function CoworkSummaryCard(props: { summary: CoworkSummary; flowChatSessionId?: string }): React.ReactElement {
+  const { summary, flowChatSessionId } = props;
 
   const progressPct = useMemo(() => {
     if (!summary.total) return 0;
@@ -48,7 +54,11 @@ export function CoworkSummaryCard(props: { summary: CoworkSummary }): React.Reac
     <Button
       variant="ghost"
       size="small"
-      onClick={() => openCoworkDagTab(summary.coworkSessionId!)}
+      onClick={() => openCoworkDagTabFromFlowChat({
+        coworkSessionId: summary.coworkSessionId!,
+        flowChatSessionId,
+        initialSelectedTaskId: summary.waitingTaskId || undefined,
+      })}
     >
       Open DAG
     </Button>
@@ -129,4 +139,3 @@ export function CoworkSummaryCard(props: { summary: CoworkSummary }): React.Reac
     </Card>
   );
 }
-
