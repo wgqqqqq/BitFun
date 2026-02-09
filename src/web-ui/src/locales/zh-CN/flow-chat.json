@@ -387,11 +387,11 @@
     "plan": {
       "loadingPlan": "正在加载计划...",
       "clickToOpenPlan": "点击打开计划文件",
-      "remainingTodos": "{{count}} Remaining To-dos",
-      "viewPlan": "View Plan",
-      "build": "Build",
-      "building": "Building...",
-      "built": "Built"
+      "remainingTodos": "剩余 {{count}} 个待办",
+      "viewPlan": "查看计划",
+      "build": "构建",
+      "building": "构建中...",
+      "built": "已构建"
     },
     "common": {
       "confirm": "确认",

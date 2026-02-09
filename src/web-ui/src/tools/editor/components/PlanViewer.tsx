@@ -11,6 +11,7 @@ import { useI18n } from '@/infrastructure/i18n';
 import { workspaceAPI } from '@/infrastructure/api/service-api/WorkspaceAPI';
 import { flowChatManager } from '@/flow_chat/services/FlowChatManager';
 import { fileSystemService } from '@/tools/file-system/services/FileSystemService';
+import { planBuildStateService } from '@/shared/services/PlanBuildStateService';
 import './PlanViewer.scss';
 
 const log = createLogger('PlanViewer');
@@ -45,22 +46,6 @@ export interface PlanViewerProps {
   jumpToColumn?: number;
 }
 
-// File write guard: prevents file watcher loops during internal writes.
-const writingFiles = new Set<string>();
-
-function markFileWriting(filePath: string): void {
-  const normalizedPath = filePath.replace(/\\/g, '/');
-  writingFiles.add(normalizedPath);
-  setTimeout(() => {
-    writingFiles.delete(normalizedPath);
-  }, 1000);
-}
-
-function isFileWriting(filePath: string): boolean {
-  const normalizedPath = filePath.replace(/\\/g, '/');
-  return writingFiles.has(normalizedPath);
-}
-
 const PlanViewer: React.FC<PlanViewerProps> = ({
   filePath,
   workspacePath,
@@ -73,7 +58,10 @@ const PlanViewer: React.FC<PlanViewerProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [planData, setPlanData] = useState<PlanData | null>(null);
   const [planContent, setPlanContent] = useState<string>('');
-  const [isBuildStarted, setIsBuildStarted] = useState(false);
+  // Initialize build state from the shared service to survive unmounts.
+  const [isBuildStarted, setIsBuildStarted] = useState(() => {
+    return filePath ? planBuildStateService.isBuildActive(filePath) : false;
+  });
   const [originalContent, setOriginalContent] = useState('');
   // Edit mode: display raw yaml frontmatter
   const [isEditingYaml, setIsEditingYaml] = useState(false);
@@ -115,7 +103,7 @@ const PlanViewer: React.FC<PlanViewerProps> = ({
   const loadFileContent = useCallback(async () => {
     if (!filePath || isUnmountedRef.current) return;
 
-    if (isFileWriting(filePath)) {
+    if (planBuildStateService.isFileWriting(filePath)) {
       return;
     }
 
@@ -204,93 +192,30 @@ const PlanViewer: React.FC<PlanViewerProps> = ({
     };
   }, [filePath, loadFileContent]);
 
+  // Subscribe to shared build state service for cross-component sync.
   useEffect(() => {
-    if (!planData?.todos?.length || !filePath) return;
+    if (!filePath) return;
 
-    const handleTodoWriteUpdate = async (event: Event) => {
-      const customEvent = event as CustomEvent<{
-        todos: Array<{ id: string; content: string; status: string }>;
-      }>;
-      const { todos: incomingTodos } = customEvent.detail;
+    // Sync initial state (in case filePath just became available).
+    setIsBuildStarted(planBuildStateService.isBuildActive(filePath));
 
-      if (!incomingTodos.length) return;
+    const unsubscribe = planBuildStateService.subscribe(filePath, (event) => {
+      setIsBuildStarted(event.isBuilding);
 
-      // Check if there are matching todos
-      const todoIds = new Set(planData.todos.map(t => t.id));
-      const matchedTodos = incomingTodos.filter(t => todoIds.has(t.id));
-      
-      if (matchedTodos.length === 0) return;
+      if (event.updatedTodos) {
+        // Update plan data with latest todos.
+        setPlanData(prev => prev ? { ...prev, todos: event.updatedTodos! } : null);
 
-      try {
-        // Read current file content
-        const content = await workspaceAPI.readFileContent(filePath);
-        const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-        
-        if (!frontmatterMatch) return;
-
-        const parsed = yaml.parse(frontmatterMatch[1]);
-        const currentPlanContent = content.replace(/^---\n[\s\S]*?\n---\n*/, '').trim();
-
-        // Update todos status
-        const updatedTodos = (parsed.todos || []).map((todo: PlanTodo) => {
-          const incomingTodo = incomingTodos.find(t => t.id === todo.id);
-          if (incomingTodo) {
-            return { ...todo, status: incomingTodo.status };
-          }
-          return todo;
-        });
-
-        // Rebuild frontmatter and write back to file
-        const updatedParsed = {
-          ...parsed,
-          todos: updatedTodos,
-        };
-        const updatedFrontmatter = yaml.stringify(updatedParsed);
-        const updatedContent = `---\n${updatedFrontmatter}---\n\n${currentPlanContent}`;
-
-        markFileWriting(filePath);
-        await workspaceAPI.writeFileContent('', filePath, updatedContent);
-
-        // Update component state
-        setPlanData({
-          name: parsed.name || '',
-          overview: parsed.overview || '',
-          todos: updatedTodos,
-        });
-        
-        // Sync update yamlContent (ensure edit mode shows latest content)
-        const newYamlContent = updatedFrontmatter.trim();
-        setYamlContent(newYamlContent);
-        setOriginalYamlContent(newYamlContent);
-
-        // Check if all todos are completed
-        const allCompleted = updatedTodos.every((t: PlanTodo) => t.status === 'completed');
-        if (allCompleted) {
-          setIsBuildStarted(false);
+        // Update yaml content for edit mode consistency.
+        if (event.updatedFrontmatter) {
+          setYamlContent(event.updatedFrontmatter);
+          setOriginalYamlContent(event.updatedFrontmatter);
         }
-      } catch (err) {
-        log.error('Failed to sync todo status', err);
       }
-    };
+    });
 
-    window.addEventListener('bitfun:todowrite-update', handleTodoWriteUpdate);
-    return () => {
-      window.removeEventListener('bitfun:todowrite-update', handleTodoWriteUpdate);
-    };
-  }, [planData, filePath]);
-
-  useEffect(() => {
-    if (!isBuildStarted) return;
-
-    const handleDialogCancelled = () => {
-      setIsBuildStarted(false);
-    };
-
-    window.addEventListener('bitfun:dialog-cancelled', handleDialogCancelled);
-    return () => {
-      window.removeEventListener('bitfun:dialog-cancelled', handleDialogCancelled);
-    };
-  }, [isBuildStarted]);
+    return unsubscribe;
+  }, [filePath]);
 
   const remainingTodos = useMemo(() => {
     if (!planData?.todos) return 0;
@@ -389,7 +314,9 @@ const PlanViewer: React.FC<PlanViewerProps> = ({
     if (!filePath || buildStatus !== 'build' || !planData) return;
 
     try {
-      setIsBuildStarted(true);
+      // Register build in shared service (notifies all subscribers including CreatePlanDisplay).
+      const todoIds = planData.todos.map(t => t.id);
+      planBuildStateService.startBuild(filePath, todoIds);
 
       // Process todos, keep only id, content, and status
       const simpleTodos = planData.todos.map(t => ({
@@ -413,7 +340,7 @@ ${JSON.stringify(simpleTodos, null, 2)}
       await flowChatManager.sendMessage(message, undefined, displayMessage, 'agentic', 'agentic');
     } catch (err) {
       log.error('Build failed', err);
-      setIsBuildStarted(false);
+      planBuildStateService.cancelBuild(filePath);
     }
   }, [filePath, buildStatus, planData, planContent, t]);
 
@@ -580,4 +507,3 @@ ${JSON.stringify(simpleTodos, null, 2)}
 };
 
 export default PlanViewer;
-

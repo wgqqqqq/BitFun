@@ -13,19 +13,13 @@ import { ideControl } from '@/shared/services/ide-control/api';
 import { flowChatManager } from '@/flow_chat/services/FlowChatManager';
 import { workspaceAPI } from '@/infrastructure/api/service-api/WorkspaceAPI';
 import { fileSystemService } from '@/tools/file-system/services/FileSystemService';
+import { planBuildStateService } from '@/shared/services/PlanBuildStateService';
 import yaml from 'yaml';
 import { Tooltip } from '@/component-library';
 import { createLogger } from '@/shared/utils/logger';
 import './CreatePlanDisplay.scss';
 
 const log = createLogger('PlanDisplay');
-
-interface TodoWriteUpdateEvent {
-  sessionId: string;
-  turnId: string;
-  todos: Array<{ id: string; content: string; status: string }>;
-  merge: boolean;
-}
 
 interface PlanTodo {
   id: string;
@@ -45,152 +39,6 @@ interface PlanData {
 // Module-level cache to keep refreshed data after unmount.
 // key: cacheKey (toolId or planFilePath), value: PlanData
 const planDataCache = new Map<string, PlanData>();
-
-// Track active builds by cacheKey to match TodoWrite events.
-const buildingPlans = new Map<string, Set<string>>();
-
-// Subscribers for cache updates, keyed by cacheKey.
-const cacheSubscribers = new Map<string, Set<(data: PlanData) => void>>();
-
-/**
- * Subscribe to cache updates for a cacheKey.
- */
-function subscribeToCacheUpdate(cacheKey: string, callback: (data: PlanData) => void): () => void {
-  if (!cacheSubscribers.has(cacheKey)) {
-    cacheSubscribers.set(cacheKey, new Set());
-  }
-  cacheSubscribers.get(cacheKey)!.add(callback);
-  
-  return () => {
-    const subscribers = cacheSubscribers.get(cacheKey);
-    if (subscribers) {
-      subscribers.delete(callback);
-      if (subscribers.size === 0) {
-        cacheSubscribers.delete(cacheKey);
-      }
-    }
-  };
-}
-
-function notifyCacheUpdate(cacheKey: string, data: PlanData): void {
-  const subscribers = cacheSubscribers.get(cacheKey);
-  if (subscribers) {
-    subscribers.forEach(callback => callback(data));
-  }
-}
-
-/**
- * Module-level TodoWrite handler to keep cache updated after unmount.
- */
-async function handleGlobalTodoWriteUpdate(event: Event): Promise<void> {
-  const customEvent = event as CustomEvent<TodoWriteUpdateEvent>;
-  const { todos: incomingTodos } = customEvent.detail;
-  
-  if (!incomingTodos.length) {
-    return;
-  }
-  
-  for (const [cacheKey, todoIds] of buildingPlans.entries()) {
-    const matchedTodos = incomingTodos.filter(t => todoIds.has(t.id));
-    if (matchedTodos.length === 0) {
-      continue;
-    }
-    
-    const cachedPlan = planDataCache.get(cacheKey);
-    if (!cachedPlan) {
-      log.warn('Cached plan data not found', { cacheKey });
-      continue;
-    }
-    
-    try {
-      const content = await workspaceAPI.readFileContent(cachedPlan.planFilePath);
-      
-      const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-      if (!frontmatterMatch) {
-        log.warn('Failed to parse plan file frontmatter', { filePath: cachedPlan.planFilePath });
-        continue;
-      }
-      
-      const parsed = yaml.parse(frontmatterMatch[1]);
-      const planContent = content.replace(/^---\n[\s\S]*?\n---\n*/, '').trim();
-      
-      const updatedTodos = (parsed.todos || []).map((todo: PlanTodo) => {
-        const incomingTodo = incomingTodos.find(t => t.id === todo.id);
-        if (incomingTodo) {
-          return { ...todo, status: incomingTodo.status };
-        }
-        return todo;
-      });
-      
-      const updatedFrontmatter = yaml.stringify({
-        ...parsed,
-        todos: updatedTodos
-      });
-      const updatedContent = `---\n${updatedFrontmatter}---\n\n${planContent}`;
-      
-      // Mark file as writing to avoid watcher feedback loops.
-      markFileWriting(cachedPlan.planFilePath);
-      await workspaceAPI.writeFileContent('', cachedPlan.planFilePath, updatedContent);
-      
-      const newPlanData: PlanData = {
-        name: parsed.name || cachedPlan.name,
-        overview: parsed.overview || cachedPlan.overview,
-        todos: updatedTodos,
-        planFilePath: cachedPlan.planFilePath,
-        planContent: planContent,
-      };
-      
-      planDataCache.set(cacheKey, newPlanData);
-      
-      notifyCacheUpdate(cacheKey, newPlanData);
-      
-      const allCompleted = updatedTodos.every((t: PlanTodo) => t.status === 'completed');
-      if (allCompleted) {
-        buildingPlans.delete(cacheKey);
-      }
-      
-    } catch (error) {
-      log.error('Failed to sync todo status', { cacheKey, error });
-    }
-  }
-}
-
-// Set up the global listener once.
-let isGlobalListenerSetup = false;
-function setupGlobalTodoWriteListener(): void {
-  if (isGlobalListenerSetup) return;
-  isGlobalListenerSetup = true;
-  
-  window.addEventListener('bitfun:todowrite-update', handleGlobalTodoWriteUpdate);
-}
-
-setupGlobalTodoWriteListener();
-
-// Clear build tracking when a dialog is cancelled.
-window.addEventListener('bitfun:dialog-cancelled', () => {
-  if (buildingPlans.size > 0) {
-    buildingPlans.clear();
-  }
-});
-
-// Track files being written to avoid watcher loops.
-const writingFiles = new Set<string>();
-
-/**
- * Mark a file as being written.
- */
-function markFileWriting(filePath: string): void {
-  const normalizedPath = filePath.replace(/\\/g, '/');
-  writingFiles.add(normalizedPath);
-  setTimeout(() => {
-    writingFiles.delete(normalizedPath);
-  }, 1000);
-}
-
-function isFileWriting(filePath: string): boolean {
-  const normalizedPath = filePath.replace(/\\/g, '/');
-  return writingFiles.has(normalizedPath);
-}
 
 // ==================== PlanDisplay core component ====================
 
@@ -224,9 +72,9 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
     return planDataCache.get(effectiveCacheKey) || null;
   });
   
-  // Initialize build state from the global tracker to survive unmounts.
+  // Initialize build state from the shared service to survive unmounts.
   const [isBuildStarted, setIsBuildStarted] = useState(() => {
-    return buildingPlans.has(effectiveCacheKey);
+    return planFilePath ? planBuildStateService.isBuildActive(planFilePath) : false;
   });
   
   const [isTodosExpanded, setIsTodosExpanded] = useState(false);
@@ -249,6 +97,33 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
 
   const planData = refreshedData || initialPlanData;
 
+  // Subscribe to shared build state service for cross-component sync.
+  useEffect(() => {
+    if (!planFilePath) return;
+    
+    // Sync initial state (in case planFilePath just became available).
+    setIsBuildStarted(planBuildStateService.isBuildActive(planFilePath));
+    
+    const unsubscribe = planBuildStateService.subscribe(planFilePath, (event) => {
+      setIsBuildStarted(event.isBuilding);
+      
+      if (event.updatedTodos) {
+        const cached = planDataCache.get(effectiveCacheKey);
+        const newPlanData: PlanData = {
+          name: cached?.name || initialName,
+          overview: cached?.overview || initialOverview,
+          todos: event.updatedTodos,
+          planFilePath: planFilePath,
+          planContent: event.planContent || cached?.planContent,
+        };
+        setRefreshedData(newPlanData);
+        planDataCache.set(effectiveCacheKey, newPlanData);
+      }
+    });
+    
+    return unsubscribe;
+  }, [planFilePath, effectiveCacheKey, initialName, initialOverview]);
+
   // Load latest content on mount and refresh on file changes.
   useEffect(() => {
     if (!planFilePath) {
@@ -263,7 +138,7 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
 
     const loadFromFile = async () => {
       // Skip refresh while writing to avoid feedback loops.
-      if (isFileWriting(planFilePath)) {
+      if (planBuildStateService.isFileWriting(planFilePath)) {
         return;
       }
 
@@ -297,7 +172,7 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
       loadFromFile();
     }
 
-    let debounceTimer: NodeJS.Timeout | null = null;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const unwatch = fileSystemService.watchFileChanges(dirPath, (event) => {
       const eventPath = event.path.replace(/\\/g, '/');
@@ -352,34 +227,6 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
       }
     }
   }, [buildStatus, isBuildStarted]);
-  
-  useEffect(() => {
-    const unsubscribe = subscribeToCacheUpdate(effectiveCacheKey, (newData) => {
-      setRefreshedData(newData);
-    });
-    
-    return () => {
-      unsubscribe();
-    };
-  }, [effectiveCacheKey]);
-
-  // Reset build state on dialog cancel (keep todos to preserve progress).
-  useEffect(() => {
-    if (!isBuildStarted) return;
-
-    const handleDialogCancelled = () => {
-      if (buildStatus === 'built') return;
-      
-      setIsBuildStarted(false);
-    };
-
-    window.addEventListener('bitfun:dialog-cancelled', handleDialogCancelled);
-    return () => {
-      window.removeEventListener('bitfun:dialog-cancelled', handleDialogCancelled);
-    };
-  }, [isBuildStarted, buildStatus]);
-
-  // The global TodoWrite listener keeps cache updated after unmount.
 
   const planFileName = useMemo(() => {
     if (!planData?.planFilePath) return '';
@@ -418,11 +265,9 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
       setRefreshedData(latestPlanData);
       planDataCache.set(effectiveCacheKey, latestPlanData);
 
-      // Register build tracking so unmounted components still receive updates.
-      const todoIds = new Set(latestPlanData.todos.map(t => t.id));
-      buildingPlans.set(effectiveCacheKey, todoIds);
-      
-      setIsBuildStarted(true);
+      // Register build in shared service (notifies all subscribers including PlanViewer).
+      const todoIds = latestPlanData.todos.map(t => t.id);
+      planBuildStateService.startBuild(planFilePath, todoIds);
 
       // Send message using the latest data.
       const simpleTodos = latestPlanData.todos.map(t => ({ 
@@ -446,8 +291,7 @@ ${JSON.stringify(simpleTodos, null, 2)}
       await flowChatManager.sendMessage(message, undefined, displayMessage, 'agentic', 'agentic');
     } catch (error) {
       log.error('Build failed', { cacheKey: effectiveCacheKey, planFilePath, error });
-      buildingPlans.delete(effectiveCacheKey);
-      setIsBuildStarted(false);
+      planBuildStateService.cancelBuild(planFilePath);
     }
   }, [planFilePath, buildStatus, effectiveCacheKey, initialName, initialOverview, initialTodos]);
 
@@ -602,7 +446,7 @@ export const CreatePlanDisplay: React.FC<ToolCardProps> = ({
       initialName={initialName}
       initialOverview={initialOverview}
       initialTodos={initialTodos}
-      status={status}
+      status={status as PlanDisplayProps['status']}
       cacheKey={toolItem.id}
     />
   );
