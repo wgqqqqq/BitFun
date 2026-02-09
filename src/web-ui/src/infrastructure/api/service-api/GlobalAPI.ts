@@ -3,7 +3,6 @@
 import { api } from './ApiClient';
 import { createTauriCommandError } from '../errors/TauriCommandError';
 
-
 export interface ApplicationState {
   status: AppStatus;
   workspace?: WorkspaceInfo;
@@ -18,18 +17,41 @@ export interface AppStatus {
 }
 
 export interface WorkspaceInfo {
+  id: string;
   name: string;
   rootPath: string;
-  type: string;
-  filesCount: number;
+  workspaceType: 'singleProject' | 'multiProject' | 'documentation' | 'other';
+  languages: string[];
+  openedAt: string;
+  lastAccessed: string;
+  description?: string;
+  tags: string[];
+  statistics?: ProjectStatistics;
+  metadata?: Record<string, any>;
 }
 
 export interface UpdateAppStatusRequest {
   status: AppStatus;
 }
 
+export interface ProjectStatistics {
+  totalFiles: number;
+  totalLines: number;
+  totalSize: number;
+  filesByLanguage: Record<string, number>;
+  filesByExtension: Record<string, number>;
+  lastUpdated: string;
+}
+
+export interface OpenWorkspaceOptions {
+  addToRecent?: boolean;
+  persist?: boolean;
+  metadata?: Record<string, any>;
+}
+
 export interface OpenWorkspaceRequest {
   path: string;
+  options?: OpenWorkspaceOptions;
 }
 
 export interface ScanWorkspaceInfoRequest {
@@ -71,13 +93,13 @@ export class GlobalAPI {
   }
 
    
-  async openWorkspace(path: string): Promise<WorkspaceInfo> {
+  async openWorkspace(path: string, options?: OpenWorkspaceOptions): Promise<WorkspaceInfo> {
     try {
       return await api.invoke('open_workspace', { 
-        request: { path } 
+        request: { path, options } 
       });
     } catch (error) {
-      throw createTauriCommandError('open_workspace', error, { path });
+      throw createTauriCommandError('open_workspace', error, { path, options });
     }
   }
 

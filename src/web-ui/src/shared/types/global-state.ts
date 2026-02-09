@@ -66,6 +66,13 @@ export interface WorkspaceInfo {
   description?: string;
   tags: string[];
   statistics?: ProjectStatistics;
+  metadata?: Record<string, any>;
+}
+
+export interface OpenWorkspaceOptions {
+  addToRecent?: boolean;
+  persist?: boolean;
+  metadata?: Record<string, any>;
 }
 
 
@@ -118,7 +125,7 @@ export interface GlobalStateAPI {
   updateAppStatus(status: AppStatus): Promise<void>;
 
   
-  openWorkspace(path: string): Promise<WorkspaceInfo>;
+  openWorkspace(path: string, options?: OpenWorkspaceOptions): Promise<WorkspaceInfo>;
   closeWorkspace(): Promise<void>;
   getCurrentWorkspace(): Promise<WorkspaceInfo | null>;
   getRecentWorkspaces(): Promise<WorkspaceInfo[]>;
@@ -148,7 +155,7 @@ export function createGlobalStateAPI(): GlobalStateAPI {
     },
 
     
-    async openWorkspace(path: string): Promise<WorkspaceInfo> {
+    async openWorkspace(path: string, options?: OpenWorkspaceOptions): Promise<WorkspaceInfo> {
       logger.debug('openWorkspace called with', {
         path,
         pathType: typeof path,
@@ -160,7 +167,7 @@ export function createGlobalStateAPI(): GlobalStateAPI {
         throw new Error('Path parameter is required and cannot be empty');
       }
       
-      return await globalAPI.openWorkspace(path);
+      return await globalAPI.openWorkspace(path, options);
     },
 
     async closeWorkspace(): Promise<void> {

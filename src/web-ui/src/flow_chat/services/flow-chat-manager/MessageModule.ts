@@ -6,7 +6,7 @@
 import { FlowChatStore } from '../../store/FlowChatStore';
 import { agentAPI } from '@/infrastructure/api';
 import { CoworkAPI } from '@/infrastructure/api/service-api/CoworkAPI';
-import { workspaceAPI } from '@/infrastructure/api';
+import { workspaceManager } from '@/infrastructure/services/business/workspaceManager';
 import { aiExperienceConfigService } from '@/infrastructure/config/services';
 import { notificationService } from '../../../shared/notification-system';
 import { stateMachineManager } from '../../state-machine';
@@ -653,7 +653,15 @@ async function sendCoworkMessage(
 
   if (workspaceRoot) {
     try {
-      await workspaceAPI.openWorkspace(workspaceRoot);
+      await workspaceManager.openWorkspace(workspaceRoot, {
+        addToRecent: false,
+        persist: false,
+        metadata: {
+          source: 'cowork',
+          temporary: true,
+          coworkSessionId,
+        },
+      });
     } catch (e: any) {
       const message = e instanceof Error ? e.message : String(e);
       notificationService.error(message, {

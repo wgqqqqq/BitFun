@@ -8,7 +8,7 @@ import { Button, Textarea, IconButton } from '@/component-library';
 import { PanelHeader } from '@/app/components/panels/base';
 import { createLogger } from '@/shared/utils/logger';
 import { CoworkAPI } from '@/infrastructure/api/service-api/CoworkAPI';
-import { workspaceAPI } from '@/infrastructure/api';
+import { useWorkspaceContext } from '@/infrastructure/contexts/WorkspaceContext';
 import { useCoworkStore } from '../../store/coworkStore';
 import type { CoworkTask } from '../../types';
 import { Play, Pause, XCircle, RefreshCw, Save } from 'lucide-react';
@@ -17,6 +17,7 @@ import './CoworkPanel.scss';
 const log = createLogger('CoworkPanel');
 
 const CoworkPanel: React.FC<{ isActive?: boolean; className?: string }> = ({ isActive = false, className = '' }) => {
+  const { openWorkspace } = useWorkspaceContext();
   const {
     coworkSessionId,
     goalInput,
@@ -67,7 +68,15 @@ const CoworkPanel: React.FC<{ isActive?: boolean; className?: string }> = ({ isA
     try {
       const resp = await CoworkAPI.createSession({ goal: goalInput.trim(), roster });
       if (resp.workspaceRoot) {
-        await workspaceAPI.openWorkspace(resp.workspaceRoot);
+        await openWorkspace(resp.workspaceRoot, {
+          addToRecent: false,
+          persist: false,
+          metadata: {
+            source: 'cowork',
+            temporary: true,
+            coworkSessionId: resp.coworkSessionId,
+          },
+        });
       }
       applySessionCreated({ coworkSessionId: resp.coworkSessionId, goal: goalInput.trim(), roster });
     } catch (e) {
@@ -76,7 +85,7 @@ const CoworkPanel: React.FC<{ isActive?: boolean; className?: string }> = ({ isA
     } finally {
       setIsBusy(false);
     }
-  }, [goalInput, roster, applySessionCreated, setError]);
+  }, [goalInput, roster, applySessionCreated, setError, openWorkspace]);
 
   const handleGeneratePlan = useCallback(async () => {
     if (!coworkSessionId) return;

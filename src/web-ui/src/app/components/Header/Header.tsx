@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { Settings, FolderOpen, Home, FolderPlus, Info, Menu, PanelBottom } from 'lucide-react';
+import { Settings, FolderOpen, Home, FolderPlus, Info, Menu, PanelBottom, ArrowLeft } from 'lucide-react';
 import { PanelLeftIcon, PanelRightIcon } from './PanelIcons';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
@@ -11,12 +11,13 @@ import { Button, WindowControls, Tooltip } from '@/component-library';
 import { WorkspaceManager } from '../../../tools/workspace';
 import { CurrentSessionTitle, useToolbarModeContext } from '../../../flow_chat'; // Imported from flow_chat module
 import { createConfigCenterTab } from '@/shared/utils/tabUtils';
-import { workspaceAPI } from '@/infrastructure/api';
+import { systemAPI, workspaceAPI } from '@/infrastructure/api';
 import { NewProjectDialog } from '../NewProjectDialog';
 import { AboutDialog } from '../AboutDialog';
 import { GlobalSearch } from './GlobalSearch';
 import { AgentOrb } from './AgentOrb';
 import { createLogger } from '@/shared/utils/logger';
+import { workspaceManager } from '@/infrastructure/services/business/workspaceManager';
 
 const log = createLogger('Header');
 
@@ -133,10 +134,38 @@ const Header: React.FC<HeaderProps> = ({
 		}, [onMaximize]);
   
   const {
+    currentWorkspace,
     hasWorkspace,
     workspacePath,
-    openWorkspace
+    openWorkspace,
+    closeWorkspace,
   } = useWorkspaceContext();
+
+  const coworkMeta = (currentWorkspace?.metadata ?? {}) as any;
+  const isCoworkTempWorkspace = Boolean(coworkMeta?.source === 'cowork' && coworkMeta?.temporary === true);
+  const lastUserWorkspacePath = workspaceManager.getLastUserWorkspacePath();
+
+  const handleRevealCoworkWorkspace = useCallback(async () => {
+    if (!workspacePath) return;
+    try {
+      await systemAPI.showInFolder(workspacePath);
+    } catch (e) {
+      log.error('Failed to reveal cowork workspace', { error: e, workspacePath });
+    }
+  }, [workspacePath]);
+
+  const handleExitCowork = useCallback(async () => {
+    try {
+      if (lastUserWorkspacePath && lastUserWorkspacePath !== workspacePath) {
+        await openWorkspace(lastUserWorkspacePath);
+        return;
+      }
+      await closeWorkspace();
+      onHome();
+    } catch (e) {
+      log.error('Failed to exit cowork workspace', { error: e });
+    }
+  }, [lastUserWorkspacePath, workspacePath, openWorkspace, closeWorkspace, onHome]);
 
   // Open existing project
   const handleOpenProject = useCallback(async () => {
@@ -433,6 +462,38 @@ const Header: React.FC<HeaderProps> = ({
               )}
             </button>
           </div>
+
+          {isCoworkTempWorkspace && (
+            <div
+              className="bitfun-cowork-workspace-banner"
+              onMouseDown={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+            >
+              <span className="bitfun-cowork-workspace-banner__label">Cowork</span>
+              <Tooltip content="Reveal temporary workspace">
+                <Button
+                  variant="ghost"
+                  size="small"
+                  iconOnly
+                  onClick={handleRevealCoworkWorkspace}
+                  aria-label="Reveal temporary workspace"
+                >
+                  <FolderOpen size={14} />
+                </Button>
+              </Tooltip>
+              <Tooltip content={lastUserWorkspacePath ? 'Switch back to previous workspace' : 'Close Cowork workspace'}>
+                <Button
+                  variant="ghost"
+                  size="small"
+                  iconOnly
+                  onClick={handleExitCowork}
+                  aria-label="Exit Cowork workspace"
+                >
+                  <ArrowLeft size={14} />
+                </Button>
+              </Tooltip>
+            </div>
+          )}
 	          
 	          {/* Config center button */}
 	          <Tooltip content={t('header.configCenter')}>

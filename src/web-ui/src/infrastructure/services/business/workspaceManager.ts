@@ -1,10 +1,11 @@
  
 
-import { WorkspaceInfo, globalStateAPI } from '../../../shared/types';
+import { WorkspaceInfo, globalStateAPI, type OpenWorkspaceOptions } from '../../../shared/types';
 import { createLogger } from '@/shared/utils/logger';
 
 const log = createLogger('WorkspaceManager');
 
+const LAST_USER_WORKSPACE_PATH_KEY = 'bitfun:lastUserWorkspacePath';
 
 export type WorkspaceEvent = 
   | { type: 'workspace:opened', workspace: WorkspaceInfo }
@@ -32,6 +33,7 @@ class WorkspaceManager {
   private listeners: Set<WorkspaceEventListener> = new Set();
   private isInitialized: boolean = false;
   private isInitializing: boolean = false;
+  private lastUserWorkspacePath: string | null = null;
 
   private constructor() {
     this.state = {
@@ -40,6 +42,8 @@ class WorkspaceManager {
       loading: false,
       error: null,
     };
+
+    this.lastUserWorkspacePath = this.loadLastUserWorkspacePath();
   }
 
    
@@ -53,6 +57,38 @@ class WorkspaceManager {
    
   public getState(): WorkspaceState {
     return { ...this.state };
+  }
+
+  public getLastUserWorkspacePath(): string | null {
+    return this.lastUserWorkspacePath;
+  }
+
+  private isTemporaryWorkspace(workspace: WorkspaceInfo | null | undefined): boolean {
+    return Boolean(workspace?.metadata && (workspace.metadata as any).temporary === true);
+  }
+
+  private loadLastUserWorkspacePath(): string | null {
+    try {
+      if (typeof window === 'undefined') return null;
+      const val = window.sessionStorage.getItem(LAST_USER_WORKSPACE_PATH_KEY);
+      return val && val.trim() ? val : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private persistLastUserWorkspacePath(path: string | null): void {
+    this.lastUserWorkspacePath = path;
+    try {
+      if (typeof window === 'undefined') return;
+      if (!path) {
+        window.sessionStorage.removeItem(LAST_USER_WORKSPACE_PATH_KEY);
+      } else {
+        window.sessionStorage.setItem(LAST_USER_WORKSPACE_PATH_KEY, path);
+      }
+    } catch {
+      // ignore
+    }
   }
 
    
@@ -133,6 +169,10 @@ class WorkspaceManager {
       
       if (currentWorkspace) {
         log.info('Restored workspace detected', { workspaceName: currentWorkspace.name });
+
+        if (!this.isTemporaryWorkspace(currentWorkspace)) {
+          this.persistLastUserWorkspacePath(currentWorkspace.rootPath);
+        }
         
         
         this.updateState({
@@ -185,7 +225,11 @@ class WorkspaceManager {
   }
 
    
-  public async openWorkspace(path: string): Promise<WorkspaceInfo> {
+  public async openWorkspace(path: string, options?: OpenWorkspaceOptions): Promise<WorkspaceInfo> {
+    return await this.openWorkspaceWithOptions(path, options);
+  }
+
+  public async openWorkspaceWithOptions(path: string, options?: OpenWorkspaceOptions): Promise<WorkspaceInfo> {
     try {
       
       this.updateState(
@@ -195,9 +239,15 @@ class WorkspaceManager {
 
       log.info('Opening workspace', { path });
 
+      const previousWorkspace = this.state.currentWorkspace;
+      const previousUserWorkspacePath =
+        previousWorkspace && !this.isTemporaryWorkspace(previousWorkspace)
+          ? previousWorkspace.rootPath
+          : this.lastUserWorkspacePath;
+      
       
       const [workspace, recentWorkspaces] = await Promise.all([
-        globalStateAPI.openWorkspace(path),
+        globalStateAPI.openWorkspace(path, options),
         globalStateAPI.getRecentWorkspaces()
       ]);
       
@@ -207,6 +257,15 @@ class WorkspaceManager {
         rootPath: workspace.rootPath,
         type: workspace.workspaceType
       });
+
+      const openedIsTemporary = this.isTemporaryWorkspace(workspace);
+      if (openedIsTemporary) {
+        if (previousUserWorkspacePath && previousUserWorkspacePath !== workspace.rootPath) {
+          this.persistLastUserWorkspacePath(previousUserWorkspacePath);
+        }
+      } else {
+        this.persistLastUserWorkspacePath(workspace.rootPath);
+      }
 
       
       this.updateState(
@@ -455,5 +514,3 @@ export const workspaceManager = WorkspaceManager.getInstance();
 
 
 export { WorkspaceManager };
-
-
