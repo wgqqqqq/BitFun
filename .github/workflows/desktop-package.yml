@@ -67,6 +67,7 @@ jobs:
           name: bitfun-${{ matrix.platform.name }}-bundle
           if-no-files-found: error
           path: |
+            target/*/release/bundle
             target/release/bundle
             src/apps/desktop/target/release/bundle
 
