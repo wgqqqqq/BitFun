@@ -791,7 +791,6 @@ impl AIClient {
                     Ok(ConnectionTestResult {
                         success: true,
                         response_time_ms,
-                        message: "Connection successful".to_string(),
                         model_response: Some(response.text),
                         error_details: None,
                     })
@@ -799,8 +798,6 @@ impl AIClient {
                     Ok(ConnectionTestResult {
                         success: false,
                         response_time_ms,
-                        message: "Connection successful but model does not support tool calls"
-                            .to_string(),
                         model_response: Some(response.text),
                         error_details: Some("Model does not support tool calls".to_string()),
                     })
@@ -813,7 +810,6 @@ impl AIClient {
                 Ok(ConnectionTestResult {
                     success: false,
                     response_time_ms,
-                    message: "Connection failed".to_string(),
                     model_response: None,
                     error_details: Some(error_msg),
                 })
