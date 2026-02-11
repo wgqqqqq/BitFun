@@ -6,12 +6,12 @@
 //! 3. Invalidate cache when configuration changes
 //! 4. Provide global singleton access
 
-use log::{debug, info};
 use crate::infrastructure::ai::AIClient;
 use crate::service::config::{get_global_config_service, ConfigService};
 use crate::util::errors::{BitFunError, BitFunResult};
 use crate::util::types::AIConfig;
 use anyhow::{anyhow, Result};
+use log::{debug, info};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
 
@@ -79,11 +79,9 @@ impl AIClientFactory {
 
                 match global_config.ai.default_models.fast {
                     Some(fast_id) => fast_id,
-                    None => {
-                        global_config.ai.default_models.primary.ok_or_else(|| {
-                            anyhow!("Fast model not configured and primary model not configured")
-                        })?
-                    }
+                    None => global_config.ai.default_models.primary.ok_or_else(|| {
+                        anyhow!("Fast model not configured and primary model not configured")
+                    })?,
                 }
             }
             _ => model_id.to_string(),
@@ -148,8 +146,7 @@ impl AIClientFactory {
 
         debug!(
             "AI client created: model_id={}, name={}",
-            model_id,
-            model_config.name
+            model_id, model_config.name
         );
 
         Ok(client)

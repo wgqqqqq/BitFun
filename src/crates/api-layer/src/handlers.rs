@@ -35,7 +35,8 @@ pub async fn handle_execute_agent_task(
 ) -> Result<ExecuteAgentResponse> {
     info!(
         "Executing agent task: agent_type={}, message_length={}",
-        request.agent_type, request.user_message.len()
+        request.agent_type,
+        request.user_message.len()
     );
 
     Ok(ExecuteAgentResponse {
