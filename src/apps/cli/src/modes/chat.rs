@@ -1,7 +1,6 @@
 /// Chat mode implementation
-/// 
+///
 /// Interactive chat mode with TUI interface
-
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::backend::CrosstermBackend;
@@ -11,12 +10,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+use crate::agent::{agentic_system::AgenticSystem, core_adapter::CoreAgentAdapter, Agent};
 use crate::config::CliConfig;
 use crate::session::Session;
 use crate::ui::chat::ChatView;
 use crate::ui::theme::Theme;
 use crate::ui::{init_terminal, restore_terminal};
-use crate::agent::{Agent, core_adapter::CoreAgentAdapter, agentic_system::AgenticSystem};
 use uuid;
 
 /// Chat mode exit reason
@@ -37,8 +36,8 @@ pub struct ChatMode {
 
 impl ChatMode {
     pub fn new(
-        config: CliConfig, 
-        agent_name: String, 
+        config: CliConfig,
+        agent_name: String,
         workspace: Option<String>,
         agentic_system: &AgenticSystem,
     ) -> Self {
@@ -48,7 +47,7 @@ impl ChatMode {
             agentic_system.coordinator.clone(),
             agentic_system.event_queue.clone(),
         )) as Arc<dyn Agent>;
-        
+
         Self {
             config,
             agent_name,
@@ -71,7 +70,7 @@ impl ChatMode {
             None => init_terminal()?,
         };
         let session = Session::new(self.agent_name.clone(), self.workspace.clone());
-        
+
         let theme = match self.config.ui.theme.as_str() {
             "light" => Theme::light(),
             _ => Theme::dark(),
@@ -79,16 +78,18 @@ impl ChatMode {
         let mut chat_view = ChatView::new(session, theme);
 
         let rt_handle = tokio::runtime::Handle::current();
-        let (response_tx, mut response_rx) = mpsc::unbounded_channel::<crate::agent::AgentResponse>();
+        let (response_tx, mut response_rx) =
+            mpsc::unbounded_channel::<crate::agent::AgentResponse>();
         let (stream_tx, mut stream_rx) = mpsc::unbounded_channel::<crate::agent::AgentEvent>();
-        
+
         let mut pending_response: Option<tokio::task::JoinHandle<Result<()>>> = None;
         let mut current_assistant_message_text = String::new();
-        let mut current_tool_map: std::collections::HashMap<String, crate::session::ToolCall> = std::collections::HashMap::new();
+        let mut current_tool_map: std::collections::HashMap<String, crate::session::ToolCall> =
+            std::collections::HashMap::new();
 
         let mut exit_reason = ChatExitReason::Quit;
         let mut should_quit = false;
-        
+
         while !should_quit {
             terminal.draw(|frame| {
                 chat_view.render(frame);
@@ -97,24 +98,27 @@ impl ChatMode {
             while let Ok(event) = stream_rx.try_recv() {
                 use crate::agent::AgentEvent;
                 use crate::session::{ToolCall, ToolCallStatus};
-                
+
                 match event {
                     AgentEvent::TextChunk(chunk) => {
                         current_assistant_message_text.push_str(&chunk);
                         chat_view.session.update_last_message_text_flow(
                             current_assistant_message_text.clone(),
-                            true
+                            true,
                         );
                     }
-                    
-                    AgentEvent::ToolCallStart { tool_name, parameters } => {
+
+                    AgentEvent::ToolCallStart {
+                        tool_name,
+                        parameters,
+                    } => {
                         if !current_assistant_message_text.is_empty() {
                             chat_view.session.update_last_message_text_flow(
                                 current_assistant_message_text.clone(),
-                                false
+                                false,
                             );
                         }
-                        
+
                         let tool_id = uuid::Uuid::new_v4().to_string();
                         let tool_call = ToolCall {
                             tool_id: Some(tool_id.clone()),
@@ -126,11 +130,11 @@ impl ChatMode {
                             progress_message: None,
                             duration_ms: None,
                         };
-                        
+
                         current_tool_map.insert(tool_id, tool_call.clone());
                         chat_view.session.add_tool_to_last_message(tool_call);
                     }
-                    
+
                     AgentEvent::ToolCallProgress { tool_name, message } => {
                         for (tool_id, tool) in current_tool_map.iter() {
                             if tool.tool_name == tool_name {
@@ -142,10 +146,15 @@ impl ChatMode {
                             }
                         }
                     }
-                    
-                    AgentEvent::ToolCallComplete { tool_name, result, success } => {
+
+                    AgentEvent::ToolCallComplete {
+                        tool_name,
+                        result,
+                        success,
+                    } => {
                         for (tool_id, tool) in current_tool_map.iter_mut() {
-                            if tool.tool_name == tool_name && tool.status == ToolCallStatus::Running {
+                            if tool.tool_name == tool_name && tool.status == ToolCallStatus::Running
+                            {
                                 tool.status = if success {
                                     ToolCallStatus::Success
                                 } else {
@@ -153,7 +162,7 @@ impl ChatMode {
                                 };
                                 tool.result = Some(result.clone());
                                 tool.progress = Some(1.0);
-                                
+
                                 let tid = tool_id.clone();
                                 chat_view.session.update_tool_in_last_message(&tid, |t| {
                                     t.status = tool.status.clone();
@@ -164,20 +173,20 @@ impl ChatMode {
                             }
                         }
                     }
-                    
+
                     AgentEvent::Done => {
                         if !current_assistant_message_text.is_empty() {
                             chat_view.session.update_last_message_text_flow(
                                 current_assistant_message_text.clone(),
-                                false
+                                false,
                             );
                         }
                     }
-                    
+
                     AgentEvent::Error(err) => {
                         chat_view.set_status(Some(format!("Error: {}", err)));
                     }
-                    
+
                     _ => {}
                 }
             }
@@ -188,7 +197,7 @@ impl ChatMode {
                 chat_view.set_loading(false);
                 chat_view.set_status(None);
             }
-            
+
             if let Some(handle) = &pending_response {
                 if handle.is_finished() {
                     pending_response = None;
@@ -201,10 +210,10 @@ impl ChatMode {
                     match event {
                         Event::Key(key) => {
                             if let Some(reason) = self.handle_key_event(
-                                key, 
-                                &mut chat_view, 
-                                &mut pending_response, 
-                                &rt_handle, 
+                                key,
+                                &mut chat_view,
+                                &mut pending_response,
+                                &rt_handle,
                                 &response_tx,
                                 &stream_tx,
                                 &mut current_assistant_message_text,
@@ -233,8 +242,8 @@ impl ChatMode {
     }
 
     fn handle_key_event(
-        &self, 
-        key: KeyEvent, 
+        &self,
+        key: KeyEvent,
         chat_view: &mut ChatView,
         pending_response: &mut Option<tokio::task::JoinHandle<Result<()>>>,
         rt_handle: &tokio::runtime::Handle,
@@ -246,7 +255,7 @@ impl ChatMode {
         if key.kind != KeyEventKind::Press && key.kind != KeyEventKind::Repeat {
             return Ok(None);
         }
-        
+
         match (key.code, key.modifiers) {
             (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
                 tracing::info!("User requested quit");
@@ -270,33 +279,42 @@ impl ChatMode {
 
                 if let Some(input) = chat_view.send_input() {
                     tracing::info!("User input: {}", input);
-                    
+
                     if input.starts_with('/') {
                         self.handle_command(&input, chat_view)?;
                         return Ok(None);
                     }
-                    
+
                     chat_view.set_loading(true);
                     chat_view.set_status(Some(format!("{} is thinking...", self.agent_name)));
-                    chat_view.session.add_message("assistant".to_string(), String::new());
-                    
+                    chat_view
+                        .session
+                        .add_message("assistant".to_string(), String::new());
+
                     current_assistant_message_text.clear();
                     current_tool_map.clear();
-                    
+
                     let agent = Arc::clone(&self.agent);
                     let input_clone = input.clone();
                     let resp_tx = response_tx.clone();
                     let stream_tx_clone = stream_tx.clone();
-                    
+
                     let handle_clone = rt_handle.spawn(async move {
-                        match agent.process_message(input_clone, stream_tx_clone.clone()).await {
+                        match agent
+                            .process_message(input_clone, stream_tx_clone.clone())
+                            .await
+                        {
                             Ok(response) => {
-                                tracing::info!("Agent response complete: {} tool calls", response.tool_calls.len());
+                                tracing::info!(
+                                    "Agent response complete: {} tool calls",
+                                    response.tool_calls.len()
+                                );
                                 let _ = resp_tx.send(response);
                             }
                             Err(e) => {
                                 tracing::error!("Agent processing failed: {}", e);
-                                let _ = stream_tx_clone.send(crate::agent::AgentEvent::Error(e.to_string()));
+                                let _ = stream_tx_clone
+                                    .send(crate::agent::AgentEvent::Error(e.to_string()));
                                 let _ = resp_tx.send(crate::agent::AgentResponse {
                                     tool_calls: vec![],
                                     success: false,
@@ -305,7 +323,7 @@ impl ChatMode {
                         }
                         Ok(())
                     });
-                    
+
                     *pending_response = Some(handle_clone);
                 }
             }
@@ -416,7 +434,8 @@ impl ChatMode {
                      /agents - List available agents\n\
                      /switch <agent> - Switch agent\n\
                      /history - Show history\n\
-                     /export - Export session".to_string(),
+                     /export - Export session"
+                        .to_string(),
                 );
             }
             "/clear" => {
@@ -432,7 +451,8 @@ impl ChatMode {
                      • test-writer - Test writing expert\n\
                      • docs-writer - Documentation expert\n\
                      • rust-specialist - Rust expert\n\
-                     • visual-debugger - Visual debugging expert".to_string(),
+                     • visual-debugger - Visual debugging expert"
+                        .to_string(),
                 );
             }
             "/switch" => {
@@ -442,34 +462,40 @@ impl ChatMode {
                         format!("Warning: Agent switching feature coming soon\nTip: Use `bitfun chat --agent {}` to start a new session", parts[1]),
                     );
                 } else {
-                    chat_view.add_message(
-                        "system".to_string(),
-                        "Usage: /switch <agent>".to_string(),
-                    );
+                    chat_view
+                        .add_message("system".to_string(), "Usage: /switch <agent>".to_string());
                 }
             }
             "/history" => {
                 chat_view.add_message(
                     "system".to_string(),
-                    format!("Current session statistics:\n\
+                    format!(
+                        "Current session statistics:\n\
                              • Messages: {}\n\
                              • Tool calls: {}\n\
                              • Files modified: {}",
-                            chat_view.session.metadata.message_count,
-                            chat_view.session.metadata.tool_calls,
-                            chat_view.session.metadata.files_modified),
+                        chat_view.session.metadata.message_count,
+                        chat_view.session.metadata.tool_calls,
+                        chat_view.session.metadata.files_modified
+                    ),
                 );
             }
             "/export" => {
                 chat_view.add_message(
                     "system".to_string(),
-                    format!("Session auto-saved to: ~/.config/bitfun/sessions/{}.json", chat_view.session.id),
+                    format!(
+                        "Session auto-saved to: ~/.config/bitfun/sessions/{}.json",
+                        chat_view.session.id
+                    ),
                 );
             }
             _ => {
                 chat_view.add_message(
                     "system".to_string(),
-                    format!("Unknown command: {}\nUse /help to see available commands", parts[0]),
+                    format!(
+                        "Unknown command: {}\nUse /help to see available commands",
+                        parts[0]
+                    ),
                 );
             }
         }
@@ -477,4 +503,3 @@ impl ChatMode {
         Ok(())
     }
 }
-
