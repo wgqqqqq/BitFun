@@ -140,6 +140,11 @@ impl PathManager {
     pub fn user_data_dir(&self) -> PathBuf {
         self.user_root.join("data")
     }
+
+    /// Get user plugins directory: ~/.config/bitfun/plugins/
+    pub fn user_plugins_dir(&self) -> PathBuf {
+        self.user_root.join("plugins")
+    }
     
     /// Get user-level rules directory: ~/.config/bitfun/data/rules/
     pub fn user_rules_dir(&self) -> PathBuf {
@@ -194,6 +199,11 @@ impl PathManager {
     /// Get project agent directory: {project}/.bitfun/agents/
     pub fn project_agents_dir(&self, workspace_path: &Path) -> PathBuf {
         self.project_root(workspace_path).join("agents")
+    }
+
+    /// Get project plugins directory: {project}/.bitfun/plugins/
+    pub fn project_plugins_dir(&self, workspace_path: &Path) -> PathBuf {
+        self.project_root(workspace_path).join("plugins")
     }
     
     /// Get project-level rules directory: {project}/.bitfun/rules/
@@ -403,4 +413,3 @@ pub fn try_get_path_manager_arc() -> BitFunResult<Arc<PathManager>> {
         .get_or_try_init(init_global_path_manager)
         .map(Arc::clone)
 }
-
