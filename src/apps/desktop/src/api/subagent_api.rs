@@ -158,7 +158,10 @@ pub async fn create_subagent(
         .chain(subagents.iter().map(|s| s.id.as_str().to_lowercase()))
         .collect();
     if existing.contains(name.to_lowercase().as_str()) {
-        return Err(format!("Name '{}' conflicts with existing mode or Sub Agent", name));
+        return Err(format!(
+            "Name '{}' conflicts with existing mode or Sub Agent",
+            name
+        ));
     }
 
     let pm = state.workspace_service.path_manager();
@@ -171,7 +174,8 @@ pub async fn create_subagent(
         }
     };
 
-    std::fs::create_dir_all(&agents_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
+    std::fs::create_dir_all(&agents_dir)
+        .map_err(|e| format!("Failed to create directory: {}", e))?;
 
     let tools = request.tools.filter(|t| !t.is_empty()).unwrap_or_else(|| {
         vec![
@@ -201,7 +205,9 @@ pub async fn create_subagent(
         path_str.clone(),
         kind,
     );
-    subagent.save_to_file(None, None).map_err(|e| e.to_string())?;
+    subagent
+        .save_to_file(None, None)
+        .map_err(|e| e.to_string())?;
 
     let custom_config = CustomSubagentConfig {
         enabled: subagent.enabled,

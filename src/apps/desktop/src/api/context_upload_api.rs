@@ -1,14 +1,13 @@
 //! Temporary Image Storage API
 
-use log::debug;
+use bitfun_core::agentic::tools::image_context::{
+    ImageContextData as CoreImageContextData, ImageContextProvider,
+};
 use dashmap::DashMap;
+use log::debug;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-use bitfun_core::agentic::tools::image_context::{
-    ImageContextProvider, 
-    ImageContextData as CoreImageContextData
-};
 
 static IMAGE_STORAGE: Lazy<DashMap<String, (ImageContextData, u64)>> = Lazy::new(DashMap::new);
 
@@ -47,9 +46,7 @@ pub struct UploadImageContextRequest {
 }
 
 #[tauri::command]
-pub async fn upload_image_contexts(
-    request: UploadImageContextRequest,
-) -> Result<(), String> {
+pub async fn upload_image_contexts(request: UploadImageContextRequest) -> Result<(), String> {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -67,9 +64,7 @@ pub async fn upload_image_contexts(
 }
 
 pub fn get_image_context(image_id: &str) -> Option<ImageContextData> {
-    IMAGE_STORAGE
-        .get(image_id)
-        .map(|entry| entry.0.clone())
+    IMAGE_STORAGE.get(image_id).map(|entry| entry.0.clone())
 }
 
 pub fn remove_image_context(image_id: &str) {
@@ -83,13 +78,13 @@ fn cleanup_expired_images(max_age_secs: u64) {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    
+
     let expired_keys: Vec<String> = IMAGE_STORAGE
         .iter()
         .filter(|entry| now - entry.value().1 > max_age_secs)
         .map(|entry| entry.key().clone())
         .collect();
-    
+
     for key in expired_keys {
         IMAGE_STORAGE.remove(&key);
         debug!("Cleaned up expired image: image_id={}", key);
@@ -103,7 +98,7 @@ impl ImageContextProvider for GlobalImageContextProvider {
     fn get_image(&self, image_id: &str) -> Option<CoreImageContextData> {
         get_image_context(image_id).map(|data| data.into())
     }
-    
+
     fn remove_image(&self, image_id: &str) {
         remove_image_context(image_id);
     }

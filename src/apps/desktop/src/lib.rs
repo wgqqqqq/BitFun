@@ -8,17 +8,15 @@ pub mod theme;
 
 use bitfun_core::infrastructure::ai::AIClientFactory;
 use bitfun_core::infrastructure::{
-    get_path_manager_arc,
-    get_workspace_path,
-    try_get_path_manager_arc,
+    get_path_manager_arc, get_workspace_path, try_get_path_manager_arc,
 };
 use bitfun_transport::{TauriTransportAdapter, TransportAdapter};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use tauri::Manager;
 use tauri::Emitter;
+use tauri::Manager;
 use tauri_plugin_log::{RotationStrategy, TimezoneStrategy};
 #[cfg(target_os = "macos")]
 use tauri::Emitter;
@@ -409,6 +407,7 @@ pub async fn run() {
             api::plugin_api::set_plugin_enabled,
             api::plugin_api::import_plugin_mcp_servers,
             initialize_mcp_servers,
+            api::mcp_api::initialize_mcp_servers_non_destructive,
             get_mcp_servers,
             start_mcp_server,
             stop_mcp_server,
@@ -467,6 +466,7 @@ pub async fn run() {
             open_workspace,
             close_workspace,
             get_current_workspace,
+            get_cowork_workspace_path,
             scan_workspace_info,
             api::prompt_template_api::get_prompt_template_config,
             api::prompt_template_api::save_prompt_template_config,

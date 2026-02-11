@@ -1,10 +1,10 @@
 //! Configuration API
 
-use tauri::State;
 use crate::api::app_state::AppState;
-use serde_json::Value;
+use log::{error, info, warn};
 use serde::Deserialize;
-use log::{info, warn, error};
+use serde_json::Value;
+use tauri::State;
 
 #[derive(Debug, Deserialize)]
 pub struct GetConfigRequest {
@@ -28,8 +28,11 @@ pub async fn get_config(
     request: GetConfigRequest,
 ) -> Result<Value, String> {
     let config_service = &state.config_service;
-    
-    match config_service.get_config::<Value>(request.path.as_deref()).await {
+
+    match config_service
+        .get_config::<Value>(request.path.as_deref())
+        .await
+    {
         Ok(config) => Ok(config),
         Err(e) => {
             error!("Failed to get config: path={:?}, error={}", request.path, e);
@@ -44,17 +47,24 @@ pub async fn set_config(
     request: SetConfigRequest,
 ) -> Result<String, String> {
     let config_service = &state.config_service;
-    
-    match config_service.set_config(&request.path, request.value).await {
+
+    match config_service
+        .set_config(&request.path, request.value)
+        .await
+    {
         Ok(_) => {
-            if request.path.starts_with("ai.models") || 
-               request.path.starts_with("ai.default_models") ||
-               request.path.starts_with("ai.agent_models") ||
-               request.path.starts_with("ai.proxy") {
+            if request.path.starts_with("ai.models")
+                || request.path.starts_with("ai.default_models")
+                || request.path.starts_with("ai.agent_models")
+                || request.path.starts_with("ai.proxy")
+            {
                 state.ai_client_factory.invalidate_cache();
-                info!("AI config changed, cache invalidated: path={}", request.path);
+                info!(
+                    "AI config changed, cache invalidated: path={}",
+                    request.path
+                );
             }
-            
+
             Ok("Configuration set successfully".to_string())
         }
         Err(e) => {
@@ -70,7 +80,7 @@ pub async fn reset_config(
     request: ResetConfigRequest,
 ) -> Result<String, String> {
     let config_service = &state.config_service;
-    
+
     match config_service.reset_config(request.path.as_deref()).await {
         Ok(_) => {
             let message = if let Some(path) = &request.path {
@@ -78,31 +88,35 @@ pub async fn reset_config(
             } else {
                 "All configurations reset successfully".to_string()
             };
-            
+
             let should_invalidate = match &request.path {
                 Some(path) => path.starts_with("ai"),
                 None => true,
             };
             if should_invalidate {
                 state.ai_client_factory.invalidate_cache();
-                info!("AI config reset, cache invalidated: path={:?}", request.path);
+                info!(
+                    "AI config reset, cache invalidated: path={:?}",
+                    request.path
+                );
             }
-            
+
             Ok(message)
         }
         Err(e) => {
-            error!("Failed to reset config: path={:?}, error={}", request.path, e);
+            error!(
+                "Failed to reset config: path={:?}, error={}",
+                request.path, e
+            );
             Err(format!("Failed to reset config: {}", e))
         }
     }
 }
 
 #[tauri::command]
-pub async fn export_config(
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
+pub async fn export_config(state: State<'_, AppState>) -> Result<Value, String> {
     let config_service = &state.config_service;
-    
+
     match config_service.export_config().await {
         Ok(export_data) => Ok(serde_json::to_value(export_data).unwrap()),
         Err(e) => {
@@ -113,15 +127,12 @@ pub async fn export_config(
 }
 
 #[tauri::command]
-pub async fn import_config(
-    state: State<'_, AppState>,
-    config: Value,
-) -> Result<Value, String> {
+pub async fn import_config(state: State<'_, AppState>, config: Value) -> Result<Value, String> {
     let config_service = &state.config_service;
-    
-    let export_data: bitfun_core::service::config::ConfigExport = serde_json::from_value(config)
-        .map_err(|e| format!("Invalid config format: {}", e))?;
-    
+
+    let export_data: bitfun_core::service::config::ConfigExport =
+        serde_json::from_value(config).map_err(|e| format!("Invalid config format: {}", e))?;
+
     match config_service.import_config(export_data).await {
         Ok(result) => {
             state.ai_client_factory.invalidate_cache();
@@ -136,11 +147,9 @@ pub async fn import_config(
 }
 
 #[tauri::command]
-pub async fn validate_config(
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
+pub async fn validate_config(state: State<'_, AppState>) -> Result<Value, String> {
     let config_service = &state.config_service;
-    
+
     match config_service.validate_config().await {
         Ok(validation_result) => Ok(serde_json::to_value(validation_result).unwrap()),
         Err(e) => {
@@ -151,11 +160,9 @@ pub async fn validate_config(
 }
 
 #[tauri::command]
-pub async fn reload_config(
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+pub async fn reload_config(state: State<'_, AppState>) -> Result<String, String> {
     let config_service = &state.config_service;
-    
+
     match config_service.reload().await {
         Ok(_) => {
             info!("Config reloaded");
@@ -169,9 +176,7 @@ pub async fn reload_config(
 }
 
 #[tauri::command]
-pub async fn sync_config_to_global(
-    _state: State<'_, AppState>,
-) -> Result<String, String> {
+pub async fn sync_config_to_global(_state: State<'_, AppState>) -> Result<String, String> {
     match bitfun_core::service::config::reload_global_config().await {
         Ok(_) => {
             info!("Config synced to global service");
@@ -190,9 +195,7 @@ pub async fn get_global_config_health() -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub async fn get_mode_configs(
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
+pub async fn get_mode_configs(state: State<'_, AppState>) -> Result<Value, String> {
     use bitfun_core::service::config::types::ModeConfig;
     use std::collections::HashMap;
 
@@ -224,7 +227,13 @@ pub async fn get_mode_configs(
     }
 
     if needs_save {
-        if let Err(e) = config_service.set_config("ai.mode_configs", serde_json::to_value(&mode_configs).unwrap()).await {
+        if let Err(e) = config_service
+            .set_config(
+                "ai.mode_configs",
+                serde_json::to_value(&mode_configs).unwrap(),
+            )
+            .await
+        {
             warn!("Failed to save initialized mode configs: {}", e);
         }
     }
@@ -233,10 +242,7 @@ pub async fn get_mode_configs(
 }
 
 #[tauri::command]
-pub async fn get_mode_config(
-    state: State<'_, AppState>,
-    mode_id: String,
-) -> Result<Value, String> {
+pub async fn get_mode_config(state: State<'_, AppState>, mode_id: String) -> Result<Value, String> {
     use bitfun_core::service::config::types::ModeConfig;
 
     let config_service = &state.config_service;
@@ -261,8 +267,14 @@ pub async fn get_mode_config(
                     enabled: true,
                     default_tools: default_tools,
                 };
-                if let Err(e) = config_service.set_config(&path, serde_json::to_value(&new_config).unwrap()).await {
-                    warn!("Failed to save initial mode config: mode_id={}, error={}", mode_id, e);
+                if let Err(e) = config_service
+                    .set_config(&path, serde_json::to_value(&new_config).unwrap())
+                    .await
+                {
+                    warn!(
+                        "Failed to save initial mode config: mode_id={}, error={}",
+                        mode_id, e
+                    );
                 }
                 new_config
             } else {
@@ -287,19 +299,28 @@ pub async fn set_mode_config(
 ) -> Result<String, String> {
     let config_service = &state.config_service;
     let path = format!("ai.mode_configs.{}", mode_id);
-    
+
     match config_service.set_config(&path, config).await {
         Ok(_) => {
             if let Err(e) = bitfun_core::service::config::reload_global_config().await {
-                warn!("Failed to reload global config after mode config change: mode_id={}, error={}", mode_id, e);
+                warn!(
+                    "Failed to reload global config after mode config change: mode_id={}, error={}",
+                    mode_id, e
+                );
             } else {
-                info!("Global config reloaded after mode config change: mode_id={}", mode_id);
+                info!(
+                    "Global config reloaded after mode config change: mode_id={}",
+                    mode_id
+                );
             }
-            
+
             Ok(format!("Mode '{}' configuration set successfully", mode_id))
         }
         Err(e) => {
-            error!("Failed to set mode config: mode_id={}, error={}", mode_id, e);
+            error!(
+                "Failed to set mode config: mode_id={}, error={}",
+                mode_id, e
+            );
             Err(format!("Failed to set mode config: {}", e))
         }
     }
@@ -329,39 +350,52 @@ pub async fn reset_mode_config(
     let config_service = &state.config_service;
     let path = format!("ai.mode_configs.{}", mode_id);
 
-    match config_service.set_config(&path, serde_json::to_value(&default_config).unwrap()).await {
+    match config_service
+        .set_config(&path, serde_json::to_value(&default_config).unwrap())
+        .await
+    {
         Ok(_) => {
             if let Err(e) = bitfun_core::service::config::reload_global_config().await {
-                warn!("Failed to reload global config after mode config reset: mode_id={}, error={}", mode_id, e);
+                warn!(
+                    "Failed to reload global config after mode config reset: mode_id={}, error={}",
+                    mode_id, e
+                );
             } else {
-                info!("Global config reloaded after mode config reset: mode_id={}", mode_id);
+                info!(
+                    "Global config reloaded after mode config reset: mode_id={}",
+                    mode_id
+                );
             }
 
-            Ok(format!("Mode '{}' configuration reset successfully", mode_id))
+            Ok(format!(
+                "Mode '{}' configuration reset successfully",
+                mode_id
+            ))
         }
         Err(e) => {
-            error!("Failed to reset mode config: mode_id={}, error={}", mode_id, e);
+            error!(
+                "Failed to reset mode config: mode_id={}, error={}",
+                mode_id, e
+            );
             Err(format!("Failed to reset mode config: {}", e))
         }
     }
 }
 
 #[tauri::command]
-pub async fn get_subagent_configs(
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
+pub async fn get_subagent_configs(state: State<'_, AppState>) -> Result<Value, String> {
     use bitfun_core::service::config::types::SubAgentConfig;
     use std::collections::HashMap;
-    
+
     let config_service = &state.config_service;
     let mut subagent_configs: HashMap<String, SubAgentConfig> = config_service
         .get_config(Some("ai.subagent_configs"))
         .await
         .unwrap_or_default();
-    
+
     let all_subagents = state.agent_registry.get_subagents_info().await;
     let mut needs_save = false;
-    
+
     for subagent in all_subagents {
         let subagent_id = subagent.id;
         if !subagent_configs.contains_key(&subagent_id) {
@@ -369,13 +403,19 @@ pub async fn get_subagent_configs(
             needs_save = true;
         }
     }
-    
+
     if needs_save {
-        if let Err(e) = config_service.set_config("ai.subagent_configs", serde_json::to_value(&subagent_configs).unwrap()).await {
+        if let Err(e) = config_service
+            .set_config(
+                "ai.subagent_configs",
+                serde_json::to_value(&subagent_configs).unwrap(),
+            )
+            .await
+        {
             warn!("Failed to save initialized subagent configs: {}", e);
         }
     }
-    
+
     Ok(serde_json::to_value(subagent_configs).unwrap())
 }
 
@@ -386,35 +426,43 @@ pub async fn set_subagent_config(
     enabled: bool,
 ) -> Result<String, String> {
     use bitfun_core::service::config::types::SubAgentConfig;
-    
+
     let config_service = &state.config_service;
     let config = SubAgentConfig { enabled };
     let path = format!("ai.subagent_configs.{}", subagent_id);
-    
-    match config_service.set_config(&path, serde_json::to_value(&config).unwrap()).await {
+
+    match config_service
+        .set_config(&path, serde_json::to_value(&config).unwrap())
+        .await
+    {
         Ok(_) => {
             if let Err(e) = bitfun_core::service::config::reload_global_config().await {
                 warn!("Failed to reload global config after subagent config change: subagent_id={}, error={}", subagent_id, e);
             } else {
                 info!("Global config reloaded after subagent config change: subagent_id={}, enabled={}", subagent_id, enabled);
             }
-            
-            Ok(format!("SubAgent '{}' configuration set successfully", subagent_id))
+
+            Ok(format!(
+                "SubAgent '{}' configuration set successfully",
+                subagent_id
+            ))
         }
         Err(e) => {
-            error!("Failed to set subagent config: subagent_id={}, enabled={}, error={}", subagent_id, enabled, e);
+            error!(
+                "Failed to set subagent config: subagent_id={}, enabled={}, error={}",
+                subagent_id, enabled, e
+            );
             Err(format!("Failed to set SubAgent config: {}", e))
         }
     }
 }
 
 #[tauri::command]
-pub async fn sync_tool_configs(
-    _state: State<'_, AppState>,
-) -> Result<Value, String> {
+pub async fn sync_tool_configs(_state: State<'_, AppState>) -> Result<Value, String> {
     match bitfun_core::service::config::tool_config_sync::sync_tool_configs().await {
         Ok(report) => {
-            info!("Tool configs synced: new_tools={}, deleted_tools={}, updated_modes={}",
+            info!(
+                "Tool configs synced: new_tools={}, deleted_tools={}, updated_modes={}",
                 report.new_tools.len(),
                 report.deleted_tools.len(),
                 report.updated_modes.len()
