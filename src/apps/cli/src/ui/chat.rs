@@ -1,5 +1,4 @@
 /// Chat mode TUI interface
-
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -10,10 +9,10 @@ use ratatui::{
 use std::collections::VecDeque;
 use unicode_width::UnicodeWidthStr;
 
-use super::theme::{Theme, StyleKind};
-use super::widgets::{Spinner, HelpText};
 use super::markdown::MarkdownRenderer;
-use crate::session::{Message, Session, FlowItem};
+use super::theme::{StyleKind, Theme};
+use super::widgets::{HelpText, Spinner};
+use crate::session::{FlowItem, Message, Session};
 
 /// Chat interface state
 pub struct ChatView {
@@ -77,11 +76,11 @@ impl ChatView {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // header
-                Constraint::Min(10),     // messages area
-                Constraint::Length(1),  // status bar
-                Constraint::Length(3),  // input area
-                Constraint::Length(1),  // shortcuts hint
+                Constraint::Length(3), // header
+                Constraint::Min(10),   // messages area
+                Constraint::Length(1), // status bar
+                Constraint::Length(3), // input area
+                Constraint::Length(1), // shortcuts hint
             ])
             .split(size);
 
@@ -97,8 +96,11 @@ impl ChatView {
     fn render_header(&self, frame: &mut Frame, area: Rect) {
         let title = format!(" BitFun CLI v{} ", env!("CARGO_PKG_VERSION"));
         let agent_info = format!(" Agent: {} ", self.session.agent);
-        
-        let workspace = self.session.workspace.as_ref()
+
+        let workspace = self
+            .session
+            .workspace
+            .as_ref()
             .map(|w| format!("Workspace: {}", w))
             .unwrap_or_else(|| "No workspace".to_string());
 
@@ -112,15 +114,13 @@ impl ChatView {
             .fg(ratatui::style::Color::Rgb(147, 51, 234))
             .add_modifier(Modifier::BOLD);
 
-        let text = vec![
-            Line::from(vec![
-                Span::styled(&title, title_style),
-                Span::raw("  "),
-                Span::styled(&agent_info, self.theme.style(StyleKind::Primary)),
-                Span::raw("  "),
-                Span::styled(&workspace, self.theme.style(StyleKind::Muted)),
-            ]),
-        ];
+        let text = vec![Line::from(vec![
+            Span::styled(&title, title_style),
+            Span::raw("  "),
+            Span::styled(&agent_info, self.theme.style(StyleKind::Primary)),
+            Span::raw("  "),
+            Span::styled(&workspace, self.theme.style(StyleKind::Muted)),
+        ])];
 
         let paragraph = Paragraph::new(text)
             .block(header)
@@ -135,7 +135,7 @@ impl ChatView {
         } else {
             " Conversation ".to_string()
         };
-        
+
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(self.theme.style(StyleKind::Border))
@@ -169,7 +169,9 @@ impl ChatView {
 
             frame.render_widget(paragraph, inner);
         } else {
-            let messages: Vec<ListItem> = self.session.messages
+            let messages: Vec<ListItem> = self
+                .session
+                .messages
                 .iter()
                 .flat_map(|msg| self.render_message(msg))
                 .collect();
@@ -177,28 +179,28 @@ impl ChatView {
             if !messages.is_empty() {
                 let total_lines = messages.len();
                 let visible_lines = inner.height as usize;
-                
+
                 if self.browse_mode {
                     let view_position = if self.scroll_offset >= total_lines {
                         0
                     } else {
                         total_lines.saturating_sub(self.scroll_offset + visible_lines)
                     };
-                    
+
                     *self.list_state.offset_mut() = view_position;
-                    
+
                     let selected_index = view_position + visible_lines / 2;
-                    self.list_state.select(Some(selected_index.min(total_lines.saturating_sub(1))));
-                    
+                    self.list_state
+                        .select(Some(selected_index.min(total_lines.saturating_sub(1))));
                 } else if self.auto_scroll {
                     let bottom_offset = total_lines.saturating_sub(visible_lines);
                     *self.list_state.offset_mut() = bottom_offset;
-                    
+
                     let last_index = total_lines.saturating_sub(1);
                     self.list_state.select(Some(last_index));
                     self.scroll_offset = 0;
                 }
-                
+
                 if self.browse_mode {
                     let progress_pct = if self.scroll_offset == 0 {
                         100
@@ -207,7 +209,7 @@ impl ChatView {
                     } else {
                         ((total_lines - self.scroll_offset) * 100 / total_lines).min(100)
                     };
-                    
+
                     let scroll_indicator = format!("{}%", progress_pct);
                     let indicator_area = Rect {
                         x: inner.x + inner.width.saturating_sub(12),
@@ -215,7 +217,7 @@ impl ChatView {
                         width: 10,
                         height: 1,
                     };
-                    
+
                     let indicator_widget = Paragraph::new(scroll_indicator)
                         .style(self.theme.style(StyleKind::Info))
                         .alignment(Alignment::Right);
@@ -223,8 +225,7 @@ impl ChatView {
                 }
             }
 
-            let list = List::new(messages)
-                .highlight_style(Style::default());
+            let list = List::new(messages).highlight_style(Style::default());
 
             frame.render_stateful_widget(list, inner, &mut self.list_state);
         }
@@ -233,14 +234,14 @@ impl ChatView {
             self.spinner.tick();
             let loading_text = format!("{} Thinking...", self.spinner.current());
             let loading_span = Span::styled(loading_text, self.theme.style(StyleKind::Primary));
-            
+
             let loading_area = Rect {
                 x: inner.x + 2,
                 y: inner.y + inner.height.saturating_sub(1),
                 width: inner.width.saturating_sub(4),
                 height: 1,
             };
-            
+
             let paragraph = Paragraph::new(loading_span);
             frame.render_widget(paragraph, loading_area);
         }
@@ -262,7 +263,7 @@ impl ChatView {
         };
 
         let time = message.timestamp.format("%H:%M:%S");
-        
+
         items.push(ListItem::new(Line::from(vec![Span::raw("")])));
 
         items.push(ListItem::new(Line::from(vec![
@@ -274,11 +275,17 @@ impl ChatView {
         if !message.flow_items.is_empty() {
             for flow_item in &message.flow_items {
                 match flow_item {
-                    FlowItem::Text { content, is_streaming } => {
-                        if message.role == "assistant" && MarkdownRenderer::has_markdown_syntax(content) {
+                    FlowItem::Text {
+                        content,
+                        is_streaming,
+                    } => {
+                        if message.role == "assistant"
+                            && MarkdownRenderer::has_markdown_syntax(content)
+                        {
                             let available_width = 80;
-                            let markdown_lines = self.markdown_renderer.render(content, available_width);
-                            
+                            let markdown_lines =
+                                self.markdown_renderer.render(content, available_width);
+
                             for md_line in markdown_lines {
                                 let mut spans = vec![Span::raw("  ")];
                                 spans.extend(md_line.spans);
@@ -293,7 +300,7 @@ impl ChatView {
                                 ])));
                             }
                         }
-                        
+
                         if *is_streaming {
                             items.push(ListItem::new(Line::from(vec![
                                 Span::raw("  "),
@@ -301,19 +308,24 @@ impl ChatView {
                             ])));
                         }
                     }
-                    
+
                     FlowItem::Tool { tool_call } => {
                         items.push(ListItem::new(Line::from("")));
-                        let tool_items = crate::ui::tool_cards::render_tool_card(tool_call, &self.theme);
+                        let tool_items =
+                            crate::ui::tool_cards::render_tool_card(tool_call, &self.theme);
                         items.extend(tool_items);
                     }
                 }
             }
         } else {
-            if message.role == "assistant" && MarkdownRenderer::has_markdown_syntax(&message.content) {
+            if message.role == "assistant"
+                && MarkdownRenderer::has_markdown_syntax(&message.content)
+            {
                 let available_width = 80;
-                let markdown_lines = self.markdown_renderer.render(&message.content, available_width);
-                
+                let markdown_lines = self
+                    .markdown_renderer
+                    .render(&message.content, available_width);
+
                 for md_line in markdown_lines {
                     let mut spans = vec![Span::raw("  ")];
                     spans.extend(md_line.spans);
@@ -332,7 +344,7 @@ impl ChatView {
 
         items
     }
-    
+
     /// Render status bar
     fn render_status_bar(&self, frame: &mut Frame, area: Rect) {
         let status_text = if let Some(status) = &self.status {
@@ -365,11 +377,7 @@ impl ChatView {
             Span::raw(&self.input)
         };
 
-        let paragraph = Paragraph::new(Line::from(vec![
-            Span::raw("> "),
-            input_text,
-        ]))
-        .block(block);
+        let paragraph = Paragraph::new(Line::from(vec![Span::raw("> "), input_text])).block(block);
 
         frame.render_widget(paragraph, area);
 
@@ -378,7 +386,7 @@ impl ChatView {
             // Calculate display width to cursor position
             let byte_pos = self.char_pos_to_byte_pos(self.cursor);
             let display_width = self.input[..byte_pos].width() as u16;
-            
+
             frame.set_cursor_position((
                 area.x + 3 + display_width, // "> " + display width
                 area.y + 1,
@@ -410,8 +418,7 @@ impl ChatView {
             style: self.theme.style(StyleKind::Muted),
         };
 
-        let paragraph = Paragraph::new(help.render())
-            .alignment(Alignment::Center);
+        let paragraph = Paragraph::new(help.render()).alignment(Alignment::Center);
 
         frame.render_widget(paragraph, area);
     }
@@ -430,7 +437,7 @@ impl ChatView {
         }
 
         let input = self.input.clone();
-        
+
         // Add to history
         self.input_history.push_front(input.clone());
         if self.input_history.len() > 50 {
@@ -452,7 +459,7 @@ impl ChatView {
         if c.is_control() || c == '\u{0}' {
             return;
         }
-        
+
         let byte_pos = self.char_pos_to_byte_pos(self.cursor);
         self.input.insert(byte_pos, c);
         self.cursor += 1;
@@ -552,11 +559,13 @@ impl ChatView {
 
     pub fn scroll_up(&mut self, lines: usize) {
         if self.browse_mode {
-            let total_lines: usize = self.session.messages
+            let total_lines: usize = self
+                .session
+                .messages
                 .iter()
                 .flat_map(|msg| self.render_message(msg))
                 .count();
-            
+
             self.scroll_offset = (self.scroll_offset + lines).min(total_lines.saturating_sub(1));
         } else {
             self.browse_mode = true;
@@ -568,7 +577,7 @@ impl ChatView {
     pub fn scroll_down(&mut self, lines: usize) {
         if self.scroll_offset > 0 {
             self.scroll_offset = self.scroll_offset.saturating_sub(lines);
-            
+
             if self.scroll_offset == 0 && self.browse_mode {
                 self.browse_mode = false;
                 self.auto_scroll = true;
@@ -577,11 +586,13 @@ impl ChatView {
     }
 
     pub fn scroll_to_top(&mut self) {
-        let total_lines: usize = self.session.messages
+        let total_lines: usize = self
+            .session
+            .messages
             .iter()
             .flat_map(|msg| self.render_message(msg))
             .count();
-        
+
         self.browse_mode = true;
         self.auto_scroll = false;
         self.scroll_offset = total_lines.saturating_sub(1);
@@ -593,4 +604,3 @@ impl ChatView {
         self.scroll_offset = 0;
     }
 }
-

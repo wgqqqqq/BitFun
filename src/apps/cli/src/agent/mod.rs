@@ -1,8 +1,6 @@
 /// Agent integration module
-/// 
+///
 /// Wraps interaction with bitfun-core's Agent system
-
-
 pub mod agentic_system;
 pub mod core_adapter;
 
@@ -24,10 +22,7 @@ pub enum AgentEvent {
         parameters: serde_json::Value,
     },
     /// Tool call in progress
-    ToolCallProgress {
-        tool_name: String,
-        message: String,
-    },
+    ToolCallProgress { tool_name: String, message: String },
     /// Tool call completed
     ToolCallComplete {
         tool_name: String,

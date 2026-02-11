@@ -1,12 +1,11 @@
 /// Session management module
-/// 
+///
 /// Responsible for creating, saving, loading and managing chat sessions
-
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::fs;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
 
 use crate::config::CliConfig;
 
@@ -137,7 +136,7 @@ impl Session {
     pub fn new(agent: String, workspace: Option<String>) -> Self {
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
-        
+
         Self {
             id: id.clone(),
             title: format!("Session {}", now.format("%m-%d %H:%M")),
@@ -159,7 +158,7 @@ impl Session {
             timestamp: Utc::now(),
             flow_items: Vec::new(),
         };
-        
+
         self.messages.push(message);
         self.metadata.message_count = self.messages.len();
         self.updated_at = Utc::now();
@@ -169,7 +168,11 @@ impl Session {
     pub fn update_last_message_text_flow(&mut self, content: String, is_streaming: bool) {
         if let Some(last_message) = self.messages.last_mut() {
             if let Some(last_item) = last_message.flow_items.last_mut() {
-                if let FlowItem::Text { content: ref mut c, is_streaming: ref mut s } = last_item {
+                if let FlowItem::Text {
+                    content: ref mut c,
+                    is_streaming: ref mut s,
+                } = last_item
+                {
                     *c = content.clone();
                     *s = is_streaming;
                 } else {
@@ -188,7 +191,7 @@ impl Session {
             self.updated_at = Utc::now();
         }
     }
-    
+
     /// Add tool call to the last message
     pub fn add_tool_to_last_message(&mut self, tool_call: ToolCall) {
         if let Some(last_message) = self.messages.last_mut() {
@@ -197,9 +200,13 @@ impl Session {
             self.updated_at = Utc::now();
         }
     }
-    
+
     /// Update tool call status in the last message
-    pub fn update_tool_in_last_message(&mut self, tool_id: &str, update_fn: impl FnOnce(&mut ToolCall)) {
+    pub fn update_tool_in_last_message(
+        &mut self,
+        tool_id: &str,
+        update_fn: impl FnOnce(&mut ToolCall),
+    ) {
         if let Some(last_message) = self.messages.last_mut() {
             for item in last_message.flow_items.iter_mut() {
                 if let FlowItem::Tool { tool_call } = item {
@@ -227,31 +234,35 @@ impl Session {
     pub fn load(id: &str) -> Result<Self> {
         let sessions_dir = CliConfig::sessions_dir()?;
         let session_file = sessions_dir.join(format!("{}.json", id));
-        
+
         if !session_file.exists() {
             anyhow::bail!("Session not found: {}", id);
         }
 
         let content = fs::read_to_string(&session_file)?;
         let session: Self = serde_json::from_str(&content)?;
-        tracing::info!("Loaded session: {} ({} messages)", session.title, session.messages.len());
+        tracing::info!(
+            "Loaded session: {} ({} messages)",
+            session.title,
+            session.messages.len()
+        );
         Ok(session)
     }
 
     /// List all sessions
     pub fn list_all() -> Result<Vec<SessionInfo>> {
         let sessions_dir = CliConfig::sessions_dir()?;
-        
+
         if !sessions_dir.exists() {
             return Ok(Vec::new());
         }
 
         let mut sessions = Vec::new();
-        
+
         for entry in fs::read_dir(sessions_dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.extension().and_then(|s| s.to_str()) != Some("json") {
                 continue;
             }
@@ -271,7 +282,7 @@ impl Session {
     fn load_info(path: &PathBuf) -> Result<SessionInfo> {
         let content = fs::read_to_string(path)?;
         let session: Self = serde_json::from_str(&content)?;
-        
+
         Ok(SessionInfo {
             id: session.id,
             title: session.title,
@@ -287,19 +298,19 @@ impl Session {
     pub fn delete(id: &str) -> Result<()> {
         let sessions_dir = CliConfig::sessions_dir()?;
         let session_file = sessions_dir.join(format!("{}.json", id));
-        
+
         if session_file.exists() {
             fs::remove_file(session_file)?;
             tracing::info!("Deleted session: {}", id);
         }
-        
+
         Ok(())
     }
 
     /// Get most recent session
     pub fn get_last() -> Result<Option<Self>> {
         let sessions = Self::list_all()?;
-        
+
         if let Some(info) = sessions.first() {
             Ok(Some(Self::load(&info.id)?))
         } else {
@@ -319,5 +330,3 @@ pub struct SessionInfo {
     pub message_count: usize,
     pub workspace: Option<String>,
 }
-
-
