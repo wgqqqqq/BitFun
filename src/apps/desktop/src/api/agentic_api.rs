@@ -141,7 +141,8 @@ pub async fn create_session(
     coordinator: State<'_, Arc<ConversationCoordinator>>,
     request: CreateSessionRequest,
 ) -> Result<CreateSessionResponse, String> {
-    let config = request.config
+    let config = request
+        .config
         .map(|c| SessionConfig {
             max_context_tokens: c.max_context_tokens.unwrap_or(128128),
             auto_compact: c.auto_compact.unwrap_or(true),
@@ -152,7 +153,7 @@ pub async fn create_session(
             compression_threshold: c.compression_threshold.unwrap_or(0.8),
         })
         .unwrap_or_default();
-    
+
     let session = coordinator
         .create_session_with_id(
             request.session_id,
@@ -177,7 +178,12 @@ pub async fn start_dialog_turn(
     request: StartDialogTurnRequest,
 ) -> Result<StartDialogTurnResponse, String> {
     let _stream = coordinator
-        .start_dialog_turn(request.session_id, request.user_input, request.turn_id, request.agent_type)
+        .start_dialog_turn(
+            request.session_id,
+            request.user_input,
+            request.turn_id,
+            request.agent_type,
+        )
         .await
         .map_err(|e| format!("Failed to start dialog turn: {}", e))?;
 
