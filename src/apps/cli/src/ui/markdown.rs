@@ -1,12 +1,11 @@
 /// Markdown rendering utilities
-
-use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd, HeadingLevel};
+use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
 };
 
-use super::theme::{Theme, StyleKind};
+use super::theme::{StyleKind, Theme};
 
 /// Markdown renderer
 pub struct MarkdownRenderer {
@@ -18,20 +17,20 @@ impl MarkdownRenderer {
     pub fn new(theme: Theme) -> Self {
         Self { theme }
     }
-    
+
     pub fn render(&self, markdown: &str, _width: usize) -> Vec<Line<'static>> {
         let mut lines = Vec::new();
         let mut current_line_spans: Vec<Span<'static>> = Vec::new();
-        
+
         // Style stack
         let mut style_stack: Vec<StyleModifier> = Vec::new();
         let mut list_level: usize = 0;
         let mut in_code_block = false;
         let mut code_block_lang = String::new();
-        
+
         let options = Options::all();
         let parser = Parser::new_ext(markdown, options);
-        
+
         for event in parser {
             match event {
                 Event::Start(tag) => {
@@ -42,7 +41,7 @@ impl MarkdownRenderer {
                                 lines.push(Line::from(std::mem::take(&mut current_line_spans)));
                             }
                             lines.push(Line::from(""));
-                            
+
                             // Heading prefix
                             let prefix = match level {
                                 HeadingLevel::H1 => "# ",
@@ -54,9 +53,11 @@ impl MarkdownRenderer {
                             };
                             current_line_spans.push(Span::styled(
                                 prefix.to_string(),
-                                self.theme.style(StyleKind::Primary).add_modifier(Modifier::BOLD)
+                                self.theme
+                                    .style(StyleKind::Primary)
+                                    .add_modifier(Modifier::BOLD),
                             ));
-                            
+
                             style_stack.push(StyleModifier::Heading);
                         }
                         Tag::Paragraph => {
@@ -65,7 +66,7 @@ impl MarkdownRenderer {
                         Tag::BlockQuote(_) => {
                             current_line_spans.push(Span::styled(
                                 "│ ".to_string(),
-                                self.theme.style(StyleKind::Muted)
+                                self.theme.style(StyleKind::Muted),
                             ));
                             style_stack.push(StyleModifier::Quote);
                         }
@@ -79,12 +80,12 @@ impl MarkdownRenderer {
                                 lines.push(Line::from(std::mem::take(&mut current_line_spans)));
                             }
                             lines.push(Line::from(""));
-                            
+
                             // Add language identifier
                             if !code_block_lang.is_empty() {
                                 current_line_spans.push(Span::styled(
                                     format!("```{}", code_block_lang),
-                                    self.theme.style(StyleKind::Muted)
+                                    self.theme.style(StyleKind::Muted),
                                 ));
                                 lines.push(Line::from(std::mem::take(&mut current_line_spans)));
                             }
@@ -104,7 +105,7 @@ impl MarkdownRenderer {
                             current_line_spans.push(Span::raw(indent));
                             current_line_spans.push(Span::styled(
                                 "• ".to_string(),
-                                self.theme.style(StyleKind::Primary)
+                                self.theme.style(StyleKind::Primary),
                             ));
                         }
                         Tag::Strong => {
@@ -119,13 +120,13 @@ impl MarkdownRenderer {
                         Tag::Image { .. } => {
                             current_line_spans.push(Span::styled(
                                 "[Image]".to_string(),
-                                self.theme.style(StyleKind::Info)
+                                self.theme.style(StyleKind::Info),
                             ));
                         }
                         _ => {}
                     }
                 }
-                
+
                 Event::End(tag_end) => {
                     match tag_end {
                         TagEnd::Heading(_) => {
@@ -157,7 +158,7 @@ impl MarkdownRenderer {
                             if !code_block_lang.is_empty() {
                                 lines.push(Line::from(Span::styled(
                                     "```".to_string(),
-                                    self.theme.style(StyleKind::Muted)
+                                    self.theme.style(StyleKind::Muted),
                                 )));
                                 code_block_lang.clear();
                             }
@@ -194,17 +195,14 @@ impl MarkdownRenderer {
                         _ => {}
                     }
                 }
-                
+
                 Event::Text(text) => {
                     let style = self.compute_style(&style_stack, in_code_block);
-                    
+
                     if in_code_block {
                         // Code block: process each line separately
                         for line in text.lines() {
-                            current_line_spans.push(Span::styled(
-                                format!("  {}", line),
-                                style
-                            ));
+                            current_line_spans.push(Span::styled(format!("  {}", line), style));
                             lines.push(Line::from(std::mem::take(&mut current_line_spans)));
                         }
                     } else {
@@ -212,76 +210,83 @@ impl MarkdownRenderer {
                         current_line_spans.push(Span::styled(text.to_string(), style));
                     }
                 }
-                
+
                 Event::Code(code) => {
                     // Inline code
                     current_line_spans.push(Span::styled(
                         format!("`{}`", code),
-                        self.theme.style(StyleKind::Success)
+                        self.theme.style(StyleKind::Success),
                     ));
                 }
-                
+
                 Event::SoftBreak | Event::HardBreak => {
                     if !in_code_block && !current_line_spans.is_empty() {
                         lines.push(Line::from(std::mem::take(&mut current_line_spans)));
                     }
                 }
-                
+
                 Event::Rule => {
                     lines.push(Line::from(Span::styled(
                         "─".repeat(60),
-                        self.theme.style(StyleKind::Muted)
+                        self.theme.style(StyleKind::Muted),
                     )));
                 }
-                
+
                 _ => {}
             }
         }
-        
+
         // Process remaining spans
         if !current_line_spans.is_empty() {
             lines.push(Line::from(current_line_spans));
         }
-        
+
         // Remove trailing empty lines
-        while lines.last().map_or(false, |line| line.spans.is_empty() || 
-            (line.spans.len() == 1 && line.spans[0].content.is_empty())) {
+        while lines.last().map_or(false, |line| {
+            line.spans.is_empty() || (line.spans.len() == 1 && line.spans[0].content.is_empty())
+        }) {
             lines.pop();
         }
-        
+
         lines
     }
-    
+
     fn compute_style(&self, stack: &[StyleModifier], in_code_block: bool) -> Style {
         let mut style = Style::default();
-        
+
         if in_code_block {
             return self.theme.style(StyleKind::Success);
         }
-        
+
         for modifier in stack {
             style = match modifier {
                 StyleModifier::Bold => style.add_modifier(Modifier::BOLD),
                 StyleModifier::Italic => style.add_modifier(Modifier::ITALIC),
-                StyleModifier::Heading => self.theme.style(StyleKind::Primary).add_modifier(Modifier::BOLD),
+                StyleModifier::Heading => self
+                    .theme
+                    .style(StyleKind::Primary)
+                    .add_modifier(Modifier::BOLD),
                 StyleModifier::Quote => style.fg(self.theme.muted),
-                StyleModifier::Link => self.theme.style(StyleKind::Info).add_modifier(Modifier::UNDERLINED),
+                StyleModifier::Link => self
+                    .theme
+                    .style(StyleKind::Info)
+                    .add_modifier(Modifier::UNDERLINED),
             };
         }
-        
+
         style
     }
-    
+
     pub fn has_markdown_syntax(text: &str) -> bool {
-        text.contains("**") ||
-        text.contains("__") ||
-        text.contains("*") ||
-        text.contains("_") ||
-        text.contains("`") ||
-        text.contains("#") ||
-        text.contains("[") ||
-        text.contains(">") ||
-        text.contains("```")
+        text.contains("**")
+            || text.contains("__")
+            || text.contains("*")
+            || text.contains("_")
+            || text.contains("`")
+            || text.contains("#")
+            || text.contains("[")
+            || text.contains(">")
+            || text.contains("```")
     }
 }
 
@@ -298,7 +303,7 @@ enum StyleModifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_has_markdown_syntax() {
         assert!(MarkdownRenderer::has_markdown_syntax("**bold**"));
@@ -307,7 +312,7 @@ mod tests {
         assert!(MarkdownRenderer::has_markdown_syntax("# Title"));
         assert!(!MarkdownRenderer::has_markdown_syntax("plain text"));
     }
-    
+
     #[test]
     fn test_render_simple() {
         let theme = Theme::default();
@@ -315,7 +320,7 @@ mod tests {
         let lines = renderer.render("**bold** text", 80);
         assert!(!lines.is_empty());
     }
-    
+
     #[test]
     fn test_render_code_block() {
         let theme = Theme::default();

@@ -1,14 +1,13 @@
 /// TUI interface module
-/// 
+///
 /// Build terminal user interface using ratatui
-
 pub mod chat;
-pub mod theme;
-pub mod widgets;
-pub mod startup;
-pub mod tool_cards;
-pub mod string_utils;
 pub mod markdown;
+pub mod startup;
+pub mod string_utils;
+pub mod theme;
+pub mod tool_cards;
+pub mod widgets;
 
 use anyhow::Result;
 use crossterm::{
@@ -44,7 +43,10 @@ pub fn restore_terminal(mut terminal: Terminal<CrosstermBackend<io::Stdout>>) ->
 }
 
 /// Render a loading/status message on the terminal (stays in alternate screen)
-pub fn render_loading(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, message: &str) -> Result<()> {
+pub fn render_loading(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    message: &str,
+) -> Result<()> {
     let msg = message.to_string();
     terminal.draw(|frame| {
         let area = frame.area();
@@ -57,14 +59,12 @@ pub fn render_loading(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mes
             ])
             .split(area);
 
-        let text = vec![
-            Line::from(Span::styled(
-                msg,
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )),
-        ];
+        let text = vec![Line::from(Span::styled(
+            msg,
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ))];
 
         let paragraph = Paragraph::new(text).alignment(Alignment::Center);
         frame.render_widget(paragraph, chunks[1]);

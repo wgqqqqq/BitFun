@@ -1,12 +1,11 @@
 /// Configuration management module
-/// 
+///
 /// CLI uses core's GlobalConfig system directly (same as tauri version)
 /// Only CLI-specific configuration is kept here (UI, shortcuts, etc.)
-
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 /// CLI configuration (contains only CLI-specific config)
 /// AI model configuration uses core's GlobalConfig
@@ -107,14 +106,14 @@ impl CliConfig {
                 .join(".config")
                 .join("bitfun")
         };
-        
+
         Ok(config_dir.join("config.toml"))
     }
 
     /// Load configuration
     pub fn load() -> Result<Self> {
         let config_path = Self::config_path()?;
-        
+
         if !config_path.exists() {
             tracing::info!("Config file not found, using defaults");
             let config = Self::default();
@@ -131,7 +130,7 @@ impl CliConfig {
     /// Save configuration
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path()?;
-        
+
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -154,7 +153,7 @@ impl CliConfig {
                 .join(".config")
                 .join("bitfun")
         };
-        
+
         fs::create_dir_all(&config_dir)?;
         Ok(config_dir)
     }
@@ -165,7 +164,4 @@ impl CliConfig {
         fs::create_dir_all(&sessions_dir)?;
         Ok(sessions_dir)
     }
-
 }
-
-
