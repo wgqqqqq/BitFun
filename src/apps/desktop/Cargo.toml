@@ -42,6 +42,8 @@ once_cell = { workspace = true }
 similar = { workspace = true }
 dashmap = { workspace = true }
 ignore = { workspace = true }
+uuid = { workspace = true }
+zip = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 win32job = { workspace = true }

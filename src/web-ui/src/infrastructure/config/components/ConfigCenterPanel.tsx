@@ -7,6 +7,7 @@ import AIFeaturesConfig from './AIFeaturesConfig';
 import AIRulesConfig from './AIRulesConfig';
 import SubAgentConfig from './SubAgentConfig';
 import SkillsConfig from './SkillsConfig';
+import PluginsConfig from './PluginsConfig';
 import MCPConfig from './MCPConfig';
 import AgenticToolsConfig from './AgenticToolsConfig';
 import AIMemoryConfig from './AIMemoryConfig';
@@ -25,7 +26,7 @@ export interface ConfigCenterPanelProps {
   initialTab?: 'models' | 'ai-rules' | 'agents' | 'mcp' | 'agentic-tools';
 }
 
-type ConfigTab = 'models' | 'super-agent' | 'ai-features' | 'modes' | 'ai-rules' | 'agents' | 'skills' | 'mcp' | 'agentic-tools' | 'ai-memory' | 'lsp' | 'debug' | 'terminal' | 'editor' | 'theme' | 'prompt-templates';
+type ConfigTab = 'models' | 'super-agent' | 'ai-features' | 'modes' | 'ai-rules' | 'agents' | 'skills' | 'plugins' | 'mcp' | 'agentic-tools' | 'ai-memory' | 'lsp' | 'debug' | 'terminal' | 'editor' | 'theme' | 'prompt-templates';
 
 interface TabCategory {
   name: string;
@@ -121,6 +122,10 @@ const ConfigCenterPanel: React.FC<ConfigCenterPanelProps> = ({
           label: t('configCenter.tabs.skills')
         },
         {
+          id: 'plugins' as ConfigTab,
+          label: t('configCenter.tabs.plugins')
+        },
+        {
           id: 'mcp' as ConfigTab,
           label: t('configCenter.tabs.mcp')
         }
@@ -186,6 +191,8 @@ const ConfigCenterPanel: React.FC<ConfigCenterPanelProps> = ({
         return <PromptTemplateConfig />;
       case 'skills':
         return <SkillsConfig />;
+      case 'plugins':
+        return <PluginsConfig />;
       case 'agents':
         return <SubAgentConfig />;
       case 'mcp':
@@ -266,6 +273,5 @@ const ConfigCenterPanel: React.FC<ConfigCenterPanelProps> = ({
 };
 
 export default ConfigCenterPanel;
-
 
 

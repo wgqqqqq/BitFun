@@ -18,6 +18,7 @@ use std::sync::{
     Arc,
 };
 use tauri::Manager;
+use tauri::Emitter;
 use tauri_plugin_log::{RotationStrategy, TimezoneStrategy};
 #[cfg(target_os = "macos")]
 use tauri::Emitter;
@@ -402,6 +403,11 @@ pub async fn run() {
             api::project_context_api::delete_imported_document,
             api::project_context_api::toggle_imported_document_enabled,
             api::project_context_api::delete_context_document,
+            api::plugin_api::list_plugins,
+            api::plugin_api::install_plugin,
+            api::plugin_api::uninstall_plugin,
+            api::plugin_api::set_plugin_enabled,
+            api::plugin_api::import_plugin_mcp_servers,
             initialize_mcp_servers,
             get_mcp_servers,
             start_mcp_server,
