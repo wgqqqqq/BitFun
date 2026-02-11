@@ -167,7 +167,8 @@ impl From<Message> for AIMessage {
                     }
                 } else {
                     // If no result_for_assistant, use serialized result
-                    serde_json::to_string(&result).unwrap_or(format!("Tool {} execution completed", tool_name))
+                    serde_json::to_string(&result)
+                        .unwrap_or(format!("Tool {} execution completed", tool_name))
                 };
 
                 Self {

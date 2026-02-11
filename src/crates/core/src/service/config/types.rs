@@ -750,7 +750,6 @@ pub struct ProxyConfig {
     pub password: Option<String>,
 }
 
-
 /// Configuration provider interface.
 #[async_trait]
 pub trait ConfigProvider: Send + Sync {
@@ -1110,7 +1109,6 @@ impl Default for AIModelConfig {
         }
     }
 }
-
 
 impl Default for SidebarConfig {
     fn default() -> Self {

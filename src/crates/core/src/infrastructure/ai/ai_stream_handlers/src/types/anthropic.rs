@@ -44,7 +44,8 @@ impl Usage {
 
 impl From<Usage> for UnifiedTokenUsage {
     fn from(value: Usage) -> Self {
-        let prompt_token_count = value.input_tokens.unwrap_or(0) + value.cache_read_input_tokens.unwrap_or(0);
+        let prompt_token_count =
+            value.input_tokens.unwrap_or(0) + value.cache_read_input_tokens.unwrap_or(0);
         let candidates_token_count = value.output_tokens.unwrap_or(0);
         Self {
             prompt_token_count,

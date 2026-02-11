@@ -2,6 +2,7 @@
 //!
 //! Uses the notify crate to watch filesystem changes and send them to the frontend via Tauri events
 
+use crate::infrastructure::events::EventEmitter;
 use log::{debug, error};
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
@@ -9,7 +10,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::{Mutex, RwLock};
-use crate::infrastructure::events::EventEmitter;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileWatchEvent {
@@ -83,16 +83,23 @@ impl FileWatcher {
         *e = Some(emitter);
     }
 
-    pub async fn watch_path(&self, path: &str, config: Option<FileWatcherConfig>) -> Result<(), String> {
+    pub async fn watch_path(
+        &self,
+        path: &str,
+        config: Option<FileWatcherConfig>,
+    ) -> Result<(), String> {
         let path_buf = PathBuf::from(path);
-        
+
         if !path_buf.exists() {
             return Err("Path does not exist".to_string());
         }
 
         {
             let mut watched_paths = self.watched_paths.write().await;
-            watched_paths.insert(path_buf.clone(), config.unwrap_or_else(|| self.config.clone()));
+            watched_paths.insert(
+                path_buf.clone(),
+                config.unwrap_or_else(|| self.config.clone()),
+            );
         }
 
         self.create_watcher().await?;
@@ -102,7 +109,7 @@ impl FileWatcher {
 
     pub async fn unwatch_path(&self, path: &str) -> Result<(), String> {
         let path_buf = PathBuf::from(path);
-        
+
         {
             let mut watched_paths = self.watched_paths.write().await;
             watched_paths.remove(&path_buf);
@@ -115,7 +122,7 @@ impl FileWatcher {
 
     async fn create_watcher(&self) -> Result<(), String> {
         let watched_paths = self.watched_paths.read().await;
-        
+
         if watched_paths.is_empty() {
             let mut watcher = self.watcher.lock().await;
             *watcher = None;
@@ -133,7 +140,8 @@ impl FileWatcher {
                 RecursiveMode::NonRecursive
             };
 
-            watcher.watch(path, mode)
+            watcher
+                .watch(path, mode)
                 .map_err(|e| format!("Failed to watch path {}: {}", path.display(), e))?;
         }
 
@@ -149,7 +157,7 @@ impl FileWatcher {
 
         tokio::spawn(async move {
             let mut last_flush = std::time::Instant::now();
-            
+
             while let Ok(event) = rx.recv() {
                 match event {
                     Ok(event) => {
@@ -164,7 +172,9 @@ impl FileWatcher {
                             }
 
                             let now = std::time::Instant::now();
-                            if now.duration_since(last_flush).as_millis() as u64 >= config.debounce_interval_ms {
+                            if now.duration_since(last_flush).as_millis() as u64
+                                >= config.debounce_interval_ms
+                            {
                                 Self::flush_events_static(&event_buffer, &emitter_arc).await;
                                 last_flush = now;
                             }
@@ -180,9 +190,12 @@ impl FileWatcher {
         Ok(())
     }
 
-    async fn should_ignore_event(event: &Event, watched_paths: &Arc<RwLock<HashMap<PathBuf, FileWatcherConfig>>>) -> bool {
+    async fn should_ignore_event(
+        event: &Event,
+        watched_paths: &Arc<RwLock<HashMap<PathBuf, FileWatcherConfig>>>,
+    ) -> bool {
         let paths = watched_paths.read().await;
-        
+
         let event_path = match event.paths.first() {
             Some(path) => path,
             None => return true,
@@ -311,7 +324,7 @@ impl FileWatcher {
 
     async fn flush_events_static(
         event_buffer: &Arc<StdMutex<Vec<FileWatchEvent>>>,
-        emitter_arc: &Arc<Mutex<Option<Arc<dyn EventEmitter>>>>
+        emitter_arc: &Arc<Mutex<Option<Arc<dyn EventEmitter>>>>,
     ) {
         let events = {
             let mut buffer = event_buffer.lock().unwrap();
@@ -324,7 +337,7 @@ impl FileWatcher {
         let emitter_guard = emitter_arc.lock().await;
         if let Some(emitter) = emitter_guard.as_ref() {
             let mut event_array = Vec::new();
-            
+
             for event in &events {
                 let kind = match event.kind {
                     FileWatchEventKind::Create => "create",
@@ -339,18 +352,21 @@ impl FileWatcher {
                             "timestamp": event.timestamp
                         }));
                         continue;
-                    },
+                    }
                     FileWatchEventKind::Other => "other",
                 };
-                
+
                 event_array.push(serde_json::json!({
                     "path": event.path,
                     "kind": kind,
                     "timestamp": event.timestamp
                 }));
             }
-            
-            if let Err(e) = emitter.emit("file-system-changed", serde_json::json!(event_array)).await {
+
+            if let Err(e) = emitter
+                .emit("file-system-changed", serde_json::json!(event_array))
+                .await
+            {
                 error!("Failed to emit file-system-changed events: {}", e);
             } else {
                 debug!("Emitted {} file system change events", event_array.len());
@@ -362,7 +378,8 @@ impl FileWatcher {
 
     pub async fn get_watched_paths(&self) -> Vec<String> {
         let watched_paths = self.watched_paths.read().await;
-        watched_paths.keys()
+        watched_paths
+            .keys()
             .map(|path| path.to_string_lossy().to_string())
             .collect()
     }
@@ -371,9 +388,9 @@ impl FileWatcher {
 static GLOBAL_FILE_WATCHER: std::sync::OnceLock<Arc<FileWatcher>> = std::sync::OnceLock::new();
 
 pub fn get_global_file_watcher() -> Arc<FileWatcher> {
-    GLOBAL_FILE_WATCHER.get_or_init(|| {
-        Arc::new(FileWatcher::new(FileWatcherConfig::default()))
-    }).clone()
+    GLOBAL_FILE_WATCHER
+        .get_or_init(|| Arc::new(FileWatcher::new(FileWatcherConfig::default())))
+        .clone()
 }
 
 // Note: This function is called by the Tauri API layer; tauri::command is declared in the API layer.
@@ -383,7 +400,7 @@ pub async fn start_file_watch(path: String, recursive: Option<bool>) -> Result<(
     if let Some(rec) = recursive {
         config.watch_recursively = rec;
     }
-    
+
     watcher.watch_path(&path, Some(config)).await
 }
 
@@ -401,7 +418,7 @@ pub async fn get_watched_paths() -> Result<Vec<String>, String> {
 
 pub fn initialize_file_watcher(emitter: Arc<dyn EventEmitter>) {
     let watcher = get_global_file_watcher();
-    
+
     tokio::spawn(async move {
         watcher.set_emitter(emitter).await;
     });

@@ -193,15 +193,21 @@ impl AnalyzeImageTool {
                 .models
                 .iter()
                 .find(|m| {
-                    m.enabled && m.capabilities.iter().any(|cap| {
-                        matches!(cap, crate::service::config::types::ModelCapability::ImageUnderstanding)
-                    })
+                    m.enabled
+                        && m.capabilities.iter().any(|cap| {
+                            matches!(
+                                cap,
+                                crate::service::config::types::ModelCapability::ImageUnderstanding
+                            )
+                        })
                 })
-                .ok_or_else(|| BitFunError::service(
-                    "No image understanding model found.\n\
+                .ok_or_else(|| {
+                    BitFunError::service(
+                        "No image understanding model found.\n\
                      Please configure an image understanding model in settings"
-                        .to_string(),
-                ))?
+                            .to_string(),
+                    )
+                })?
                 .clone()
         };
 
@@ -252,52 +258,48 @@ impl AnalyzeImageTool {
         provider: &str,
     ) -> BitFunResult<Vec<Message>> {
         let message = match provider.to_lowercase().as_str() {
-            "openai" => {
-                Message {
-                    role: "user".to_string(),
-                    content: Some(serde_json::to_string(&json!([
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": format!("data:{};base64,{}", mime_type, base64_data)
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
+            "openai" => Message {
+                role: "user".to_string(),
+                content: Some(serde_json::to_string(&json!([
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": format!("data:{};base64,{}", mime_type, base64_data)
                         }
-                    ]))?),
-                    reasoning_content: None,
-                    thinking_signature: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                    name: None,
-                }
-            }
-            "anthropic" => {
-                Message {
-                    role: "user".to_string(),
-                    content: Some(serde_json::to_string(&json!([
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": mime_type,
-                                "data": base64_data
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+                ]))?),
+                reasoning_content: None,
+                thinking_signature: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
+            "anthropic" => Message {
+                role: "user".to_string(),
+                content: Some(serde_json::to_string(&json!([
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": mime_type,
+                            "data": base64_data
                         }
-                    ]))?),
-                    reasoning_content: None,
-                    thinking_signature: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                    name: None,
-                }
-            }
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+                ]))?),
+                reasoning_content: None,
+                thinking_signature: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
             _ => {
                 return Err(BitFunError::validation(format!(
                     "Unsupported provider: {}",
