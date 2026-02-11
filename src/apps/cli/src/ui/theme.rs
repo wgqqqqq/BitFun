@@ -1,5 +1,4 @@
 /// Theme and style definitions
-
 use ratatui::style::{Color, Modifier, Style};
 
 #[derive(Debug, Clone)]
@@ -17,14 +16,14 @@ pub struct Theme {
 impl Theme {
     pub fn dark() -> Self {
         Self {
-            primary: Color::Rgb(59, 130, 246),    // blue
-            success: Color::Rgb(34, 197, 94),     // green
-            warning: Color::Rgb(251, 191, 36),    // yellow
-            error: Color::Rgb(239, 68, 68),       // red
-            info: Color::Rgb(147, 197, 253),      // light blue
-            muted: Color::Rgb(156, 163, 175),     // gray
-            background: Color::Rgb(17, 24, 39),   // dark gray background
-            border: Color::Rgb(55, 65, 81),       // border gray
+            primary: Color::Rgb(59, 130, 246),  // blue
+            success: Color::Rgb(34, 197, 94),   // green
+            warning: Color::Rgb(251, 191, 36),  // yellow
+            error: Color::Rgb(239, 68, 68),     // red
+            info: Color::Rgb(147, 197, 253),    // light blue
+            muted: Color::Rgb(156, 163, 175),   // gray
+            background: Color::Rgb(17, 24, 39), // dark gray background
+            border: Color::Rgb(55, 65, 81),     // border gray
         }
     }
 

@@ -1,5 +1,4 @@
 /// Custom TUI widgets
-
 use ratatui::{
     style::Style,
     text::{Line, Span},
@@ -33,7 +32,7 @@ pub struct HelpText {
 impl HelpText {
     pub fn render(&self) -> Line<'_> {
         let mut spans = Vec::new();
-        
+
         for (i, (key, desc)) in self.shortcuts.iter().enumerate() {
             if i > 0 {
                 spans.push(Span::raw(" "));
@@ -41,7 +40,7 @@ impl HelpText {
             spans.push(Span::styled(format!("[{}]", key), self.style));
             spans.push(Span::raw(desc));
         }
-        
+
         Line::from(spans)
     }
 }
