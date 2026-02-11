@@ -55,6 +55,7 @@ import zhCNSettingsAiRules from '../../../locales/zh-CN/settings/ai-rules.json';
 import zhCNSettingsAiMemory from '../../../locales/zh-CN/settings/ai-memory.json';
 import zhCNSettingsAgents from '../../../locales/zh-CN/settings/agents.json';
 import zhCNSettingsDefaultModel from '../../../locales/zh-CN/settings/default-model.json';
+import zhCNSettingsIntegrations from '../../../locales/zh-CN/settings/integrations.json';
 
 import zhCNMermaidEditor from '../../../locales/zh-CN/mermaid-editor.json';
 import zhCNOnboarding from '../../../locales/zh-CN/onboarding.json';
@@ -91,6 +92,7 @@ import enUSSettingsAiRules from '../../../locales/en-US/settings/ai-rules.json';
 import enUSSettingsAiMemory from '../../../locales/en-US/settings/ai-memory.json';
 import enUSSettingsAgents from '../../../locales/en-US/settings/agents.json';
 import enUSSettingsDefaultModel from '../../../locales/en-US/settings/default-model.json';
+import enUSSettingsIntegrations from '../../../locales/en-US/settings/integrations.json';
 
 import enUSMermaidEditor from '../../../locales/en-US/mermaid-editor.json';
 import enUSOnboarding from '../../../locales/en-US/onboarding.json';
@@ -134,6 +136,7 @@ const resources = {
     'settings/ai-memory': zhCNSettingsAiMemory,
     'settings/agents': zhCNSettingsAgents,
     'settings/default-model': zhCNSettingsDefaultModel,
+    'settings/integrations': zhCNSettingsIntegrations,
     
     'mermaid-editor': zhCNMermaidEditor,
     'onboarding': zhCNOnboarding,
@@ -171,6 +174,7 @@ const resources = {
     'settings/ai-memory': enUSSettingsAiMemory,
     'settings/agents': enUSSettingsAgents,
     'settings/default-model': enUSSettingsDefaultModel,
+    'settings/integrations': enUSSettingsIntegrations,
     
     'mermaid-editor': enUSMermaidEditor,
     'onboarding': enUSOnboarding,
