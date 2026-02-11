@@ -424,7 +424,7 @@ pub fn grep_search(
     // Add file type filter
     let mut types_builder = TypesBuilder::new();
     types_builder.add_defaults();
-    
+
     types_builder
         .add("arkts", "*.ets")
         .map_err(|e| format!("Failed to add arkts type: {}", e))?;
@@ -445,7 +445,10 @@ pub fn grep_search(
             types_builder
                 .add(ftype, &glob_pattern)
                 .map_err(|e| format!("Failed to add file type '{}': {}", ftype, e))?;
-            debug!("Auto-added file type '{}' with glob '{}'", ftype, glob_pattern);
+            debug!(
+                "Auto-added file type '{}' with glob '{}'",
+                ftype, glob_pattern
+            );
         }
 
         // User specified type, use user-specified type

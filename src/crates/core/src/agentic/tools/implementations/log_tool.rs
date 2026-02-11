@@ -18,11 +18,11 @@ pub struct LogTool;
 /// LogTool input parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogToolInput {
-    pub action: String,           // Operation type: "read", "tail", "search", "analyze"
+    pub action: String, // Operation type: "read", "tail", "search", "analyze"
     pub log_path: Option<String>, // Log file path
-    pub lines: Option<usize>,     // Number of lines to read (for tail operation)
-    pub pattern: Option<String>,  // Search pattern (for search operation)
-    pub level: Option<String>,    // Log level filter: "error", "warn", "info", "debug"
+    pub lines: Option<usize>, // Number of lines to read (for tail operation)
+    pub pattern: Option<String>, // Search pattern (for search operation)
+    pub level: Option<String>, // Log level filter: "error", "warn", "info", "debug"
 }
 
 impl LogTool {

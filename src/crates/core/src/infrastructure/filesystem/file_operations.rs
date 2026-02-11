@@ -3,9 +3,9 @@
 //! Provides safe file read/write and operations
 
 use crate::util::errors::*;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tokio::fs;
-use serde::{Serialize, Deserialize};
 
 pub struct FileOperationService {
     max_file_size_mb: u64,
@@ -91,29 +91,36 @@ impl FileOperationService {
 
     pub async fn read_file(&self, file_path: &str) -> BitFunResult<FileReadResult> {
         let path = Path::new(file_path);
-        
+
         self.validate_file_access(path, false).await?;
-        
+
         if !path.exists() {
-            return Err(BitFunError::service(format!("File does not exist: {}", file_path)));
+            return Err(BitFunError::service(format!(
+                "File does not exist: {}",
+                file_path
+            )));
         }
-        
+
         if path.is_dir() {
-            return Err(BitFunError::service(format!("Path is a directory: {}", file_path)));
+            return Err(BitFunError::service(format!(
+                "Path is a directory: {}",
+                file_path
+            )));
         }
-        
-        let metadata = fs::metadata(path).await
+
+        let metadata = fs::metadata(path)
+            .await
             .map_err(|e| BitFunError::service(format!("Failed to read file metadata: {}", e)))?;
-        
+
         let file_size = metadata.len();
         if file_size > self.max_file_size_mb * 1024 * 1024 {
             return Err(BitFunError::service(format!(
-                "File too large: {}MB (max: {}MB)", 
-                file_size / (1024 * 1024), 
+                "File too large: {}MB (max: {}MB)",
+                file_size / (1024 * 1024),
                 self.max_file_size_mb
             )));
         }
-        
+
         match fs::read_to_string(path).await {
             Ok(content) => {
                 let line_count = content.lines().count();
@@ -126,11 +133,12 @@ impl FileOperationService {
                 })
             }
             Err(_) => {
-                let bytes = fs::read(path).await
+                let bytes = fs::read(path)
+                    .await
                     .map_err(|e| BitFunError::service(format!("Failed to read file: {}", e)))?;
-                
+
                 let is_binary = self.is_binary_content(&bytes);
-                
+
                 if is_binary {
                     use base64::Engine;
                     let engine = base64::engine::general_purpose::STANDARD;
@@ -156,34 +164,36 @@ impl FileOperationService {
     }
 
     pub async fn write_file(
-        &self, 
-        file_path: &str, 
+        &self,
+        file_path: &str,
         content: &str,
         options: FileOperationOptions,
     ) -> BitFunResult<FileWriteResult> {
         let path = Path::new(file_path);
-        
+
         self.validate_file_access(path, true).await?;
-        
+
         let mut backup_created = false;
         let mut backup_path = None;
-        
+
         if options.backup_on_overwrite && path.exists() {
             let backup_file_path = self.create_backup(path).await?;
             backup_created = true;
             backup_path = Some(backup_file_path);
         }
-        
+
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).await
-                .map_err(|e| BitFunError::service(format!("Failed to create parent directory: {}", e)))?;
+            fs::create_dir_all(parent).await.map_err(|e| {
+                BitFunError::service(format!("Failed to create parent directory: {}", e))
+            })?;
         }
-        
-        fs::write(path, content).await
+
+        fs::write(path, content)
+            .await
             .map_err(|e| BitFunError::service(format!("Failed to write file: {}", e)))?;
-        
+
         let bytes_written = content.len() as u64;
-        
+
         Ok(FileWriteResult {
             bytes_written,
             backup_created,
@@ -198,28 +208,30 @@ impl FileOperationService {
         options: FileOperationOptions,
     ) -> BitFunResult<FileWriteResult> {
         let path = Path::new(file_path);
-        
+
         self.validate_file_access(path, true).await?;
-        
+
         let mut backup_created = false;
         let mut backup_path = None;
-        
+
         if options.backup_on_overwrite && path.exists() {
             let backup_file_path = self.create_backup(path).await?;
             backup_created = true;
             backup_path = Some(backup_file_path);
         }
-        
+
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).await
-                .map_err(|e| BitFunError::service(format!("Failed to create parent directory: {}", e)))?;
+            fs::create_dir_all(parent).await.map_err(|e| {
+                BitFunError::service(format!("Failed to create parent directory: {}", e))
+            })?;
         }
-        
-        fs::write(path, data).await
+
+        fs::write(path, data)
+            .await
             .map_err(|e| BitFunError::service(format!("Failed to write binary file: {}", e)))?;
-        
+
         let bytes_written = data.len() as u64;
-        
+
         Ok(FileWriteResult {
             bytes_written,
             backup_created,
@@ -230,117 +242,138 @@ impl FileOperationService {
     pub async fn copy_file(&self, from: &str, to: &str) -> BitFunResult<u64> {
         let from_path = Path::new(from);
         let to_path = Path::new(to);
-        
+
         self.validate_file_access(from_path, false).await?;
         self.validate_file_access(to_path, true).await?;
-        
+
         if !from_path.exists() {
-            return Err(BitFunError::service(format!("Source file does not exist: {}", from)));
+            return Err(BitFunError::service(format!(
+                "Source file does not exist: {}",
+                from
+            )));
         }
-        
+
         if from_path.is_dir() {
-            return Err(BitFunError::service("Cannot copy directory as file".to_string()));
+            return Err(BitFunError::service(
+                "Cannot copy directory as file".to_string(),
+            ));
         }
-        
+
         if let Some(parent) = to_path.parent() {
-            fs::create_dir_all(parent).await
-                .map_err(|e| BitFunError::service(format!("Failed to create target directory: {}", e)))?;
+            fs::create_dir_all(parent).await.map_err(|e| {
+                BitFunError::service(format!("Failed to create target directory: {}", e))
+            })?;
         }
-        
-        let bytes_copied = fs::copy(from_path, to_path).await
+
+        let bytes_copied = fs::copy(from_path, to_path)
+            .await
             .map_err(|e| BitFunError::service(format!("Failed to copy file: {}", e)))?;
-        
+
         Ok(bytes_copied)
     }
 
     pub async fn move_file(&self, from: &str, to: &str) -> BitFunResult<()> {
         let from_path = Path::new(from);
         let to_path = Path::new(to);
-        
+
         self.validate_file_access(from_path, true).await?;
         self.validate_file_access(to_path, true).await?;
-        
+
         if !from_path.exists() {
-            return Err(BitFunError::service(format!("Source file does not exist: {}", from)));
+            return Err(BitFunError::service(format!(
+                "Source file does not exist: {}",
+                from
+            )));
         }
-        
+
         if let Some(parent) = to_path.parent() {
-            fs::create_dir_all(parent).await
-                .map_err(|e| BitFunError::service(format!("Failed to create target directory: {}", e)))?;
+            fs::create_dir_all(parent).await.map_err(|e| {
+                BitFunError::service(format!("Failed to create target directory: {}", e))
+            })?;
         }
-        
-        fs::rename(from_path, to_path).await
+
+        fs::rename(from_path, to_path)
+            .await
             .map_err(|e| BitFunError::service(format!("Failed to move file: {}", e)))?;
-        
+
         Ok(())
     }
 
     pub async fn delete_file(&self, file_path: &str) -> BitFunResult<()> {
         let path = Path::new(file_path);
-        
+
         self.validate_file_access(path, true).await?;
-        
+
         if !path.exists() {
-            return Err(BitFunError::service(format!("File does not exist: {}", file_path)));
+            return Err(BitFunError::service(format!(
+                "File does not exist: {}",
+                file_path
+            )));
         }
-        
+
         if path.is_dir() {
-            return Err(BitFunError::service("Cannot delete directory as file".to_string()));
+            return Err(BitFunError::service(
+                "Cannot delete directory as file".to_string(),
+            ));
         }
-        
-        fs::remove_file(path).await
+
+        fs::remove_file(path)
+            .await
             .map_err(|e| BitFunError::service(format!("Failed to delete file: {}", e)))?;
-        
+
         Ok(())
     }
 
     pub async fn get_file_info(&self, file_path: &str) -> BitFunResult<FileInfo> {
         let path = Path::new(file_path);
-        
+
         self.validate_file_access(path, false).await?;
-        
+
         if !path.exists() {
-            return Err(BitFunError::service(format!("File does not exist: {}", file_path)));
+            return Err(BitFunError::service(format!(
+                "File does not exist: {}",
+                file_path
+            )));
         }
-        
-        let metadata = fs::metadata(path).await
+
+        let metadata = fs::metadata(path)
+            .await
             .map_err(|e| BitFunError::service(format!("Failed to read file metadata: {}", e)))?;
-        
-        let file_name = path.file_name()
+
+        let file_name = path
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("")
             .to_string();
-        
-        let extension = path.extension()
+
+        let extension = path
+            .extension()
             .and_then(|e| e.to_str())
             .map(|s| s.to_string());
-        
+
         let mime_type = if !metadata.is_dir() {
             self.detect_mime_type(path)
         } else {
             None
         };
-        
-        let created_at = metadata.created().ok()
-            .map(|t| {
-                let datetime: chrono::DateTime<chrono::Utc> = t.into();
-                datetime.format("%Y-%m-%d %H:%M:%S").to_string()
-            });
-        
-        let modified_at = metadata.modified().ok()
-            .map(|t| {
-                let datetime: chrono::DateTime<chrono::Utc> = t.into();
-                datetime.format("%Y-%m-%d %H:%M:%S").to_string()
-            });
-        
-        let accessed_at = metadata.accessed().ok()
-            .map(|t| {
-                let datetime: chrono::DateTime<chrono::Utc> = t.into();
-                datetime.format("%Y-%m-%d %H:%M:%S").to_string()
-            });
-        
+
+        let created_at = metadata.created().ok().map(|t| {
+            let datetime: chrono::DateTime<chrono::Utc> = t.into();
+            datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+        });
+
+        let modified_at = metadata.modified().ok().map(|t| {
+            let datetime: chrono::DateTime<chrono::Utc> = t.into();
+            datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+        });
+
+        let accessed_at = metadata.accessed().ok().map(|t| {
+            let datetime: chrono::DateTime<chrono::Utc> = t.into();
+            datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+        });
+
         let permissions = self.get_permissions_string(path).await;
-        
+
         Ok(FileInfo {
             path: file_path.to_string(),
             name: file_name,
@@ -358,36 +391,42 @@ impl FileOperationService {
 
     pub async fn create_directory(&self, dir_path: &str) -> BitFunResult<()> {
         let path = Path::new(dir_path);
-        
+
         self.validate_file_access(path, true).await?;
-        
-        fs::create_dir_all(path).await
+
+        fs::create_dir_all(path)
+            .await
             .map_err(|e| BitFunError::service(format!("Failed to create directory: {}", e)))?;
-        
+
         Ok(())
     }
 
     pub async fn delete_directory(&self, dir_path: &str, recursive: bool) -> BitFunResult<()> {
         let path = Path::new(dir_path);
-        
+
         self.validate_file_access(path, true).await?;
-        
+
         if !path.exists() {
-            return Err(BitFunError::service(format!("Directory does not exist: {}", dir_path)));
+            return Err(BitFunError::service(format!(
+                "Directory does not exist: {}",
+                dir_path
+            )));
         }
-        
+
         if !path.is_dir() {
             return Err(BitFunError::service("Path is not a directory".to_string()));
         }
-        
+
         if recursive {
-            fs::remove_dir_all(path).await
-                .map_err(|e| BitFunError::service(format!("Failed to delete directory recursively: {}", e)))?;
+            fs::remove_dir_all(path).await.map_err(|e| {
+                BitFunError::service(format!("Failed to delete directory recursively: {}", e))
+            })?;
         } else {
-            fs::remove_dir(path).await
+            fs::remove_dir(path)
+                .await
                 .map_err(|e| BitFunError::service(format!("Failed to delete directory: {}", e)))?;
         }
-        
+
         Ok(())
     }
 
@@ -395,54 +434,63 @@ impl FileOperationService {
         for restricted in &self.restricted_paths {
             if path.starts_with(restricted) {
                 return Err(BitFunError::service(format!(
-                    "Access denied: path is in restricted list: {:?}", 
+                    "Access denied: path is in restricted list: {:?}",
                     path
                 )));
             }
         }
-        
+
         if let Some(allowed_extensions) = &self.allowed_extensions {
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 if !allowed_extensions.contains(&ext.to_lowercase()) {
                     return Err(BitFunError::service(format!(
-                        "File extension not allowed: {}", 
+                        "File extension not allowed: {}",
                         ext
                     )));
                 }
             }
         }
-        
+
         if is_write {
             if let Some(parent) = path.parent() {
                 if parent.exists() {
-                    let metadata = fs::metadata(parent).await
-                        .map_err(|e| BitFunError::service(format!("Failed to check parent directory permissions: {}", e)))?;
-                    
+                    let metadata = fs::metadata(parent).await.map_err(|e| {
+                        BitFunError::service(format!(
+                            "Failed to check parent directory permissions: {}",
+                            e
+                        ))
+                    })?;
+
                     if metadata.permissions().readonly() {
-                        return Err(BitFunError::service("Parent directory is read-only".to_string()));
+                        return Err(BitFunError::service(
+                            "Parent directory is read-only".to_string(),
+                        ));
                     }
                 }
             }
         }
-        
+
         Ok(())
     }
 
     async fn create_backup(&self, path: &Path) -> BitFunResult<String> {
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-        let backup_name = format!("{}.backup_{}", 
-            path.file_name().unwrap().to_string_lossy(), 
-            timestamp);
-        
+        let backup_name = format!(
+            "{}.backup_{}",
+            path.file_name().unwrap().to_string_lossy(),
+            timestamp
+        );
+
         let backup_path = if let Some(parent) = path.parent() {
             parent.join(backup_name)
         } else {
             PathBuf::from(backup_name)
         };
-        
-        fs::copy(path, &backup_path).await
+
+        fs::copy(path, &backup_path)
+            .await
             .map_err(|e| BitFunError::service(format!("Failed to create backup: {}", e)))?;
-        
+
         Ok(backup_path.to_string_lossy().to_string())
     }
 
@@ -453,15 +501,16 @@ impl FileOperationService {
         } else {
             data
         };
-        
+
         if sample.contains(&0) {
             return true;
         }
-        
-        let non_printable_count = sample.iter()
+
+        let non_printable_count = sample
+            .iter()
             .filter(|&&b| b < 32 && b != 9 && b != 10 && b != 13)
             .count();
-        
+
         let non_printable_ratio = non_printable_count as f64 / sample.len() as f64;
         non_printable_ratio > 0.1
     }
@@ -502,26 +551,29 @@ impl FileOperationService {
                 use std::os::unix::fs::PermissionsExt;
                 let perms = metadata.permissions();
                 let mode = perms.mode();
-                
-                let user = format!("{}{}{}",
+
+                let user = format!(
+                    "{}{}{}",
                     if mode & 0o400 != 0 { "r" } else { "-" },
                     if mode & 0o200 != 0 { "w" } else { "-" },
                     if mode & 0o100 != 0 { "x" } else { "-" }
                 );
-                let group = format!("{}{}{}",
+                let group = format!(
+                    "{}{}{}",
                     if mode & 0o040 != 0 { "r" } else { "-" },
                     if mode & 0o020 != 0 { "w" } else { "-" },
                     if mode & 0o010 != 0 { "x" } else { "-" }
                 );
-                let other = format!("{}{}{}",
+                let other = format!(
+                    "{}{}{}",
                     if mode & 0o004 != 0 { "r" } else { "-" },
                     if mode & 0o002 != 0 { "w" } else { "-" },
                     if mode & 0o001 != 0 { "x" } else { "-" }
                 );
-                
+
                 Some(format!("{}{}{}", user, group, other))
             }
-            
+
             #[cfg(windows)]
             {
                 let readonly = metadata.permissions().readonly();
