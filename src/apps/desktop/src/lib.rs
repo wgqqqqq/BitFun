@@ -19,7 +19,6 @@ use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_log::{RotationStrategy, TimezoneStrategy};
 #[cfg(target_os = "macos")]
-use tauri::Emitter;
 
 // Re-export API
 pub use api::*;
@@ -467,6 +466,7 @@ pub async fn run() {
             close_workspace,
             get_current_workspace,
             get_cowork_workspace_path,
+            ensure_cowork_session_dirs,
             scan_workspace_info,
             api::prompt_template_api::get_prompt_template_config,
             api::prompt_template_api::save_prompt_template_config,
