@@ -3,10 +3,10 @@ use crate::types::anthropic::{
     MessageStart, Usage,
 };
 use crate::types::unified::UnifiedResponse;
-use anyhow::{anyhow, Error, Result};
+use anyhow::{anyhow, Result};
 use eventsource_stream::Eventsource;
 use futures::StreamExt;
-use log::{debug, trace};
+use log::{error, trace};
 use reqwest::Response;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -25,8 +25,6 @@ pub async fn handle_anthropic_stream(
 ) {
     let mut stream = response.bytes_stream().eventsource();
     let idle_timeout = Duration::from_secs(600);
-    let mut received_done = false;
-    let mut response_error: Option<Error> = None;
     let mut usage = Usage::default();
 
     loop {
@@ -34,30 +32,28 @@ pub async fn handle_anthropic_stream(
         let sse = match sse_event {
             Ok(Some(Ok(sse))) => sse,
             Ok(None) => {
-                if !received_done {
-                    let error = response_error.unwrap_or(anyhow!(
-                        "SSE Error: stream closed before response completed"
-                    ));
-                    let _ = tx_event.send(Err(error));
-                }
+                let error_msg = "SSE Error: stream closed before response completed";
+                error!("{}", error_msg);
+                let _ = tx_event.send(Err(anyhow!(error_msg)));
                 return;
             }
             Ok(Some(Err(e))) => {
-                let error_str = format!("SSE Error: {}", e);
-                debug!("{}", error_str);
-                let error = anyhow!(error_str);
-                let _ = tx_event.send(Err(error));
+                let error_msg = format!("SSE Error: {}", e);
+                error!("{}", error_msg);
+                let _ = tx_event.send(Err(anyhow!(error_msg)));
                 return;
             }
             Err(_) => {
-                let _ = tx_event.send(Err(anyhow!("SSE Timeout: idle timeout waiting for SSE")));
+                let error_msg = "SSE Timeout: idle timeout waiting for SSE";
+                error!("{}", error_msg);
+                let _ = tx_event.send(Err(anyhow!(error_msg)));
                 return;
             }
         };
 
+        trace!("Anthropic SSE: {:?}", sse);
         let event_type = sse.event;
         let data = sse.data;
-        trace!("sse data: {:?}", data);
 
         if let Some(ref tx) = tx_raw_sse {
             let _ = tx.send(format!("[{}] {}", event_type, data));
@@ -69,20 +65,20 @@ pub async fn handle_anthropic_stream(
                     Ok(message_start) => message_start,
                     Err(e) => {
                         let err_str = format!("SSE Parsing Error: {e}, data: {}", &data);
-                        debug!("{}", err_str);
-                        let _ = tx_event.send(Err(anyhow!(err_str)));
+                        error!("{}", err_str);
                         continue;
                     }
                 };
-                usage.update(&message_start.message.usage);
+                if let Some(message_usage) = message_start.message.usage {
+                    usage.update(&message_usage);
+                }
             }
             "content_block_start" => {
                 let content_block_start: ContentBlockStart = match serde_json::from_str(&data) {
                     Ok(content_block_start) => content_block_start,
                     Err(e) => {
                         let err_str = format!("SSE Parsing Error: {e}, data: {}", &data);
-                        debug!("{}", err_str);
-                        let _ = tx_event.send(Err(anyhow!(err_str)));
+                        error!("{}", err_str);
                         continue;
                     }
                 };
@@ -91,7 +87,7 @@ pub async fn handle_anthropic_stream(
                     ContentBlock::ToolUse { .. }
                 ) {
                     let unified_response = UnifiedResponse::from(content_block_start);
-                    trace!("unified_response: {:?}", unified_response);
+                    trace!("Anthropic unified response: {:?}", unified_response);
                     let _ = tx_event.send(Ok(unified_response));
                 }
             }
@@ -100,18 +96,17 @@ pub async fn handle_anthropic_stream(
                     Ok(content_block_delta) => content_block_delta,
                     Err(e) => {
                         let err_str = format!("SSE Parsing Error: {e}, data: {}", &data);
-                        debug!("{}", err_str);
-                        let _ = tx_event.send(Err(anyhow!(err_str)));
+                        error!("{}", err_str);
                         continue;
                     }
                 };
                 match UnifiedResponse::try_from(content_block_delta) {
                     Ok(unified_response) => {
-                        trace!("unified_response: {:?}", unified_response);
+                        trace!("Anthropic unified response: {:?}", unified_response);
                         let _ = tx_event.send(Ok(unified_response));
                     }
                     Err(e) => {
-                        debug!("Skipping invalid content_block_delta: {e}");
+                        error!("Skipping invalid content_block_delta: {}", e);
                     }
                 };
             }
@@ -120,15 +115,20 @@ pub async fn handle_anthropic_stream(
                     Ok(message_delta) => message_delta,
                     Err(e) => {
                         let err_str = format!("SSE Parsing Error: {e}, data: {}", &data);
-                        debug!("{}", err_str);
-                        let _ = tx_event.send(Err(anyhow!(err_str)));
+                        error!("{}", err_str);
                         continue;
                     }
                 };
-                usage.update(&message_delta.usage);
-                message_delta.usage = usage.clone();
+                if let Some(delta_usage) = message_delta.usage.as_ref() {
+                    usage.update(delta_usage);
+                }
+                message_delta.usage = if usage.is_empty() {
+                    None
+                } else {
+                    Some(usage.clone())
+                };
                 let unified_response = UnifiedResponse::from(message_delta);
-                trace!("unified_response: {:?}", unified_response);
+                trace!("Anthropic unified response: {:?}", unified_response);
                 let _ = tx_event.send(Ok(unified_response));
             }
             "error" => {
@@ -136,15 +136,16 @@ pub async fn handle_anthropic_stream(
                     Ok(message_delta) => message_delta,
                     Err(e) => {
                         let err_str = format!("SSE Parsing Error: {e}, data: {}", &data);
-                        debug!("{}", err_str);
+                        error!("{}", err_str);
                         let _ = tx_event.send(Err(anyhow!(err_str)));
-                        continue;
+                        return;
                     }
                 };
-                response_error = Some(anyhow!(String::from(sse_error.error)))
+                let _ = tx_event.send(Err(anyhow!(String::from(sse_error.error))));
+                return;
             }
             "message_stop" => {
-                received_done = true;
+                return;
             }
             _ => {}
         }

@@ -68,13 +68,11 @@ pub async fn handle_openai_stream(
             }
         };
 
-        let raw = sse.data.clone();
-        trace!("sse data: {:?}", raw);
-
+        let raw = sse.data;
+        trace!("OpenAI SSE: {:?}", raw);
         if let Some(ref tx) = tx_raw_sse {
             let _ = tx.send(raw.clone());
         }
-
         if raw == "[DONE]" {
             return;
         }
@@ -82,7 +80,9 @@ pub async fn handle_openai_stream(
         let event_json: Value = match serde_json::from_str(&raw) {
             Ok(json) => json,
             Err(e) => {
-                let _ = tx_event.send(Err(anyhow!("SSE parsing error: {}, data: {}", e, &raw)));
+                let error_msg = format!("SSE parsing error: {}, data: {}", e, &raw);
+                error!("{}", error_msg);
+                let _ = tx_event.send(Err(anyhow!(error_msg)));
                 return;
             }
         };
@@ -125,7 +125,7 @@ pub async fn handle_openai_stream(
 
         let has_empty_choices = sse_data.is_choices_empty();
         let unified_responses = sse_data.into_unified_responses();
-        trace!("unified responses: {:?}", unified_responses);
+        trace!("OpenAI unified responses: {:?}", unified_responses);
         if unified_responses.is_empty() {
             if has_empty_choices {
                 warn!(

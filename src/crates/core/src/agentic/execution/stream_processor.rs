@@ -664,14 +664,16 @@ impl StreamProcessor {
                         Ok(Some(Err(e))) => {
                             let error_msg = format!("Stream processing error: {}", e);
                             error!("{}", error_msg);
-                            // Network errors/timeouts don't log SSE
-                            // flush_sse_on_error(&sse_collector, &error_msg).await;
+                            // log SSE for network errors
+                            flush_sse_on_error(&sse_collector, &error_msg).await;
                             self.graceful_shutdown_from_ctx(&mut ctx, error_msg.clone()).await;
                             return Err(BitFunError::AIClient(error_msg));
                         }
                         Err(_) => {
                             let error_msg = format!("Stream data timeout (no data received for {} seconds)", chunk_timeout.as_secs());
                             error!("Stream data timeout ({} seconds), forcing termination", chunk_timeout.as_secs());
+                            // log SSE for timeout errors
+                            flush_sse_on_error(&sse_collector, &error_msg).await;
                             self.graceful_shutdown_from_ctx(&mut ctx, error_msg.clone()).await;
                             return Err(BitFunError::AIClient(error_msg));
                         }
