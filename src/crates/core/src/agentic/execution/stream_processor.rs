@@ -691,26 +691,30 @@ impl StreamProcessor {
                     }
 
                     // Handle different types of response content
-                    // Normalize empty strings to None so the if-else chain correctly
-                    // falls through (some models send empty text alongside reasoning content)
+                    // Normalize empty strings to None
+                    //  (some models send empty text alongside reasoning content)
                     let text = response.text.filter(|t| !t.is_empty());
                     let reasoning_content = response.reasoning_content.filter(|t| !t.is_empty());
 
-                    if let Some(tool_call) = response.tool_call {
-                        self.send_thinking_end_if_needed(&mut ctx).await;
-                        if let Some(err) = self.check_cancellation(&mut ctx, cancellation_token, "processing tool call").await {
+                    if let Some(thinking_content) = reasoning_content {
+                        self.handle_thinking_chunk(&mut ctx, thinking_content).await;
+                        if let Some(err) = self.check_cancellation(&mut ctx, cancellation_token, "processing thinking chunk").await {
                             return err;
                         }
-                        self.handle_tool_call_chunk(&mut ctx, tool_call).await;
-                    } else if let Some(text) = text {
+                    }
+
+                    if let Some(text) = text {
                         self.send_thinking_end_if_needed(&mut ctx).await;
                         self.handle_text_chunk(&mut ctx, text).await;
                         if let Some(err) = self.check_cancellation(&mut ctx, cancellation_token, "processing text chunk").await {
                             return err;
                         }
-                    } else if let Some(thinking_content) = reasoning_content {
-                        self.handle_thinking_chunk(&mut ctx, thinking_content).await;
-                        if let Some(err) = self.check_cancellation(&mut ctx, cancellation_token, "processing thinking chunk").await {
+                    }
+
+                    if let Some(tool_call) = response.tool_call {
+                        self.send_thinking_end_if_needed(&mut ctx).await;
+                        self.handle_tool_call_chunk(&mut ctx, tool_call).await;
+                        if let Some(err) = self.check_cancellation(&mut ctx, cancellation_token, "processing tool call").await {
                             return err;
                         }
                     }
