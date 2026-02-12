@@ -7,7 +7,6 @@ import AIFeaturesConfig from './AIFeaturesConfig';
 import AIRulesConfig from './AIRulesConfig';
 import SubAgentConfig from './SubAgentConfig';
 import SkillsConfig from './SkillsConfig';
-import PluginsConfig from './PluginsConfig';
 import MCPConfig from './MCPConfig';
 import IntegrationsConfig from './IntegrationsConfig';
 import AgenticToolsConfig from './AgenticToolsConfig';
@@ -35,7 +34,6 @@ type ConfigTab =
   | 'ai-rules'
   | 'agents'
   | 'skills'
-  | 'plugins'
   | 'integrations'
   | 'mcp'
   | 'agentic-tools'
@@ -141,10 +139,6 @@ const ConfigCenterPanel: React.FC<ConfigCenterPanelProps> = ({
           label: t('configCenter.tabs.skills')
         },
         {
-          id: 'plugins' as ConfigTab,
-          label: t('configCenter.tabs.plugins')
-        },
-        {
           id: 'integrations' as ConfigTab,
           label: t('configCenter.tabs.integrations')
         },
@@ -214,8 +208,6 @@ const ConfigCenterPanel: React.FC<ConfigCenterPanelProps> = ({
         return <PromptTemplateConfig />;
       case 'skills':
         return <SkillsConfig />;
-      case 'plugins':
-        return <PluginsConfig />;
       case 'agents':
         return <SubAgentConfig />;
       case 'mcp':
@@ -298,4 +290,3 @@ const ConfigCenterPanel: React.FC<ConfigCenterPanelProps> = ({
 };
 
 export default ConfigCenterPanel;
-
