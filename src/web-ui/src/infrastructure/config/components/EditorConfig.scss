@@ -286,6 +286,23 @@ $config-section-gap: 16px;
 }
 
 
+// Action buttons
+.config-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: $size-gap-3;
+  margin-top: $size-gap-5;
+  padding-top: $size-gap-4;
+  border-top: 1px solid var(--border-accent-soft);
+
+  &__saving {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+}
+
+
 @media (max-width: 768px) {
   .config-form-row {
     grid-template-columns: 1fr;

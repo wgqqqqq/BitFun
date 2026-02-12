@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { NumberInput, Select } from '@/component-library';
+import { NumberInput, Select, Button } from '@/component-library';
+import { RotateCcw } from 'lucide-react';
 import { configManager } from '../services/ConfigManager';
 import { globalEventBus } from '@/infrastructure/event-bus';
 import { DEFAULT_EDITOR_CONFIG, type EditorConfig as EditorConfigType, type EditorConfigPartial } from '@/tools/editor/config';
@@ -623,14 +624,15 @@ const EditorConfig: React.FC<EditorConfigProps> = () => {
 
           
           <div className="config-action-buttons">
-            <button
-              type="button"
-              className="config-action-buttons__reset"
+            <Button
+              variant="secondary"
+              size="small"
               onClick={resetConfig}
               disabled={isSaving}
             >
+              <RotateCcw size={14} />
               {t('actions.reset')}
-            </button>
+            </Button>
             {isSaving && (
               <span className="config-action-buttons__saving">{t('messages.saving')}</span>
             )}
