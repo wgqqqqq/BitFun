@@ -52,6 +52,16 @@ struct GrepSink {
     last_line_number: Arc<Mutex<Option<u64>>>,
 }
 
+fn lock_recover<'a, T>(mutex: &'a Mutex<T>, name: &str) -> std::sync::MutexGuard<'a, T> {
+    match mutex.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            warn!("Mutex poisoned in grep search: {}", name);
+            poisoned.into_inner()
+        }
+    }
+}
+
 impl GrepSink {
     fn new(
         output_mode: OutputMode,
@@ -76,21 +86,21 @@ impl GrepSink {
     }
 
     fn get_output(&self) -> String {
-        let output = self.output.lock().unwrap();
+        let output = lock_recover(&self.output, "output");
         String::from_utf8_lossy(&output).to_string()
     }
 
     fn get_line_count(&self) -> usize {
-        *self.line_count.lock().unwrap()
+        *lock_recover(&self.line_count, "line_count")
     }
 
     fn get_match_count(&self) -> usize {
-        *self.match_count.lock().unwrap()
+        *lock_recover(&self.match_count, "match_count")
     }
 
     fn should_stop(&self) -> bool {
         if let Some(limit) = self.head_limit {
-            let count = *self.line_count.lock().unwrap();
+            let count = *lock_recover(&self.line_count, "line_count");
             count >= limit
         } else {
             false
@@ -98,7 +108,7 @@ impl GrepSink {
     }
 
     fn increment_line_count(&self) -> bool {
-        let mut count = self.line_count.lock().unwrap();
+        let mut count = lock_recover(&self.line_count, "line_count");
         *count += 1;
         if let Some(limit) = self.head_limit {
             *count <= limit
@@ -109,7 +119,7 @@ impl GrepSink {
 
     fn write_line(&self, line: &[u8]) {
         if self.increment_line_count() {
-            let mut output = self.output.lock().unwrap();
+            let mut output = lock_recover(&self.output, "output");
             output.extend_from_slice(line);
             output.push(b'\n');
         }
@@ -123,11 +133,11 @@ impl GrepSink {
             return;
         }
 
-        let mut last_line = self.last_line_number.lock().unwrap();
+        let mut last_line = lock_recover(&self.last_line_number, "last_line_number");
         if let Some(last) = *last_line {
             // If current line number is not continuous with previous line (difference > 1), insert separator
             if current_line > last + 1 {
-                let mut output = self.output.lock().unwrap();
+                let mut output = lock_recover(&self.output, "output");
                 output.extend_from_slice(b"--\n");
             }
         }
@@ -155,7 +165,7 @@ impl Sink for GrepSink {
             return Ok(false);
         }
 
-        *self.match_count.lock().unwrap() += 1;
+        *lock_recover(&self.match_count, "match_count") += 1;
 
         match self.output_mode {
             OutputMode::Content => {
@@ -424,7 +434,7 @@ pub fn grep_search(
     // Add file type filter
     let mut types_builder = TypesBuilder::new();
     types_builder.add_defaults();
-    
+
     types_builder
         .add("arkts", "*.ets")
         .map_err(|e| format!("Failed to add arkts type: {}", e))?;
@@ -445,7 +455,10 @@ pub fn grep_search(
             types_builder
                 .add(ftype, &glob_pattern)
                 .map_err(|e| format!("Failed to add file type '{}': {}", ftype, e))?;
-            debug!("Auto-added file type '{}' with glob '{}'", ftype, glob_pattern);
+            debug!(
+                "Auto-added file type '{}' with glob '{}'",
+                ftype, glob_pattern
+            );
         }
 
         // User specified type, use user-specified type

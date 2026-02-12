@@ -560,12 +560,18 @@ impl WorkspaceLspManager {
                     let mut states = self.server_states.write().await;
                     if let Some(state) = states.get_mut(language) {
                         state.status = ServerStatus::Running;
-                        state.started_at = Some(
-                            SystemTime::now()
-                                .duration_since(SystemTime::UNIX_EPOCH)
-                                .unwrap()
-                                .as_secs(),
-                        );
+                        state.started_at = match SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                        {
+                            Ok(duration) => Some(duration.as_secs()),
+                            Err(e) => {
+                                warn!(
+                                    "Failed to compute LSP server start timestamp: language={}, error={}",
+                                    language, e
+                                );
+                                Some(0)
+                            }
+                        };
                     }
                     info!("LSP server started: {}", language);
                 }

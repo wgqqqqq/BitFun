@@ -8,6 +8,7 @@ use crate::service::mcp::server::MCPServerManager;
 use crate::util::errors::{BitFunError, BitFunResult};
 use log::{debug, info, warn};
 use serde_json::{json, Value};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -58,7 +59,7 @@ impl ContextEnhancer {
             .collect::<Vec<_>>();
 
         let mut sorted = scored_resources;
-        sorted.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
+        sorted.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(Ordering::Equal));
 
         let mut selected = Vec::new();
         let mut total_size = 0;

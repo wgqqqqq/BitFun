@@ -182,8 +182,10 @@ mod tests {
             24,
         );
 
-        let serialized = SessionSerializer::serialize(&[session.clone()]).unwrap();
-        let deserialized = SessionSerializer::deserialize(&serialized).unwrap();
+        let serialized = SessionSerializer::serialize(&[session.clone()])
+            .expect("serialize should succeed for a valid terminal session");
+        let deserialized = SessionSerializer::deserialize(&serialized)
+            .expect("deserialize should succeed for serialized session payload");
 
         assert_eq!(deserialized.len(), 1);
         assert_eq!(deserialized[0].id, session.id);

@@ -4,7 +4,7 @@
 
 use super::providers::ConfigProviderRegistry;
 use super::types::*;
-use crate::infrastructure::{PathManager, try_get_path_manager_arc};
+use crate::infrastructure::{try_get_path_manager_arc, PathManager};
 use crate::util::errors::*;
 use log::{debug, info, warn};
 
@@ -198,12 +198,7 @@ impl ConfigManager {
     fn add_default_agent_models_config(
         agent_models: &mut std::collections::HashMap<String, String>,
     ) {
-        let agents_using_fast = vec![
-            "Explore",
-            "FileFinder",
-            "GenerateDoc",
-            "CodeReview",
-        ];
+        let agents_using_fast = vec!["Explore", "FileFinder", "GenerateDoc", "CodeReview"];
         for key in agents_using_fast {
             if !agent_models.contains_key(key) {
                 agent_models.insert(key.to_string(), "fast".to_string());
@@ -470,7 +465,9 @@ impl ConfigManager {
             return Ok(());
         }
 
-        let last_key = keys.last().unwrap();
+        let last_key = keys.last().ok_or_else(|| {
+            BitFunError::config(format!("Config path '{}' does not contain any keys", path))
+        })?;
         let parent_keys = &keys[..keys.len() - 1];
 
         let mut current = &mut config_value;
@@ -503,6 +500,7 @@ impl ConfigManager {
         old_config: &GlobalConfig,
     ) -> BitFunResult<()> {
         self.check_and_broadcast_debug_mode_change(old_config).await;
+        self.check_and_broadcast_log_level_change(old_config).await;
 
         self.providers
             .notify_config_changed(path, old_config, &self.config)
@@ -531,6 +529,23 @@ impl ConfigManager {
                 new_log_path: new_debug.log_path.clone(),
             })
             .await;
+        }
+    }
+
+    /// Detects and broadcasts runtime log-level changes.
+    async fn check_and_broadcast_log_level_change(&self, old_config: &GlobalConfig) {
+        let old_level = old_config.app.logging.level.trim().to_lowercase();
+        let new_level = self.config.app.logging.level.trim().to_lowercase();
+
+        if old_level != new_level {
+            debug!(
+                "App logging level change detected: {} -> {}",
+                old_level, new_level
+            );
+
+            use super::global::{ConfigUpdateEvent, GlobalConfigManager};
+            GlobalConfigManager::broadcast_update(ConfigUpdateEvent::LogLevelUpdated { new_level })
+                .await;
         }
     }
 }

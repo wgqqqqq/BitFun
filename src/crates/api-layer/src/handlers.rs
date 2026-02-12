@@ -35,7 +35,8 @@ pub async fn handle_execute_agent_task(
 ) -> Result<ExecuteAgentResponse> {
     info!(
         "Executing agent task: agent_type={}, message_length={}",
-        request.agent_type, request.user_message.len()
+        request.agent_type,
+        request.user_message.len()
     );
 
     Ok(ExecuteAgentResponse {
@@ -109,7 +110,9 @@ mod tests {
     #[tokio::test]
     async fn test_health_check() {
         let state = CoreAppState::new();
-        let response = handle_health_check(&state).await.unwrap();
+        let response = handle_health_check(&state)
+            .await
+            .expect("health check should always succeed");
         assert_eq!(response.status, "healthy");
     }
 }

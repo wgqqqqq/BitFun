@@ -112,6 +112,45 @@ impl AIClient {
         &self.config.format
     }
 
+    /// Whether to inject the GLM-specific `tool_stream` request field.
+    ///
+    /// `tool_stream` is only required by GLM; other providers can do tool streaming without this field.
+    /// Current rule: inject only for pure-version GLM models (no suffix) with version >= 4.6.
+    fn supports_glm_tool_stream(model_name: &str) -> bool {
+        Self::parse_glm_major_minor(model_name)
+            .map(|(major, minor)| major > 4 || (major == 4 && minor >= 6))
+            .unwrap_or(false)
+    }
+
+    /// Parse strict `glm-<major>[.<minor>]` from model names like:
+    /// - glm-4.6
+    /// - glm-5
+    ///
+    /// Models with non-numeric suffixes are treated as not requiring this GLM-specific field, e.g.:
+    /// - glm-4.6-flash
+    /// - glm-4.5v
+    fn parse_glm_major_minor(model_name: &str) -> Option<(u32, u32)> {
+        let version_part = model_name.strip_prefix("glm-")?;
+
+        if version_part.is_empty() {
+            return None;
+        }
+
+        let mut parts = version_part.split('.');
+        let major: u32 = parts.next()?.parse().ok()?;
+        let minor: u32 = match parts.next() {
+            Some(v) => v.parse().ok()?,
+            None => 0,
+        };
+
+        // Only allow one numeric segment after the decimal point.
+        if parts.next().is_some() {
+            return None;
+        }
+
+        Some((major, minor))
+    }
+
     /// Determine whether to use merge mode
     ///
     /// true: apply default headers first, then custom headers (custom can override)
@@ -215,7 +254,7 @@ impl AIClient {
 
         let model_name = self.config.model.to_lowercase();
 
-        if model_name == "glm-4.6" || model_name == "glm-4.7" || model_name == "glm-5" {
+        if Self::supports_glm_tool_stream(&model_name) {
             request_body["tool_stream"] = serde_json::Value::Bool(true);
         }
 
@@ -233,6 +272,18 @@ impl AIClient {
                     request_body[key] = value.clone();
                 }
                 debug!(target: "ai::openai_stream_request", "Applied extra_body overrides: {:?}", extra_obj.keys().collect::<Vec<_>>());
+            }
+        }
+
+        // This client currently consumes only the first choice in stream handling.
+        // Remove custom n override and keep provider defaults.
+        if let Some(request_obj) = request_body.as_object_mut() {
+            if let Some(existing_n) = request_obj.remove("n") {
+                warn!(
+                    target: "ai::openai_stream_request",
+                    "Removed custom request field n={} because the stream processor only handles the first choice",
+                    existing_n
+                );
             }
         }
 
@@ -275,8 +326,8 @@ impl AIClient {
 
         let model_name = self.config.model.to_lowercase();
 
-        // TODO: Zhipu tool streaming currently only supports the OpenAI format
-        if model_name == "glm-4.6" || model_name == "glm-4.7" || model_name == "glm-5" {
+        // GLM-specific extension: only set `tool_stream` when the model requires it.
+        if Self::supports_glm_tool_stream(&model_name) {
             request_body["tool_stream"] = serde_json::Value::Bool(true);
         }
 

@@ -220,7 +220,13 @@ pub fn create_main_window(app_handle: &tauri::AppHandle) {
     let init_script = theme.generate_init_script();
 
     let main_url = if cfg!(debug_assertions) {
-        WebviewUrl::External("http://localhost:1422".parse().expect("Invalid dev URL"))
+        match "http://localhost:1422".parse() {
+            Ok(url) => WebviewUrl::External(url),
+            Err(e) => {
+                error!("Invalid dev URL, fallback to app URL: {}", e);
+                WebviewUrl::App("index.html".into())
+            }
+        }
     } else {
         WebviewUrl::App("index.html".into())
     };

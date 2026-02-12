@@ -31,7 +31,8 @@ pub async fn get_skill_configs(
 
     let all_skills = registry.get_all_skills().await;
 
-    Ok(serde_json::to_value(all_skills).unwrap())
+    serde_json::to_value(all_skills)
+        .map_err(|e| format!("Failed to serialize skill configs: {}", e))
 }
 
 #[tauri::command]
@@ -136,7 +137,10 @@ pub async fn add_skill(
         return Err(validation.error.unwrap_or("Invalid skill path".to_string()));
     }
 
-    let skill_name = validation.name.as_ref().unwrap();
+    let skill_name = validation
+        .name
+        .as_ref()
+        .ok_or_else(|| "Skill name missing after validation".to_string())?;
     let source = Path::new(&source_path);
 
     let target_dir = if level == "project" {

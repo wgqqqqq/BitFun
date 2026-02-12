@@ -295,8 +295,10 @@ impl WorkspaceInfo {
 
                     if let Ok(modified) = metadata.modified() {
                         let modified_dt = chrono::DateTime::<chrono::Utc>::from(modified);
-                        if stats.last_modified.is_none()
-                            || stats.last_modified.as_ref().unwrap() < &modified_dt
+                        if stats
+                            .last_modified
+                            .as_ref()
+                            .map_or(true, |last_modified| last_modified < &modified_dt)
                         {
                             stats.last_modified = Some(modified_dt);
                         }
@@ -459,7 +461,12 @@ impl WorkspaceManager {
 
         if let Some(workspace_id) = existing_workspace_id {
             self.set_current_workspace(workspace_id.clone())?;
-            return Ok(self.workspaces.get(&workspace_id).unwrap().clone());
+            return self.workspaces.get(&workspace_id).cloned().ok_or_else(|| {
+                BitFunError::service(format!(
+                    "Workspace '{}' disappeared after selecting it",
+                    workspace_id
+                ))
+            });
         }
 
         let workspace = WorkspaceInfo::new(path, ScanOptions::default()).await?;

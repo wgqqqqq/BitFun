@@ -3,7 +3,21 @@
 //! Helper functions and types for the JSON-RPC protocol.
 
 use super::types::*;
+use log::warn;
 use serde_json::{json, Value};
+
+fn serialize_params(method: &str, params: impl serde::Serialize) -> Option<Value> {
+    match serde_json::to_value(params) {
+        Ok(value) => Some(value),
+        Err(err) => {
+            warn!(
+                "Failed to serialize MCP request params: method={}, error={}",
+                method, err
+            );
+            None
+        }
+    }
+}
 
 /// Creates an `initialize` request.
 pub fn create_initialize_request(
@@ -25,7 +39,7 @@ pub fn create_initialize_request(
     MCPRequest::new(
         Value::Number(id.into()),
         "initialize".to_string(),
-        Some(serde_json::to_value(params).unwrap()),
+        serialize_params("initialize", params),
     )
 }
 
@@ -33,7 +47,7 @@ pub fn create_initialize_request(
 pub fn create_resources_list_request(id: u64, cursor: Option<String>) -> MCPRequest {
     let params = if cursor.is_some() {
         let params = ResourcesListParams { cursor };
-        Some(serde_json::to_value(params).unwrap())
+        serialize_params("resources/list", params)
     } else {
         None
     };
@@ -50,7 +64,7 @@ pub fn create_resources_read_request(id: u64, uri: impl Into<String>) -> MCPRequ
     MCPRequest::new(
         Value::Number(id.into()),
         "resources/read".to_string(),
-        Some(serde_json::to_value(params).unwrap()),
+        serialize_params("resources/read", params),
     )
 }
 
@@ -58,7 +72,7 @@ pub fn create_resources_read_request(id: u64, uri: impl Into<String>) -> MCPRequ
 pub fn create_prompts_list_request(id: u64, cursor: Option<String>) -> MCPRequest {
     let params = if cursor.is_some() {
         let params = PromptsListParams { cursor };
-        Some(serde_json::to_value(params).unwrap())
+        serialize_params("prompts/list", params)
     } else {
         None
     };
@@ -78,7 +92,7 @@ pub fn create_prompts_get_request(
     MCPRequest::new(
         Value::Number(id.into()),
         "prompts/get".to_string(),
-        Some(serde_json::to_value(params).unwrap()),
+        serialize_params("prompts/get", params),
     )
 }
 
@@ -86,7 +100,7 @@ pub fn create_prompts_get_request(
 pub fn create_tools_list_request(id: u64, cursor: Option<String>) -> MCPRequest {
     let params = if cursor.is_some() {
         let params = ToolsListParams { cursor };
-        Some(serde_json::to_value(params).unwrap())
+        serialize_params("tools/list", params)
     } else {
         None
     };
@@ -106,7 +120,7 @@ pub fn create_tools_call_request(
     MCPRequest::new(
         Value::Number(id.into()),
         "tools/call".to_string(),
-        Some(serde_json::to_value(params).unwrap()),
+        serialize_params("tools/call", params),
     )
 }
 

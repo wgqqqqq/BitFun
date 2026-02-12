@@ -4,6 +4,7 @@
 
 use crate::service::mcp::protocol::{MCPResource, MCPResourceContent};
 use serde_json::{json, Value};
+use std::cmp::Ordering;
 
 /// Resource adapter.
 pub struct ResourceAdapter;
@@ -65,7 +66,7 @@ impl ResourceAdapter {
             .filter(|(_, score)| *score >= min_relevance)
             .collect();
 
-        scored_resources.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scored_resources.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
 
         scored_resources.truncate(max_results);
 

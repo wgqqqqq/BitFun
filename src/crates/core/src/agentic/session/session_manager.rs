@@ -133,7 +133,7 @@ impl SessionManager {
 
         info!("Session created: session_name={}", session.session_name);
 
-        Ok(self.sessions.get(&session_id).unwrap().clone())
+        Ok(session)
     }
 
     /// Get session
@@ -633,7 +633,10 @@ impl SessionManager {
             session.updated_at = SystemTime::now();
             Ok(())
         } else {
-            Err(BitFunError::NotFound(format!("Session not found: {}", session_id)))
+            Err(BitFunError::NotFound(format!(
+                "Session not found: {}",
+                session_id
+            )))
         }
     }
 
@@ -662,7 +665,10 @@ impl SessionManager {
             user_message.to_string()
         };
 
-        let user_prompt = format!("User message: {}\n\nPlease generate session title:", truncated_message);
+        let user_prompt = format!(
+            "User message: {}\n\nPlease generate session title:",
+            truncated_message
+        );
 
         // Construct messages (using AIClient's Message type)
         let messages = vec![

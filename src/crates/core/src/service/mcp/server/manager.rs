@@ -354,12 +354,10 @@ impl MCPServerManager {
         self.config_service.save_server_config(&config).await?;
 
         let status = self.get_server_status(&config.id).await;
-        if status.is_ok()
-            && matches!(
-                status.unwrap(),
-                MCPServerStatus::Connected | MCPServerStatus::Healthy
-            )
-        {
+        if matches!(
+            status,
+            Ok(MCPServerStatus::Connected | MCPServerStatus::Healthy)
+        ) {
             info!(
                 "Restarting MCP server to apply new configuration: id={}",
                 config.id

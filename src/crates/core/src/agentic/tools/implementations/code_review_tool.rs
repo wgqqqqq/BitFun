@@ -124,15 +124,26 @@ impl CodeReviewTool {
                 "confidence_note": "AI did not return complete review results"
             });
         } else {
-            let summary = input.get_mut("summary").unwrap();
-            if summary.get("overall_assessment").is_none() {
-                summary["overall_assessment"] = json!("None");
-            }
-            if summary.get("risk_level").is_none() {
-                summary["risk_level"] = json!("low");
-            }
-            if summary.get("recommended_action").is_none() {
-                summary["recommended_action"] = json!("approve");
+            if let Some(summary) = input.get_mut("summary") {
+                if summary.get("overall_assessment").is_none() {
+                    summary["overall_assessment"] = json!("None");
+                }
+                if summary.get("risk_level").is_none() {
+                    summary["risk_level"] = json!("low");
+                }
+                if summary.get("recommended_action").is_none() {
+                    summary["recommended_action"] = json!("approve");
+                }
+            } else {
+                warn!(
+                    "CodeReview tool summary field exists but is not mutable object, using default values"
+                );
+                input["summary"] = json!({
+                    "overall_assessment": "None",
+                    "risk_level": "low",
+                    "recommended_action": "approve",
+                    "confidence_note": "AI returned invalid summary format"
+                });
             }
         }
 

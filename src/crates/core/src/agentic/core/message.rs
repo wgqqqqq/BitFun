@@ -167,7 +167,8 @@ impl From<Message> for AIMessage {
                     }
                 } else {
                     // If no result_for_assistant, use serialized result
-                    serde_json::to_string(&result).unwrap_or(format!("Tool {} execution completed", tool_name))
+                    serde_json::to_string(&result)
+                        .unwrap_or(format!("Tool {} execution completed", tool_name))
                 };
 
                 Self {
@@ -304,8 +305,8 @@ impl Message {
 
     /// Get message's token count
     pub fn get_tokens(&mut self) -> usize {
-        if self.metadata.tokens.is_some() {
-            return self.metadata.tokens.unwrap();
+        if let Some(tokens) = self.metadata.tokens {
+            return tokens;
         }
         let tokens = TokenCounter::estimate_message_tokens(&AIMessage::from(&*self));
         self.metadata.tokens = Some(tokens);

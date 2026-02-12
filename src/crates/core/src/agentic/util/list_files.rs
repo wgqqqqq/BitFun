@@ -149,7 +149,9 @@ pub fn list_files(
                 break;
             }
 
-            let entry = queue.pop_front().unwrap();
+            let Some(entry) = queue.pop_front() else {
+                continue;
+            };
             let entry_path = &entry.path;
 
             // Check if this is a special folder that should not be expanded
@@ -384,15 +386,13 @@ pub fn format_files_list(files_list: Vec<FileEntry>, dir_path: &str) -> String {
 
                 // Extract the file/directory name (last component)
                 let name = if child.is_dir {
-                    format!(
-                        "{}/",
-                        child.path[..child.path.len() - 1]
-                            .split('/')
-                            .last()
-                            .unwrap()
-                    )
+                    let dir_name = child.path[..child.path.len() - 1]
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or("");
+                    format!("{}/", dir_name)
                 } else {
-                    child.path.split('/').last().unwrap().to_string()
+                    child.path.rsplit('/').next().unwrap_or("").to_string()
                 };
 
                 // Choose the appropriate connector

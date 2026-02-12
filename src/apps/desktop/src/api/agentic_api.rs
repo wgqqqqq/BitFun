@@ -1,5 +1,6 @@
 //! Agentic API
 
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -141,7 +142,8 @@ pub async fn create_session(
     coordinator: State<'_, Arc<ConversationCoordinator>>,
     request: CreateSessionRequest,
 ) -> Result<CreateSessionResponse, String> {
-    let config = request.config
+    let config = request
+        .config
         .map(|c| SessionConfig {
             max_context_tokens: c.max_context_tokens.unwrap_or(128128),
             auto_compact: c.auto_compact.unwrap_or(true),
@@ -152,7 +154,7 @@ pub async fn create_session(
             compression_threshold: c.compression_threshold.unwrap_or(0.8),
         })
         .unwrap_or_default();
-    
+
     let session = coordinator
         .create_session_with_id(
             request.session_id,
@@ -177,7 +179,12 @@ pub async fn start_dialog_turn(
     request: StartDialogTurnRequest,
 ) -> Result<StartDialogTurnResponse, String> {
     let _stream = coordinator
-        .start_dialog_turn(request.session_id, request.user_input, request.turn_id, request.agent_type)
+        .start_dialog_turn(
+            request.session_id,
+            request.user_input,
+            request.turn_id,
+            request.agent_type,
+        )
         .await
         .map_err(|e| format!("Failed to start dialog turn: {}", e))?;
 
@@ -269,11 +276,7 @@ pub async fn list_sessions(
             agent_type: summary.agent_type,
             state: format!("{:?}", summary.state),
             turn_count: summary.turn_count,
-            created_at: summary
-                .created_at
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            created_at: system_time_to_unix_secs(summary.created_at),
         })
         .collect();
 
@@ -375,11 +378,7 @@ fn session_to_response(session: Session) -> SessionResponse {
         agent_type: session.agent_type,
         state: format!("{:?}", session.state),
         turn_count: session.dialog_turn_ids.len(),
-        created_at: session
-            .created_at
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
+        created_at: system_time_to_unix_secs(session.created_at),
     }
 }
 
@@ -426,10 +425,16 @@ fn message_to_dto(message: Message) -> MessageDTO {
         id: message.id,
         role: role.to_string(),
         content,
-        timestamp: message
-            .timestamp
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
+        timestamp: system_time_to_unix_secs(message.timestamp),
+    }
+}
+
+fn system_time_to_unix_secs(time: std::time::SystemTime) -> u64 {
+    match time.duration_since(std::time::UNIX_EPOCH) {
+        Ok(duration) => duration.as_secs(),
+        Err(err) => {
+            warn!("Failed to convert SystemTime to unix timestamp: {}", err);
+            0
+        }
     }
 }

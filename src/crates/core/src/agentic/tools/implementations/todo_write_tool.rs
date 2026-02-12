@@ -280,10 +280,9 @@ When in doubt, use this tool. Being proactive with task management demonstrates 
                 }
                 // If no id, generate a new one
                 if !obj.contains_key("id") {
-                    let new_id = format!(
-                        "todo_{}",
-                        uuid::Uuid::new_v4().to_string().split('-').next().unwrap()
-                    );
+                    let uuid = uuid::Uuid::new_v4().to_string();
+                    let short_id = uuid.split('-').next().unwrap_or("todo");
+                    let new_id = format!("todo_{}", short_id);
                     obj.insert("id".to_string(), json!(new_id));
                 }
             }

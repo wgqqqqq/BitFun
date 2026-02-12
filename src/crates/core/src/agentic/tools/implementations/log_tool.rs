@@ -18,11 +18,11 @@ pub struct LogTool;
 /// LogTool input parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogToolInput {
-    pub action: String,           // Operation type: "read", "tail", "search", "analyze"
+    pub action: String, // Operation type: "read", "tail", "search", "analyze"
     pub log_path: Option<String>, // Log file path
-    pub lines: Option<usize>,     // Number of lines to read (for tail operation)
-    pub pattern: Option<String>,  // Search pattern (for search operation)
-    pub level: Option<String>,    // Log level filter: "error", "warn", "info", "debug"
+    pub lines: Option<usize>, // Number of lines to read (for tail operation)
+    pub pattern: Option<String>, // Search pattern (for search operation)
+    pub level: Option<String>, // Log level filter: "error", "warn", "info", "debug"
 }
 
 impl LogTool {
@@ -312,9 +312,11 @@ The tool will return the log content or analysis results that you can use to dia
             }
         };
 
+        let result_for_assistant =
+            serde_json::to_string_pretty(&result).unwrap_or_else(|_| result.to_string());
         Ok(vec![ToolResult::Result {
-            data: result.clone(),
-            result_for_assistant: Some(serde_json::to_string_pretty(&result).unwrap()),
+            data: result,
+            result_for_assistant: Some(result_for_assistant),
         }])
     }
 }

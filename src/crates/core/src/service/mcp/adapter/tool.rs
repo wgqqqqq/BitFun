@@ -185,11 +185,10 @@ impl Tool for MCPToolWrapper {
 
         let result_value = serde_json::to_value(&result)?;
 
+        let result_for_assistant = self.render_result_for_assistant(&result_value);
         Ok(vec![ToolResult::Result {
             data: result_value,
-            result_for_assistant: Some(
-                self.render_result_for_assistant(&serde_json::to_value(&result).unwrap()),
-            ),
+            result_for_assistant: Some(result_for_assistant),
         }])
     }
 }

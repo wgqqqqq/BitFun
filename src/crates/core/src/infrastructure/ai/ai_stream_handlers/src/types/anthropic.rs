@@ -8,7 +8,7 @@ pub struct MessageStart {
 
 #[derive(Debug, Deserialize)]
 pub struct Message {
-    pub usage: Usage,
+    pub usage: Option<Usage>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -16,6 +16,7 @@ pub struct Usage {
     input_tokens: Option<u32>,
     output_tokens: Option<u32>,
     cache_read_input_tokens: Option<u32>,
+    cache_creation_input_tokens: Option<u32>,
 }
 
 impl Default for Usage {
@@ -24,6 +25,7 @@ impl Default for Usage {
             input_tokens: None,
             output_tokens: None,
             cache_read_input_tokens: None,
+            cache_creation_input_tokens: None,
         }
     }
 }
@@ -39,18 +41,36 @@ impl Usage {
         if other.cache_read_input_tokens.is_some() {
             self.cache_read_input_tokens = other.cache_read_input_tokens;
         }
+        if other.cache_creation_input_tokens.is_some() {
+            self.cache_creation_input_tokens = other.cache_creation_input_tokens;
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.input_tokens.is_none()
+            && self.output_tokens.is_none()
+            && self.cache_read_input_tokens.is_none()
+            && self.cache_creation_input_tokens.is_none()
     }
 }
 
 impl From<Usage> for UnifiedTokenUsage {
     fn from(value: Usage) -> Self {
-        let prompt_token_count = value.input_tokens.unwrap_or(0) + value.cache_read_input_tokens.unwrap_or(0);
+        let cache_read = value.cache_read_input_tokens.unwrap_or(0);
+        let cache_creation = value.cache_creation_input_tokens.unwrap_or(0);
+        let prompt_token_count = value.input_tokens.unwrap_or(0) + cache_read + cache_creation;
         let candidates_token_count = value.output_tokens.unwrap_or(0);
         Self {
             prompt_token_count,
             candidates_token_count,
             total_token_count: prompt_token_count + candidates_token_count,
-            cached_content_token_count: value.cache_read_input_tokens,
+            cached_content_token_count: match (
+                value.cache_read_input_tokens,
+                value.cache_creation_input_tokens,
+            ) {
+                (None, None) => None,
+                (read, creation) => Some(read.unwrap_or(0) + creation.unwrap_or(0)),
+            },
         }
     }
 }
@@ -58,12 +78,13 @@ impl From<Usage> for UnifiedTokenUsage {
 #[derive(Debug, Deserialize)]
 pub struct MessageDelta {
     pub delta: MessageDeltaDelta,
-    pub usage: Usage,
+    pub usage: Option<Usage>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct MessageDeltaDelta {
-    pub stop_reason: String,
+    pub stop_reason: Option<String>,
+    pub stop_sequence: Option<String>,
 }
 
 impl From<MessageDelta> for UnifiedResponse {
@@ -73,8 +94,8 @@ impl From<MessageDelta> for UnifiedResponse {
             reasoning_content: None,
             thinking_signature: None,
             tool_call: None,
-            usage: Some(UnifiedTokenUsage::from(value.usage)),
-            finish_reason: Some(value.delta.stop_reason),
+            usage: value.usage.map(UnifiedTokenUsage::from),
+            finish_reason: value.delta.stop_reason,
         }
     }
 }
@@ -93,6 +114,8 @@ pub enum ContentBlock {
     Text,
     #[serde(rename = "tool_use")]
     ToolUse { id: String, name: String },
+    #[serde(other)]
+    Unknown,
 }
 
 impl From<ContentBlockStart> for UnifiedResponse {
@@ -129,6 +152,8 @@ pub enum Delta {
     InputJsonDelta { partial_json: String },
     #[serde(rename = "signature_delta")]
     SignatureDelta { signature: String },
+    #[serde(other)]
+    Unknown,
 }
 
 impl TryFrom<ContentBlockDelta> for UnifiedResponse {
@@ -152,6 +177,9 @@ impl TryFrom<ContentBlockDelta> for UnifiedResponse {
             }
             Delta::SignatureDelta { signature } => {
                 result.thinking_signature = Some(signature);
+            }
+            Delta::Unknown => {
+                return Err("Unsupported anthropic delta type".to_string());
             }
         }
         Ok(result)

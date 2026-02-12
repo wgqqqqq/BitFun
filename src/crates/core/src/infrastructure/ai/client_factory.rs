@@ -6,12 +6,12 @@
 //! 3. Invalidate cache when configuration changes
 //! 4. Provide global singleton access
 
-use log::{debug, info};
 use crate::infrastructure::ai::AIClient;
 use crate::service::config::{get_global_config_service, ConfigService};
 use crate::util::errors::{BitFunError, BitFunResult};
 use crate::util::types::AIConfig;
 use anyhow::{anyhow, Result};
+use log::{debug, info, warn};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
 
@@ -79,11 +79,9 @@ impl AIClientFactory {
 
                 match global_config.ai.default_models.fast {
                     Some(fast_id) => fast_id,
-                    None => {
-                        global_config.ai.default_models.primary.ok_or_else(|| {
-                            anyhow!("Fast model not configured and primary model not configured")
-                        })?
-                    }
+                    None => global_config.ai.default_models.primary.ok_or_else(|| {
+                        anyhow!("Fast model not configured and primary model not configured")
+                    })?,
                 }
             }
             _ => model_id.to_string(),
@@ -93,19 +91,37 @@ impl AIClientFactory {
     }
 
     pub fn invalidate_cache(&self) {
-        let mut cache = self.client_cache.write().unwrap();
+        let mut cache = match self.client_cache.write() {
+            Ok(cache) => cache,
+            Err(poisoned) => {
+                warn!("AI client cache write lock poisoned during invalidate_cache, recovering");
+                poisoned.into_inner()
+            }
+        };
         let count = cache.len();
         cache.clear();
         info!("AI client cache cleared (removed {} clients)", count);
     }
 
     pub fn get_cache_size(&self) -> usize {
-        let cache = self.client_cache.read().unwrap();
+        let cache = match self.client_cache.read() {
+            Ok(cache) => cache,
+            Err(poisoned) => {
+                warn!("AI client cache read lock poisoned during get_cache_size, recovering");
+                poisoned.into_inner()
+            }
+        };
         cache.len()
     }
 
     pub fn invalidate_model(&self, model_id: &str) {
-        let mut cache = self.client_cache.write().unwrap();
+        let mut cache = match self.client_cache.write() {
+            Ok(cache) => cache,
+            Err(poisoned) => {
+                warn!("AI client cache write lock poisoned during invalidate_model, recovering");
+                poisoned.into_inner()
+            }
+        };
         if cache.remove(model_id).is_some() {
             debug!("Client cache cleared for model: {}", model_id);
         }
@@ -113,7 +129,15 @@ impl AIClientFactory {
 
     async fn get_or_create_client(&self, model_id: &str) -> Result<Arc<AIClient>> {
         {
-            let cache = self.client_cache.read().unwrap();
+            let cache = match self.client_cache.read() {
+                Ok(cache) => cache,
+                Err(poisoned) => {
+                    warn!(
+                        "AI client cache read lock poisoned during get_or_create_client, recovering"
+                    );
+                    poisoned.into_inner()
+                }
+            };
             if let Some(client) = cache.get(model_id) {
                 return Ok(client.clone());
             }
@@ -142,14 +166,21 @@ impl AIClientFactory {
         let client = Arc::new(AIClient::new_with_proxy(ai_config, proxy_config));
 
         {
-            let mut cache = self.client_cache.write().unwrap();
+            let mut cache = match self.client_cache.write() {
+                Ok(cache) => cache,
+                Err(poisoned) => {
+                    warn!(
+                        "AI client cache write lock poisoned during get_or_create_client, recovering"
+                    );
+                    poisoned.into_inner()
+                }
+            };
             cache.insert(model_id.to_string(), client.clone());
         }
 
         debug!(
             "AI client created: model_id={}, name={}",
-            model_id,
-            model_config.name
+            model_id, model_config.name
         );
 
         Ok(client)

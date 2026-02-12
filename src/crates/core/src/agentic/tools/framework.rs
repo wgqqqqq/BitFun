@@ -201,18 +201,18 @@ pub trait Tool: Send + Sync {
     ) -> BitFunResult<Vec<ToolResult>>;
 
     async fn call(&self, input: &Value, context: &ToolUseContext) -> BitFunResult<Vec<ToolResult>> {
-        if context.cancellation_token.is_none() {
-            return self.call_impl(input, context).await;
-        }
-        let cancellation_token = context.cancellation_token.as_ref().unwrap();
-        tokio::select! {
-            result = self.call_impl(input, context) => {
-                result
-            }
+        if let Some(cancellation_token) = context.cancellation_token.as_ref() {
+            tokio::select! {
+                result = self.call_impl(input, context) => {
+                    result
+                }
 
-            _ = cancellation_token.cancelled() => {
-                Err(crate::util::errors::BitFunError::Cancelled("Tool execution cancelled".to_string()))
+                _ = cancellation_token.cancelled() => {
+                    Err(crate::util::errors::BitFunError::Cancelled("Tool execution cancelled".to_string()))
+                }
             }
+        } else {
+            self.call_impl(input, context).await
         }
     }
 }

@@ -15,7 +15,7 @@ use log::{debug, warn};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::process::ChildStdin;
 use tokio::sync::{mpsc, oneshot, RwLock};
 
@@ -151,14 +151,18 @@ impl MCPConnection {
                 }
             }
             TransportType::Remote(transport) => {
+                let request_id = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_err(|e| {
+                        BitFunError::MCPError(format!(
+                            "Failed to build request id for method {}: {}",
+                            method, e
+                        ))
+                    })?
+                    .as_millis() as u64;
                 let request = MCPRequest {
                     jsonrpc: "2.0".to_string(),
-                    id: Value::Number(serde_json::Number::from(
-                        std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
-                            .as_millis() as u64,
-                    )),
+                    id: Value::Number(serde_json::Number::from(request_id)),
                     method: method.clone(),
                     params,
                 };

@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 struct PromptTokensDetails {
-    cached_tokens: u32,
+    cached_tokens: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -20,13 +20,9 @@ impl From<OpenAIUsage> for UnifiedTokenUsage {
             prompt_token_count: usage.prompt_tokens,
             candidates_token_count: usage.completion_tokens,
             total_token_count: usage.total_tokens,
-            cached_content_token_count: if let Some(prompt_tokens_details) =
-                usage.prompt_tokens_details
-            {
-                Some(prompt_tokens_details.cached_tokens)
-            } else {
-                None
-            },
+            cached_content_token_count: usage
+                .prompt_tokens_details
+                .and_then(|prompt_tokens_details| prompt_tokens_details.cached_tokens),
         }
     }
 }
@@ -91,24 +87,260 @@ pub struct OpenAISSEData {
     usage: Option<OpenAIUsage>,
 }
 
+impl OpenAISSEData {
+    pub fn is_choices_empty(&self) -> bool {
+        self.choices.is_empty()
+    }
+
+    pub fn first_choice_tool_call_count(&self) -> usize {
+        self.choices
+            .first()
+            .and_then(|choice| choice.delta.tool_calls.as_ref())
+            .map(|tool_calls| tool_calls.len())
+            .unwrap_or(0)
+    }
+
+    pub fn into_unified_responses(self) -> Vec<UnifiedResponse> {
+        let mut usage = self.usage.map(|usage| usage.into());
+
+        let Some(first_choice) = self.choices.into_iter().next() else {
+            // OpenAI can emit `choices: []` for the final usage chunk.
+            return usage
+                .map(|usage_data| {
+                    vec![UnifiedResponse {
+                        usage: Some(usage_data),
+                        ..Default::default()
+                    }]
+                })
+                .unwrap_or_default();
+        };
+
+        let Choice {
+            delta,
+            finish_reason,
+            ..
+        } = first_choice;
+        let mut finish_reason = finish_reason;
+        let Delta {
+            reasoning_content,
+            content,
+            tool_calls,
+            ..
+        } = delta;
+
+        let mut responses = Vec::new();
+
+        if content.is_some() || reasoning_content.is_some() {
+            responses.push(UnifiedResponse {
+                text: content,
+                reasoning_content,
+                thinking_signature: None,
+                tool_call: None,
+                usage: usage.take(),
+                finish_reason: finish_reason.take(),
+            });
+        }
+
+        if let Some(tool_calls) = tool_calls {
+            for tool_call in tool_calls {
+                let is_first_event = responses.is_empty();
+                responses.push(UnifiedResponse {
+                    text: None,
+                    reasoning_content: None,
+                    thinking_signature: None,
+                    tool_call: Some(UnifiedToolCall::from(tool_call)),
+                    usage: if is_first_event { usage.take() } else { None },
+                    finish_reason: if is_first_event {
+                        finish_reason.take()
+                    } else {
+                        None
+                    },
+                });
+            }
+        }
+
+        if responses.is_empty() {
+            responses.push(UnifiedResponse {
+                text: None,
+                reasoning_content: None,
+                thinking_signature: None,
+                tool_call: None,
+                usage,
+                finish_reason,
+            });
+        }
+
+        responses
+    }
+}
+
 impl From<OpenAISSEData> for UnifiedResponse {
     fn from(data: OpenAISSEData) -> Self {
-        let choices0 = data.choices.get(0).unwrap();
-        let text = choices0.delta.content.clone();
-        let reasoning_content = choices0.delta.reasoning_content.clone();
-        let finish_reason = choices0.finish_reason.clone();
-        let tool_call = choices0.delta.tool_calls.as_ref().and_then(|tool_calls| {
-            tool_calls
-                .get(0)
-                .map(|tool_call| UnifiedToolCall::from(tool_call.clone()))
-        });
-        Self {
-            text,
-            reasoning_content,
-            thinking_signature: None,
-            tool_call,
-            usage: data.usage.map(|usage| usage.into()),
-            finish_reason,
-        }
+        data.into_unified_responses()
+            .into_iter()
+            .next()
+            .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::OpenAISSEData;
+
+    #[test]
+    fn splits_multiple_tool_calls_in_first_choice() {
+        let raw = r#"{
+            "id": "chatcmpl_test",
+            "created": 123,
+            "model": "gpt-test",
+            "choices": [{
+                "index": 0,
+                "delta": {
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "tool_a",
+                                "arguments": "{\"a\":1}"
+                            }
+                        },
+                        {
+                            "index": 1,
+                            "id": "call_2",
+                            "type": "function",
+                            "function": {
+                                "name": "tool_b",
+                                "arguments": "{\"b\":2}"
+                            }
+                        }
+                    ]
+                },
+                "finish_reason": "tool_calls"
+            }],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+                "prompt_tokens_details": {
+                    "cached_tokens": 3
+                }
+            }
+        }"#;
+
+        let sse_data: OpenAISSEData = serde_json::from_str(raw).expect("valid openai sse data");
+        let responses = sse_data.into_unified_responses();
+
+        assert_eq!(responses.len(), 2);
+        assert_eq!(
+            responses[0]
+                .tool_call
+                .as_ref()
+                .and_then(|tool| tool.id.as_deref()),
+            Some("call_1")
+        );
+        assert_eq!(
+            responses[1]
+                .tool_call
+                .as_ref()
+                .and_then(|tool| tool.id.as_deref()),
+            Some("call_2")
+        );
+        assert_eq!(responses[0].finish_reason.as_deref(), Some("tool_calls"));
+        assert!(responses[1].finish_reason.is_none());
+        assert!(responses[0].usage.is_some());
+        assert!(responses[1].usage.is_none());
+    }
+
+    #[test]
+    fn handles_empty_choices_with_usage_chunk() {
+        let raw = r#"{
+            "id": "chatcmpl_test",
+            "created": 123,
+            "model": "gpt-test",
+            "choices": [],
+            "usage": {
+                "prompt_tokens": 7,
+                "completion_tokens": 3,
+                "total_tokens": 10
+            }
+        }"#;
+
+        let sse_data: OpenAISSEData = serde_json::from_str(raw).expect("valid openai sse data");
+        let responses = sse_data.into_unified_responses();
+
+        assert_eq!(responses.len(), 1);
+        assert!(responses[0].usage.is_some());
+        assert!(responses[0].text.is_none());
+        assert!(responses[0].tool_call.is_none());
+    }
+
+    #[test]
+    fn handles_empty_choices_without_usage_chunk() {
+        let raw = r#"{
+            "id": "chatcmpl_test",
+            "created": 123,
+            "model": "gpt-test",
+            "choices": [],
+            "usage": null
+        }"#;
+
+        let sse_data: OpenAISSEData = serde_json::from_str(raw).expect("valid openai sse data");
+        let responses = sse_data.into_unified_responses();
+
+        assert!(responses.is_empty());
+    }
+
+    #[test]
+    fn preserves_text_when_tool_calls_exist_in_same_chunk() {
+        let raw = r#"{
+            "id": "chatcmpl_test",
+            "created": 123,
+            "model": "gpt-test",
+            "choices": [{
+                "index": 0,
+                "delta": {
+                    "content": "hello",
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "tool_a",
+                                "arguments": "{\"a\":1}"
+                            }
+                        }
+                    ]
+                },
+                "finish_reason": "tool_calls"
+            }],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15
+            }
+        }"#;
+
+        let sse_data: OpenAISSEData = serde_json::from_str(raw).expect("valid openai sse data");
+        let responses = sse_data.into_unified_responses();
+
+        assert_eq!(responses.len(), 2);
+        assert_eq!(responses[0].text.as_deref(), Some("hello"));
+        assert!(responses[0].tool_call.is_none());
+        assert!(responses[0].usage.is_some());
+        assert_eq!(responses[0].finish_reason.as_deref(), Some("tool_calls"));
+
+        assert!(responses[1].text.is_none());
+        assert_eq!(
+            responses[1]
+                .tool_call
+                .as_ref()
+                .and_then(|tool| tool.id.as_deref()),
+            Some("call_1")
+        );
+        assert!(responses[1].usage.is_none());
+        assert!(responses[1].finish_reason.is_none());
     }
 }

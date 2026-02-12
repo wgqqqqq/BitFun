@@ -245,11 +245,15 @@ impl TerminalApi {
     /// If the singleton is already initialized, it will use the existing instance.
     pub async fn new(config: TerminalConfig) -> Self {
         let session_manager = if is_session_manager_initialized() {
-            get_session_manager().expect("SessionManager should be initialized")
+            match get_session_manager() {
+                Some(manager) => manager,
+                None => panic!("SessionManager should be initialized"),
+            }
         } else {
-            init_session_manager(config)
-                .await
-                .expect("Failed to initialize SessionManager")
+            match init_session_manager(config).await {
+                Ok(manager) => manager,
+                Err(_) => panic!("Failed to initialize SessionManager"),
+            }
         };
 
         Self { session_manager }

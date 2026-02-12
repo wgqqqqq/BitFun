@@ -148,6 +148,26 @@ pub struct AgentRegistry {
 }
 
 impl AgentRegistry {
+    fn read_agents(&self) -> std::sync::RwLockReadGuard<'_, HashMap<String, AgentEntry>> {
+        match self.agents.read() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                warn!("Agent registry read lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        }
+    }
+
+    fn write_agents(&self) -> std::sync::RwLockWriteGuard<'_, HashMap<String, AgentEntry>> {
+        match self.agents.write() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                warn!("Agent registry write lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        }
+    }
+
     /// Create a new agent registry with built-in agents
     pub fn new() -> Self {
         let mut agents = HashMap::new();
@@ -220,7 +240,7 @@ impl AgentRegistry {
         custom_config: Option<CustomSubagentConfig>,
     ) {
         let id = agent.id().to_string();
-        let mut map = self.agents.write().expect("agents lock");
+        let mut map = self.write_agents();
         if map.contains_key(&id) {
             error!("Agent {} already registered, skip registration", id);
             return;
@@ -238,57 +258,37 @@ impl AgentRegistry {
 
     /// Get a agent by ID (searches all categories including hidden)
     pub fn get_agent(&self, agent_type: &str) -> Option<Arc<dyn Agent>> {
-        self.agents
-            .read()
-            .expect("agents lock")
-            .get(agent_type)
-            .map(|e| e.agent.clone())
+        self.read_agents().get(agent_type).map(|e| e.agent.clone())
     }
 
     /// Check if an agent exists
     pub fn check_agent_exists(&self, agent_type: &str) -> bool {
-        self.agents
-            .read()
-            .expect("agents lock")
-            .contains_key(agent_type)
+        self.read_agents().contains_key(agent_type)
     }
 
     /// Get a mode by ID
     pub fn get_mode_agent(&self, agent_type: &str) -> Option<Arc<dyn Agent>> {
-        self.agents
-            .read()
-            .expect("agents lock")
-            .get(agent_type)
-            .and_then(|e| {
-                if e.category == AgentCategory::Mode {
-                    Some(e.agent.clone())
-                } else {
-                    None
-                }
-            })
+        self.read_agents().get(agent_type).and_then(|e| {
+            if e.category == AgentCategory::Mode {
+                Some(e.agent.clone())
+            } else {
+                None
+            }
+        })
     }
 
     /// check if a subagent exists with specified source (used for duplicate check before adding)
     pub fn has_subagent(&self, agent_id: &str, source: SubAgentSource) -> bool {
-        self.agents
-            .read()
-            .expect("agents lock")
-            .get(agent_id)
-            .map_or(false, |e| {
-                e.category == AgentCategory::SubAgent && e.subagent_source == Some(source)
-            })
+        self.read_agents().get(agent_id).map_or(false, |e| {
+            e.category == AgentCategory::SubAgent && e.subagent_source == Some(source)
+        })
     }
 
     /// get agent tools from config
     /// if not set, return default tools
     /// tool configuration synchronization is implemented through tool_config_sync, here only read configuration
     pub async fn get_agent_tools(&self, agent_type: &str) -> Vec<String> {
-        let entry = self
-            .agents
-            .read()
-            .expect("agents lock")
-            .get(agent_type)
-            .cloned();
+        let entry = self.read_agents().get(agent_type).cloned();
         let Some(entry) = entry else {
             return Vec::new();
         };
@@ -307,7 +307,7 @@ impl AgentRegistry {
     /// get all mode agent information (including enabled status, used for frontend mode selector etc.)
     pub async fn get_modes_info(&self) -> Vec<AgentInfo> {
         let mode_configs = get_mode_configs().await;
-        let map = self.agents.read().expect("agents lock");
+        let map = self.read_agents();
         let mut result: Vec<AgentInfo> = map
             .values()
             .filter(|e| e.category == AgentCategory::Mode)
@@ -342,7 +342,7 @@ impl AgentRegistry {
 
     /// check if a subagent is readonly (used for TaskTool.is_concurrency_safe etc.)
     pub fn get_subagent_is_readonly(&self, id: &str) -> Option<bool> {
-        let map = self.agents.read().expect("agents lock");
+        let map = self.read_agents();
         let entry = map.get(id)?;
         if entry.category != AgentCategory::SubAgent {
             return None;
@@ -355,7 +355,7 @@ impl AgentRegistry {
     /// - custom subagent: read enabled and model configuration from custom_config cache
     pub async fn get_subagents_info(&self) -> Vec<AgentInfo> {
         let subagent_configs = get_subagent_configs().await;
-        let map = self.agents.read().expect("agents lock");
+        let map = self.read_agents();
         let result: Vec<AgentInfo> = map
             .values()
             .filter(|e| e.category == AgentCategory::SubAgent)
@@ -385,7 +385,7 @@ impl AgentRegistry {
         let valid_models = Self::get_valid_model_ids().await;
 
         let custom = CustomSubagentLoader::load_custom_subagents(workspace_root);
-        let mut map = self.agents.write().expect("agents lock");
+        let mut map = self.write_agents();
         // remove all non-built-in subagents
         map.retain(|_, e| {
             !(e.category == AgentCategory::SubAgent
@@ -476,7 +476,7 @@ impl AgentRegistry {
 
     /// clear all custom subagents (project/user source), only keep built-in subagents. called when closing workspace.
     pub fn clear_custom_subagents(&self) {
-        let mut map = self.agents.write().expect("agents lock");
+        let mut map = self.write_agents();
         let before = map
             .values()
             .filter(|e| e.category == AgentCategory::SubAgent)
@@ -498,7 +498,7 @@ impl AgentRegistry {
     /// get custom subagent configuration (used for updating configuration)
     /// only custom subagent is valid, return clone of CustomSubagentConfig
     pub fn get_custom_subagent_config(&self, agent_id: &str) -> Option<CustomSubagentConfig> {
-        let map = self.agents.read().expect("agents lock");
+        let map = self.read_agents();
         let entry = map.get(agent_id)?;
         if entry.category != AgentCategory::SubAgent {
             return None;
@@ -514,7 +514,7 @@ impl AgentRegistry {
         enabled: Option<bool>,
         model: Option<String>,
     ) -> BitFunResult<()> {
-        let mut map = self.agents.write().expect("agents lock");
+        let mut map = self.write_agents();
         let entry = map
             .get_mut(agent_id)
             .ok_or_else(|| BitFunError::agent(format!("Subagent not found: {}", agent_id)))?;
@@ -559,7 +559,7 @@ impl AgentRegistry {
     /// remove single non-built-in subagent, return its file path (used for caller to delete file)
     /// only allow removing entries that are SubAgent and not Builtin
     pub fn remove_subagent(&self, agent_id: &str) -> BitFunResult<Option<String>> {
-        let mut map = self.agents.write().expect("agents lock");
+        let mut map = self.write_agents();
         let entry = map
             .get(agent_id)
             .ok_or_else(|| BitFunError::agent(format!("Subagent not found: {}", agent_id)))?;

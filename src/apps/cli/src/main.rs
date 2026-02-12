@@ -12,7 +12,7 @@ mod modes;
 mod agent;
 
 use clap::{Parser, Subcommand};
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use config::CliConfig;
 use modes::chat::ChatMode;
@@ -160,7 +160,15 @@ async fn main() -> Result<()> {
         {
             tracing_subscriber::fmt()
                 .with_max_level(log_level)
-                .with_writer(move || file.try_clone().unwrap())
+                .with_writer(move || -> Box<dyn std::io::Write + Send> {
+                    match file.try_clone() {
+                        Ok(cloned) => Box::new(cloned),
+                        Err(e) => {
+                            eprintln!("Warning: Failed to clone log file handle: {}", e);
+                            Box::new(std::io::sink())
+                        }
+                    }
+                })
                 .with_ansi(false)
                 .with_target(false)
                 .init();
@@ -227,7 +235,7 @@ async fn main() -> Result<()> {
             
             bitfun_core::service::config::initialize_global_config()
                 .await
-                .expect("Failed to initialize global config service");
+                .context("Failed to initialize global config service")?;
             tracing::info!("Global config service initialized");
 
             let config_service = bitfun_core::service::config::get_global_config_service()
@@ -249,12 +257,12 @@ async fn main() -> Result<()> {
             use bitfun_core::infrastructure::ai::AIClientFactory;
             AIClientFactory::initialize_global()
                 .await
-                .expect("Failed to initialize global AIClientFactory");
+                .context("Failed to initialize global AIClientFactory")?;
             tracing::info!("Global AI client factory initialized");
             
             let agentic_system = agent::agentic_system::init_agentic_system()
                 .await
-                .expect("Failed to initialize agentic system");
+                .context("Failed to initialize agentic system")?;
             tracing::info!("Agentic system initialized");
             
             if let Some(ref mut term) = startup_terminal {
@@ -296,7 +304,7 @@ async fn main() -> Result<()> {
             
             bitfun_core::service::config::initialize_global_config()
                 .await
-                .expect("Failed to initialize global config service");
+                .context("Failed to initialize global config service")?;
             tracing::info!("Global config service initialized");
 
             let config_service = bitfun_core::service::config::get_global_config_service()
@@ -319,12 +327,12 @@ async fn main() -> Result<()> {
             use bitfun_core::infrastructure::ai::AIClientFactory;
             AIClientFactory::initialize_global()
                 .await
-                .expect("Failed to initialize global AIClientFactory");
+                .context("Failed to initialize global AIClientFactory")?;
             tracing::info!("Global AI client factory initialized");
             
             let agentic_system = agent::agentic_system::init_agentic_system()
                 .await
-                .expect("Failed to initialize agentic system");
+                .context("Failed to initialize agentic system")?;
             tracing::info!("Agentic system initialized");
             
             let mut exec_mode = ExecMode::new(
@@ -407,7 +415,7 @@ async fn main() -> Result<()> {
                 
                 bitfun_core::service::config::initialize_global_config()
                     .await
-                    .expect("Failed to initialize global config service");
+                    .context("Failed to initialize global config service")?;
                 tracing::info!("Global config service initialized");
 
                 let config_service = bitfun_core::service::config::get_global_config_service()
@@ -427,12 +435,12 @@ async fn main() -> Result<()> {
                 use bitfun_core::infrastructure::ai::AIClientFactory;
                 AIClientFactory::initialize_global()
                     .await
-                    .expect("Failed to initialize global AIClientFactory");
+                    .context("Failed to initialize global AIClientFactory")?;
                 tracing::info!("Global AI client factory initialized");
                 
                 let agentic_system = agent::agentic_system::init_agentic_system()
                     .await
-                    .expect("Failed to initialize agentic system");
+                    .context("Failed to initialize agentic system")?;
                 tracing::info!("Agentic system initialized");
                 
                 ui::render_loading(&mut terminal, "System initialized, starting chat interface...")?;

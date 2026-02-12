@@ -21,12 +21,14 @@ impl MessageHelper {
                 .iter_mut()
                 .for_each(|m| m.metadata.keep_thinking = true);
         } else {
-            let last_message_turn_id = messages.last().unwrap().metadata.turn_id.clone();
+            let last_message_turn_id = messages.last().and_then(|m| m.metadata.turn_id.clone());
             if let Some(last_turn_id) = last_message_turn_id {
                 messages.iter_mut().for_each(|m| {
-                    let cur_turn_id = m.metadata.turn_id.as_ref();
-                    m.metadata.keep_thinking =
-                        cur_turn_id.is_some() && *cur_turn_id.unwrap() == last_turn_id;
+                    m.metadata.keep_thinking = m
+                        .metadata
+                        .turn_id
+                        .as_ref()
+                        .is_some_and(|cur_turn_id| cur_turn_id == &last_turn_id);
                 })
             } else {
                 // Find the index of the last user message (role is user and not <system-reminder>) from back to front

@@ -206,7 +206,10 @@ mod tests {
 
         bufferer.buffer_data(1, b"hello").await;
 
-        let data = bufferer.recv().await.unwrap();
+        let data = bufferer
+            .recv()
+            .await
+            .expect("expected buffered data when buffering is disabled");
         assert_eq!(data.process_id, 1);
         assert_eq!(data.data, b"hello");
     }
@@ -228,7 +231,10 @@ mod tests {
         // Wait for flush
         tokio::time::sleep(Duration::from_millis(20)).await;
 
-        let data = bufferer.recv().await.unwrap();
+        let data = bufferer
+            .recv()
+            .await
+            .expect("expected buffered data after flush interval");
         assert_eq!(data.process_id, 1);
         assert_eq!(data.data, b"hello world");
     }
@@ -247,7 +253,10 @@ mod tests {
         // This should trigger immediate flush
         bufferer.buffer_data(1, b"0123456789AB").await;
 
-        let data = bufferer.recv().await.unwrap();
+        let data = bufferer
+            .recv()
+            .await
+            .expect("expected immediate flush when max buffer size is exceeded");
         assert_eq!(data.data.len(), 12);
     }
 }

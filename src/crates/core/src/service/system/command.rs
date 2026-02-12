@@ -54,7 +54,9 @@ pub enum SystemError {
 /// ```rust
 /// let result = check_command("git");
 /// if result.exists {
-///     println!("Git path: {}", result.path.unwrap());
+///     if let Some(path) = result.path.as_deref() {
+///         println!("Git path: {}", path);
+///     }
 /// }
 /// ```
 pub fn check_command(cmd: &str) -> CheckCommandResult {

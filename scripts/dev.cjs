@@ -132,7 +132,7 @@ async function main() {
     if (copyResult.error && copyResult.error.status !== undefined) {
       printError(`Exit code: ${copyResult.error.status}`);
     }
-    printInfo('Hint: run `pnpm install` in repo root if dependencies are missing');
+    printInfo('Hint: run `npm install` in repo root if dependencies are missing');
     process.exit(1);
   }
   
@@ -160,7 +160,7 @@ async function main() {
   
   try {
     if (mode === 'desktop') {
-      await runCommand('pnpm tauri dev', path.join(ROOT_DIR, 'src/apps/desktop'));
+      await runCommand('npm exec -- tauri dev', path.join(ROOT_DIR, 'src/apps/desktop'));
     } else {
       await runCommand('npx vite', path.join(ROOT_DIR, 'src/web-ui'));
     }

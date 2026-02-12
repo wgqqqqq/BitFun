@@ -193,15 +193,21 @@ impl AnalyzeImageTool {
                 .models
                 .iter()
                 .find(|m| {
-                    m.enabled && m.capabilities.iter().any(|cap| {
-                        matches!(cap, crate::service::config::types::ModelCapability::ImageUnderstanding)
-                    })
+                    m.enabled
+                        && m.capabilities.iter().any(|cap| {
+                            matches!(
+                                cap,
+                                crate::service::config::types::ModelCapability::ImageUnderstanding
+                            )
+                        })
                 })
-                .ok_or_else(|| BitFunError::service(
-                    "No image understanding model found.\n\
+                .ok_or_else(|| {
+                    BitFunError::service(
+                        "No image understanding model found.\n\
                      Please configure an image understanding model in settings"
-                        .to_string(),
-                ))?
+                            .to_string(),
+                    )
+                })?
                 .clone()
         };
 
@@ -252,52 +258,48 @@ impl AnalyzeImageTool {
         provider: &str,
     ) -> BitFunResult<Vec<Message>> {
         let message = match provider.to_lowercase().as_str() {
-            "openai" => {
-                Message {
-                    role: "user".to_string(),
-                    content: Some(serde_json::to_string(&json!([
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": format!("data:{};base64,{}", mime_type, base64_data)
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
+            "openai" => Message {
+                role: "user".to_string(),
+                content: Some(serde_json::to_string(&json!([
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": format!("data:{};base64,{}", mime_type, base64_data)
                         }
-                    ]))?),
-                    reasoning_content: None,
-                    thinking_signature: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                    name: None,
-                }
-            }
-            "anthropic" => {
-                Message {
-                    role: "user".to_string(),
-                    content: Some(serde_json::to_string(&json!([
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": mime_type,
-                                "data": base64_data
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+                ]))?),
+                reasoning_content: None,
+                thinking_signature: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
+            "anthropic" => Message {
+                role: "user".to_string(),
+                content: Some(serde_json::to_string(&json!([
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": mime_type,
+                            "data": base64_data
                         }
-                    ]))?),
-                    reasoning_content: None,
-                    thinking_signature: None,
-                    tool_calls: None,
-                    tool_call_id: None,
-                    name: None,
-                }
-            }
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+                ]))?),
+                reasoning_content: None,
+                thinking_signature: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
             _ => {
                 return Err(BitFunError::validation(format!(
                     "Unsupported provider: {}",
@@ -636,6 +638,19 @@ Important Notes:
             &vision_model.provider,
         )?;
 
+        let custom_request_body = vision_model
+            .custom_request_body
+            .clone()
+            .map(|body| {
+                serde_json::from_str(&body).map_err(|e| {
+                    BitFunError::parse(format!(
+                        "Failed to parse custom request body for model {}: {}",
+                        vision_model.name, e
+                    ))
+                })
+            })
+            .transpose()?;
+
         // Vision models cannot set max_tokens (e.g., glm-4v doesn't support this parameter)
         let model_config = ModelConfig {
             name: vision_model.name.clone(),
@@ -650,10 +665,7 @@ Important Notes:
             custom_headers: vision_model.custom_headers.clone(),
             custom_headers_mode: vision_model.custom_headers_mode.clone(),
             skip_ssl_verify: vision_model.skip_ssl_verify,
-            custom_request_body: vision_model
-                .custom_request_body
-                .clone()
-                .map(|body| serde_json::from_str(&body).unwrap()),
+            custom_request_body,
         };
 
         let ai_client = Arc::new(AIClient::new(model_config));

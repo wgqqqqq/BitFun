@@ -37,11 +37,12 @@ static SESSION_MANAGER: OnceCell<Arc<SessionManager>> = OnceCell::const_new();
 pub async fn init_session_manager(
     config: TerminalConfig,
 ) -> Result<Arc<SessionManager>, &'static str> {
+    let manager = Arc::new(SessionManager::new(config));
     SESSION_MANAGER
-        .set(Arc::new(SessionManager::new(config)))
+        .set(manager.clone())
         .map_err(|_| "SessionManager already initialized")?;
 
-    Ok(SESSION_MANAGER.get().unwrap().clone())
+    Ok(manager)
 }
 
 /// Get the global SessionManager singleton.
@@ -74,10 +75,10 @@ pub fn get_session_manager() -> Option<Arc<SessionManager>> {
 /// let sessions = manager.list_sessions().await;
 /// ```
 pub fn session_manager() -> Arc<SessionManager> {
-    SESSION_MANAGER
-        .get()
-        .cloned()
-        .expect("SessionManager not initialized. Call init_session_manager first.")
+    match SESSION_MANAGER.get().cloned() {
+        Some(manager) => manager,
+        None => panic!("SessionManager not initialized. Call init_session_manager first."),
+    }
 }
 
 /// Check if the SessionManager singleton has been initialized.

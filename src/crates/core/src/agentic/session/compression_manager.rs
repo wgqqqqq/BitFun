@@ -182,8 +182,10 @@ impl CompressionManager {
             // If the last turn exceeds 30% but not 40%, keep the last turn
             let token_limit_last_turn =
                 (context_window as f32 * self.config.keep_last_turn_ratio) as usize;
-            if *turns_tokens.last().unwrap() <= token_limit_last_turn {
-                turn_index_to_keep = turns_count - 1;
+            if let Some(last_turn_tokens) = turns_tokens.last() {
+                if *last_turn_tokens <= token_limit_last_turn {
+                    turn_index_to_keep = turns_count - 1;
+                }
             }
         }
         debug!("Turn index to keep: {}", turn_index_to_keep);
@@ -208,14 +210,21 @@ impl CompressionManager {
             return Ok(Vec::new());
         }
 
-        let last_turn_messages = &turns.last().unwrap().messages;
+        let Some(last_turn_messages) = turns.last().map(|turn| &turn.messages) else {
+            debug!("No turns available after split, skipping last-turn extraction");
+            return Ok(Vec::new());
+        };
         let last_user_message = {
-            let last_turn_first_message = last_turn_messages.first().unwrap().clone();
-            if last_turn_first_message.role == MessageRole::User {
-                Some(last_turn_first_message)
-            } else {
-                None
-            }
+            last_turn_messages
+                .first()
+                .cloned()
+                .and_then(|first_message| {
+                    if first_message.role == MessageRole::User {
+                        Some(first_message)
+                    } else {
+                        None
+                    }
+                })
         };
         let last_todo = MessageHelper::get_last_todo(&last_turn_messages);
         trace!("Last user message: {:?}", last_user_message);
