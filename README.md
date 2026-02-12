@@ -60,13 +60,12 @@ Other form factors are currently only specification drafts and not yet developed
 Make sure you have the following prerequisites installed:
 
 - Node.js (LTS recommended)
-- pnpm (run `corepack enable`)
 - Rust toolchain (install via [rustup](https://rustup.rs/))
 - [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for desktop development
 
 ```bash
 # Install dependencies
-pnpm install
+npm install
 
 # Run desktop app in development mode
 npm run desktop:dev

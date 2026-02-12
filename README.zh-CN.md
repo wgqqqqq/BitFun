@@ -60,13 +60,12 @@ BitFun 是一款代理式开发环境（ADE，Agentic Development Environment）
 请确保已安装以下前置依赖：
 
 - Node.js（推荐 LTS 版本）
-- pnpm（执行 `corepack enable`）
 - Rust 工具链（通过 [rustup](https://rustup.rs/) 安装）
 - [Tauri 前置依赖](https://v2.tauri.app/start/prerequisites/)（桌面端开发需要）
 
 ```bash
 # 安装依赖
-pnpm install
+npm install
 
 # 以开发模式运行桌面端
 npm run desktop:dev
