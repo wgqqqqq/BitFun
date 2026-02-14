@@ -6,6 +6,9 @@ pub mod logging;
 pub mod macos_menubar;
 pub mod theme;
 
+#[cfg(target_os = "macos")]
+// Re-export API
+pub use api::*;
 use bitfun_core::infrastructure::ai::AIClientFactory;
 use bitfun_core::infrastructure::{
     get_path_manager_arc, get_workspace_path, try_get_path_manager_arc,
@@ -17,11 +20,6 @@ use std::sync::{
 };
 use tauri::Manager;
 use tauri_plugin_log::{RotationStrategy, TimezoneStrategy};
-#[cfg(target_os = "macos")]
-use tauri::Emitter;
-
-// Re-export API
-pub use api::*;
 
 use api::ai_rules_api::*;
 use api::clipboard_file_api::*;
@@ -35,6 +33,7 @@ use api::i18n_api::*;
 use api::lsp_api::*;
 use api::lsp_workspace_api::*;
 use api::mcp_api::*;
+use api::runtime_api::*;
 use api::skill_api::*;
 use api::snapshot_service::*;
 use api::startchat_agent_api::*;
@@ -491,6 +490,7 @@ pub async fn run() {
             check_command_exists,
             check_commands_exist,
             run_system_command,
+            get_runtime_capabilities,
             i18n_get_current_language,
             i18n_set_language,
             i18n_get_supported_languages,
