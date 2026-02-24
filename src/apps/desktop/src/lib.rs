@@ -15,7 +15,6 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_log::{RotationStrategy, TimezoneStrategy};
 #[cfg(target_os = "macos")]
@@ -262,6 +261,7 @@ pub async fn run() {
             get_file_metadata,
             rename_file,
             reveal_in_explorer,
+            open_in_explorer,
             get_file_tree,
             get_directory_children,
             get_directory_children_paginated,
@@ -466,8 +466,6 @@ pub async fn run() {
             open_workspace,
             close_workspace,
             get_current_workspace,
-            get_cowork_workspace_path,
-            ensure_cowork_session_dirs,
             scan_workspace_info,
             api::prompt_template_api::get_prompt_template_config,
             api::prompt_template_api::save_prompt_template_config,
