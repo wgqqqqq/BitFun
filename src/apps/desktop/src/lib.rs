@@ -19,6 +19,8 @@ use std::sync::{
     Arc,
 };
 use tauri::Manager;
+#[cfg(target_os = "macos")]
+use tauri::Emitter;
 use tauri_plugin_log::{RotationStrategy, TimezoneStrategy};
 
 use api::ai_rules_api::*;
