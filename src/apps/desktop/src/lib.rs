@@ -75,7 +75,7 @@ pub async fn run() {
         .await
         .expect("Failed to initialize function agents");
 
-    let app_state = AppState::new_async()
+    let app_state = api::AppState::new_async()
         .await
         .expect("Failed to initialize AppState");
 
