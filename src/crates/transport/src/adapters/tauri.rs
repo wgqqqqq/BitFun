@@ -54,10 +54,11 @@ impl TransportAdapter for TauriTransportAdapter {
                     "sessionId": session_id,
                 }))?;
             }
-            AgenticEvent::DialogTurnStarted { session_id, turn_id, user_input, subagent_parent_info, .. } => {
+            AgenticEvent::DialogTurnStarted { session_id, turn_id, turn_index, user_input, subagent_parent_info } => {
                 self.app_handle.emit("agentic://dialog-turn-started", json!({
                     "sessionId": session_id,
                     "turnId": turn_id,
+                    "turnIndex": turn_index,
                     "userInput": user_input,
                     "subagentParentInfo": subagent_parent_info,
                 }))?;

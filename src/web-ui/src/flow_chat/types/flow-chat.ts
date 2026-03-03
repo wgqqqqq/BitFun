@@ -120,6 +120,7 @@ export interface DialogTurn {
   error?: string;
   tokenUsage?: TokenUsage;
   todos?: TodoItem[];
+  backendTurnIndex?: number;
 }
 
 export interface FlowChatState {

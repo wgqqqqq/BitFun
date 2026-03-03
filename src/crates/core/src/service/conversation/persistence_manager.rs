@@ -154,8 +154,6 @@ impl ConversationPersistenceManager {
             if turn.turn_index >= metadata.turn_count {
                 metadata.turn_count = turn.turn_index + 1;
             }
-            metadata.message_count += 1 + turn.model_rounds.len();
-            metadata.tool_call_count += turn.count_tool_calls();
 
             self.save_session_metadata(&metadata).await?;
         }

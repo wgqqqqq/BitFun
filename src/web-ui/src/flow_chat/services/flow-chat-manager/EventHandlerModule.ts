@@ -263,7 +263,7 @@ function cleanRemoteUserInput(raw: string): string {
 }
 
 function handleDialogTurnStarted(context: FlowChatContext, event: any): void {
-  const { sessionId, turnId, userInput, subagentParentInfo } = event;
+  const { sessionId, turnId, turnIndex, userInput, subagentParentInfo } = event;
 
   if (subagentParentInfo) {
     return;
@@ -281,7 +281,6 @@ function handleDialogTurnStarted(context: FlowChatContext, event: any): void {
   const freshSession = store.getState().sessions.get(sessionId);
   const dialogTurn = freshSession?.dialogTurns.find((turn: DialogTurn) => turn.id === turnId);
   if (!dialogTurn) {
-    // Turn was created remotely (e.g., from mobile) - create it in the store
     const newTurn: DialogTurn = {
       id: turnId,
       sessionId,
@@ -292,7 +291,8 @@ function handleDialogTurnStarted(context: FlowChatContext, event: any): void {
       },
       modelRounds: [],
       status: 'pending',
-      startTime: Date.now()
+      startTime: Date.now(),
+      backendTurnIndex: typeof turnIndex === 'number' ? turnIndex : undefined,
     };
     store.addDialogTurn(sessionId, newTurn);
 
@@ -305,6 +305,13 @@ function handleDialogTurnStarted(context: FlowChatContext, event: any): void {
       dialogTurnId: turnId,
     });
     return;
+  }
+
+  if (typeof turnIndex === 'number' && dialogTurn.backendTurnIndex === undefined) {
+    store.updateDialogTurn(sessionId, turnId, turn => ({
+      ...turn,
+      backendTurnIndex: turnIndex,
+    }));
   }
 }
 

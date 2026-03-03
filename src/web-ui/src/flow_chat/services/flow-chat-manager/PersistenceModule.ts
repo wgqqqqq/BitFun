@@ -167,7 +167,8 @@ export async function saveDialogTurnToDisk(
       return;
     }
 
-    const turnData = convertDialogTurnToBackendFormat(dialogTurn, session.dialogTurns.indexOf(dialogTurn));
+    const turnIndex = dialogTurn.backendTurnIndex ?? session.dialogTurns.indexOf(dialogTurn);
+    const turnData = convertDialogTurnToBackendFormat(dialogTurn, turnIndex);
     await conversationAPI.saveDialogTurn(turnData, workspacePath);
     
     await updateSessionMetadata(context, sessionId);
@@ -305,6 +306,9 @@ export function convertDialogTurnToBackendFormat(dialogTurn: DialogTurn, turnInd
 
 /**
  * Update session metadata (lastActiveAt, statistics, etc.)
+ * Loads existing metadata first to avoid overwriting correct historical counts
+ * when the in-memory dialogTurns only has a partial view (e.g. remote-triggered turns
+ * on a historical session whose full history hasn't been loaded yet).
  */
 export async function updateSessionMetadata(
   context: FlowChatContext,
@@ -319,13 +323,22 @@ export async function updateSessionMetadata(
     const workspacePath = session.workspacePath || await globalAPI.getCurrentWorkspacePath();
     if (!workspacePath) return;
 
-    const turnCount = session.dialogTurns.length;
-    const messageCount = session.dialogTurns.reduce((sum, turn) => {
+    let existingMetadata: any = null;
+    try {
+      existingMetadata = await conversationAPI.loadSessionMetadata(sessionId, workspacePath);
+    } catch {
+      // ignore
+    }
+
+    const isFullyLoaded = !session.isHistorical;
+
+    const inMemoryTurnCount = session.dialogTurns.length;
+    const inMemoryMessageCount = session.dialogTurns.reduce((sum, turn) => {
       return sum + 1 + turn.modelRounds.reduce((roundSum, round) => {
         return roundSum + round.items.filter(item => item.type === 'text').length;
       }, 0);
     }, 0);
-    const toolCallCount = session.dialogTurns.reduce((sum, turn) => {
+    const inMemoryToolCallCount = session.dialogTurns.reduce((sum, turn) => {
       return sum + turn.modelRounds.reduce((roundSum, round) => {
         return roundSum + round.items.filter(item => item.type === 'tool').length;
       }, 0);
@@ -333,17 +346,17 @@ export async function updateSessionMetadata(
 
     const metadata: any = {
       sessionId: session.sessionId,
-      sessionName: session.title || i18nService.t('flow-chat:session.new'),
-      agentType: session.mode || 'agentic',
-      modelName: session.config.modelName || 'default',
-      createdAt: session.createdAt,
+      sessionName: session.title || existingMetadata?.sessionName || i18nService.t('flow-chat:session.new'),
+      agentType: session.mode || existingMetadata?.agentType || 'agentic',
+      modelName: session.config.modelName || existingMetadata?.modelName || 'default',
+      createdAt: existingMetadata?.createdAt || session.createdAt,
       lastActiveAt: Date.now(),
-      turnCount,
-      messageCount,
-      toolCallCount,
+      turnCount: Math.max(inMemoryTurnCount, existingMetadata?.turnCount ?? 0),
+      messageCount: isFullyLoaded ? inMemoryMessageCount : (existingMetadata?.messageCount ?? inMemoryMessageCount),
+      toolCallCount: isFullyLoaded ? inMemoryToolCallCount : (existingMetadata?.toolCallCount ?? inMemoryToolCallCount),
       status: 'active',
-      tags: [],
-      todos: session.todos || [],
+      tags: existingMetadata?.tags || [],
+      todos: session.todos || existingMetadata?.todos || [],
     };
 
     await conversationAPI.saveSessionMetadata(metadata, workspacePath);

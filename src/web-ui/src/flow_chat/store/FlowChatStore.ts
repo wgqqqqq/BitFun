@@ -1310,6 +1310,7 @@ export class FlowChatStore {
       timestamp: turn.timestamp,
       status: turn.status,
       startTime: turn.startTime,
+      backendTurnIndex: turn.turnIndex,
     }));
   }
 
