@@ -35,8 +35,8 @@ BitFun uses a 3-tier test classification system:
 **Purpose**: Verify basic app functionality; must pass before any release.
 
 **Characteristics**:
-- Run time: 2-5 minutes
-- No AI interaction or workspace required (but may detect workspace state)
+- Run time: 1-2 minutes
+- No AI interaction or workspace required
 - Can run in CI/CD
 - Tests verify UI elements exist and are accessible
 
@@ -54,7 +54,7 @@ BitFun uses a 3-tier test classification system:
 | `l0-theme.spec.ts` | Theme attributes on root element, theme CSS variables, theme system functional |
 | `l0-i18n.spec.ts` | Language configuration, i18n system functional, translated content |
 | `l0-notification.spec.ts` | Notification service available, notification entry visible in header |
-| `l0-observe.spec.ts` | Manual observation test - keeps app window open for inspection |
+| `l0-observe.spec.ts` | Manual observation test - keeps app window open for 60 seconds for inspection |
 
 ### L1 - Functional Tests (Feature Validation)
 
@@ -70,20 +70,20 @@ BitFun uses a 3-tier test classification system:
 
 **Test Files**:
 
-| Test File | Verification | Status |
-|-----------|--------------|--------|
-| `l1-ui-navigation.spec.ts` | Header component, window controls (minimize/maximize/close), window state toggling | 11 passing |
-| `l1-workspace.spec.ts` | Workspace state detection, startup page vs workspace UI, window state management | 9 passing |
-| `l1-chat-input.spec.ts` | Chat input typing, multiline input, send button state, message clearing | 14 passing |
-| `l1-navigation.spec.ts` | Navigation panel structure, clicking nav items to switch views, active item highlighting | 9 passing |
-| `l1-file-tree.spec.ts` | File tree display, folder expand/collapse, file selection, git status indicators | 6 passing |
-| `l1-editor.spec.ts` | Monaco editor display, file content, tab bar, multi-tab switch, unsaved marker | 6 passing |
-| `l1-terminal.spec.ts` | Terminal container, xterm.js display, keyboard input, terminal output | 5 passing |
-| `l1-git-panel.spec.ts` | Git panel display, branch name, changed files list, commit input, diff viewing | 9 passing |
-| `l1-settings.spec.ts` | Settings button, panel open/close, settings tabs, configuration inputs | 9 passing |
-| `l1-session.spec.ts` | Session scene, session list in sidebar, new session button, session switching | 11 passing |
-| `l1-dialog.spec.ts` | Modal overlay, confirm dialogs, input dialogs, dialog close (ESC/backdrop) | 13 passing |
-| `l1-chat.spec.ts` | Message list display, message sending, stop button, code block rendering, streaming indicator | 14 passing, 1 failing |
+| Test File | Verification |
+|-----------|--------------|
+| `l1-ui-navigation.spec.ts` | Header component, window controls (minimize/maximize/close), window state toggling |
+| `l1-workspace.spec.ts` | Workspace state detection, startup page vs workspace UI, window state management |
+| `l1-chat-input.spec.ts` | Chat input typing, multiline input (Shift+Enter), send button state, message clearing |
+| `l1-navigation.spec.ts` | Navigation panel structure, clicking nav items to switch views, active item highlighting |
+| `l1-file-tree.spec.ts` | File tree display, folder expand/collapse, file selection, open file in editor |
+| `l1-editor.spec.ts` | Monaco editor display, file content, tab bar, multi-tab switch/close, unsaved marker |
+| `l1-terminal.spec.ts` | Terminal container, xterm.js display, keyboard input, terminal output |
+| `l1-git-panel.spec.ts` | Git panel display, branch name, changed files list, commit input, diff viewing |
+| `l1-settings.spec.ts` | Settings button, panel open/close, settings tabs, configuration inputs |
+| `l1-session.spec.ts` | Session scene, session list in sidebar, new session button, session switching |
+| `l1-dialog.spec.ts` | Modal overlay, confirm dialogs, input dialogs, dialog close (ESC/backdrop) |
+| `l1-chat.spec.ts` | Message list display, message sending, stop button, code block rendering, streaming indicator |
 
 ### L2 - Integration Tests (Full System)
 
@@ -95,13 +95,15 @@ BitFun uses a 3-tier test classification system:
 
 **When to run**: Pre-release, manual validation
 
-**Test Files**:
+**Current Status**: L2 tests are not yet implemented
 
-| Test File | Verification |
-|-----------|--------------|
-| `l2-ai-conversation.spec.ts` | Complete AI conversation flow |
-| `l2-tool-execution.spec.ts` | Tool execution (Read, Write, Bash) |
-| `l2-multi-step.spec.ts` | Multi-step user journeys |
+**Planned Test Files**:
+
+| Test File | Verification | Status |
+|-----------|--------------|--------|
+| `l2-ai-conversation.spec.ts` | Complete AI conversation flow | Not implemented |
+| `l2-tool-execution.spec.ts` | Tool execution (Read, Write, Bash) | Not implemented |
+| `l2-multi-step.spec.ts` | Multi-step user journeys | Not implemented |
 
 ## Getting Started
 
@@ -113,7 +115,7 @@ Install required dependencies:
 # Install tauri-driver
 cargo install tauri-driver --locked
 
-# Build the application
+# Build the application (from project root)
 npm run desktop:build
 
 # Install E2E test dependencies
@@ -125,8 +127,8 @@ npm install
 
 Check that the app binary exists:
 
-**Windows**: `src/apps/desktop/target/release/BitFun.exe`  
-**Linux/macOS**: `src/apps/desktop/target/release/bitfun`
+**Windows**: `target/release/bitfun-desktop.exe`
+**Linux/macOS**: `target/release/bitfun-desktop`
 
 ### 3. Run Tests
 
@@ -146,7 +148,7 @@ npm run test:l1
 npm test -- --spec ./specs/l0-smoke.spec.ts
 ```
 
-### 4. Identify Test Running Mode (Release vs Dev)
+### 4. Test Running Mode (Release vs Dev)
 
 The test framework supports two running modes:
 
@@ -165,66 +167,15 @@ The test framework supports two running modes:
 When running tests, check the first few lines of output:
 
 ```bash
-# Release Mode Output Example
+# Release Mode Output
 application: <PROJECT_ROOT>\target\release\bitfun-desktop.exe
-[0-0] Application: <PROJECT_ROOT>\target\release\bitfun-desktop.exe
-                                          ^^^^^^^^
 
-# Dev Mode Output Example
+# Dev Mode Output
 application: <PROJECT_ROOT>\target\debug\bitfun-desktop.exe
-                                        ^^^^^
-Debug build detected, checking dev server...    ← Dev mode specific
-Dev server is already running on port 1422      ← Dev mode specific
-[0-0] Application: <PROJECT_ROOT>\target\debug\bitfun-desktop.exe
+Debug build detected, checking dev server...
 ```
 
-**Quick Check Command**:
-
-```powershell
-# Check which mode will be used
-if (Test-Path "target/release/bitfun-desktop.exe") {
-    Write-Host "Will use: RELEASE MODE"
-} elseif (Test-Path "target/debug/bitfun-desktop.exe") {
-    Write-Host "Will use: DEV MODE"
-}
-```
-
-**Force Dev Mode**:
-
-Using convenient scripts (recommended):
-
-```bash
-# Switch to Dev mode
-cd tests/e2e
-./switch-to-dev.ps1
-
-# Run tests
-npm run test:l0:all
-
-# Switch back to Release mode
-./switch-to-release.ps1
-```
-
-Or manual operation:
-
-```bash
-# 1. Start dev server (optional but recommended)
-npm run dev
-
-# 2. Rename release build
-cd target/release
-ren bitfun-desktop.exe bitfun-desktop.exe.bak
-
-# 3. Run tests (will automatically use debug build)
-cd ../../tests/e2e
-npm run test:l0
-
-# 4. Restore release build
-cd ../../target/release
-ren bitfun-desktop.exe.bak bitfun-desktop.exe
-```
-
-**Core Principle**: The test framework prioritizes `target/release/bitfun-desktop.exe`. If it doesn't exist, it automatically uses `target/debug/bitfun-desktop.exe`. Simply delete or rename the release build to switch to dev mode.
+**Core Principle**: The test framework prioritizes `target/release/bitfun-desktop.exe`. If it doesn't exist, it automatically uses `target/debug/bitfun-desktop.exe`.
 
 ## Test Structure
 
@@ -232,31 +183,47 @@ ren bitfun-desktop.exe.bak bitfun-desktop.exe
 tests/e2e/
 ├── specs/                          # Test specifications
 │   ├── l0-smoke.spec.ts           # L0: Basic smoke tests
-│   ├── l0-open-workspace.spec.ts  # L0: Workspace opening
+│   ├── l0-open-workspace.spec.ts  # L0: Workspace detection
 │   ├── l0-open-settings.spec.ts   # L0: Settings interaction
-│   ├── l1-chat-input.spec.ts      # L1: Chat input validation
-│   ├── l1-file-tree.spec.ts       # L1: File tree operations
+│   ├── l0-navigation.spec.ts      # L0: Navigation sidebar
+│   ├── l0-tabs.spec.ts            # L0: Tab bar
+│   ├── l0-theme.spec.ts           # L0: Theme system
+│   ├── l0-i18n.spec.ts            # L0: Internationalization
+│   ├── l0-notification.spec.ts    # L0: Notification system
+│   ├── l0-observe.spec.ts         # L0: Manual observation
+│   ├── l1-ui-navigation.spec.ts   # L1: Window controls
 │   ├── l1-workspace.spec.ts       # L1: Workspace management
-│   ├── startup/                    # Startup-related tests
-│   │   └── app-launch.spec.ts
-│   └── chat/                       # Chat-related tests
-│       └── basic-chat.spec.ts
+│   ├── l1-chat-input.spec.ts      # L1: Chat input
+│   ├── l1-navigation.spec.ts      # L1: Navigation panel
+│   ├── l1-file-tree.spec.ts       # L1: File tree operations
+│   ├── l1-editor.spec.ts          # L1: Editor functionality
+│   ├── l1-terminal.spec.ts        # L1: Terminal
+│   ├── l1-git-panel.spec.ts       # L1: Git panel
+│   ├── l1-settings.spec.ts        # L1: Settings panel
+│   ├── l1-session.spec.ts         # L1: Session management
+│   ├── l1-dialog.spec.ts          # L1: Dialog components
+│   └── l1-chat.spec.ts            # L1: Chat functionality
 ├── page-objects/                   # Page Object Model
 │   ├── BasePage.ts                # Base class with common methods
 │   ├── ChatPage.ts                # Chat view page object
 │   ├── StartupPage.ts             # Startup screen page object
+│   ├── index.ts                   # Page object exports
 │   └── components/                 # Reusable components
-│       ├── Header.ts
-│       ├── ChatInput.ts
-│       └── MessageList.ts
+│       ├── Header.ts              # Header component
+│       └── ChatInput.ts           # Chat input component
 ├── helpers/                        # Utility functions
+│   ├── index.ts                   # Helper exports
 │   ├── screenshot-utils.ts        # Screenshot capture
 │   ├── tauri-utils.ts             # Tauri-specific helpers
-│   └── wait-utils.ts              # Wait and retry logic
+│   ├── wait-utils.ts              # Wait and retry logic
+│   ├── workspace-helper.ts        # Workspace operations
+│   └── workspace-utils.ts         # Workspace utilities
 ├── fixtures/                       # Test data
 │   └── test-data.json
 └── config/                         # Configuration
-    ├── wdio.conf.ts               # WebDriverIO config
+    ├── wdio.conf.ts               # WebDriverIO base config
+    ├── wdio.conf_l0.ts            # L0 test configuration
+    ├── wdio.conf_l1.ts            # L1 test configuration
     └── capabilities.ts            # Platform capabilities
 ```
 
@@ -277,7 +244,7 @@ Examples:
 
 ### 2. Use Page Objects
 
-**Bad** ❌:
+**Bad**:
 ```typescript
 it('should send message', async () => {
   const input = await $('[data-testid="chat-input-textarea"]');
@@ -287,7 +254,7 @@ it('should send message', async () => {
 });
 ```
 
-**Good** ✅:
+**Good**:
 ```typescript
 import { ChatPage } from '../page-objects/ChatPage';
 
@@ -306,7 +273,6 @@ it('should send message', async () => {
 
 import { browser, expect } from '@wdio/globals';
 import { SomePage } from '../page-objects/SomePage';
-import { saveScreenshot, saveFailureScreenshot } from '../helpers/screenshot-utils';
 
 describe('Feature Name', () => {
   const page = new SomePage();
@@ -332,15 +298,11 @@ describe('Feature Name', () => {
   });
 
   afterEach(async function () {
-    // Capture screenshot on failure
-    if (this.currentTest?.state === 'failed') {
-      await saveFailureScreenshot(this.currentTest.title);
-    }
+    // Capture screenshot on failure (handled by config)
   });
 
   after(async () => {
     // Cleanup
-    await saveScreenshot('feature-complete');
   });
 });
 ```
@@ -397,28 +359,21 @@ await waitForElementStable('[data-testid="message-list"]', 500, 10000);
 
 // Wait for streaming to complete
 await waitForStreamingComplete('[data-testid="model-response"]', 2000, 30000);
-
-// Use retry for flaky operations
-await page.withRetry(async () => {
-  await page.clickSend();
-  expect(await page.getMessageCount()).toBeGreaterThan(0);
-});
 ```
 
 ## Best Practices
 
-### Do's ✅
+### Do's
 
 1. **Keep tests focused** - One test, one assertion concept
 2. **Use meaningful test names** - Describe the expected behavior
 3. **Test user behavior** - Not implementation details
 4. **Handle async properly** - Always await async operations
 5. **Clean up after tests** - Reset state when needed
-6. **Add screenshots on failure** - Use afterEach hook
-7. **Log progress** - Use console.log for debugging
-8. **Use environment settings** - Centralize timeouts and retries
+6. **Log progress** - Use console.log for debugging
+7. **Use environment settings** - Centralize timeouts and retries
 
-### Don'ts ❌
+### Don'ts
 
 1. **Don't use hard-coded waits** - Use `waitForElement` instead of `pause`
 2. **Don't share state between tests** - Each test should be independent
@@ -427,22 +382,6 @@ await page.withRetry(async () => {
 5. **Don't use complex selectors** - Prefer data-testid
 6. **Don't test third-party code** - Only test BitFun functionality
 7. **Don't mix test levels** - Keep L0/L1/L2 separate
-
-### Error Handling
-
-```typescript
-it('should handle errors gracefully', async () => {
-  try {
-    await page.performRiskyAction();
-  } catch (error) {
-    // Capture context
-    await saveFailureScreenshot('error-context');
-    const pageSource = await browser.getPageSource();
-    console.error('Page state:', pageSource.substring(0, 500));
-    throw error; // Re-throw to fail the test
-  }
-});
-```
 
 ### Conditional Tests
 
@@ -483,15 +422,18 @@ echo %PATH% # Windows
 
 #### 2. App not built
 
-**Symptom**: `Binary not found at target/release/BitFun.exe`
+**Symptom**: `Application not found at target/release/bitfun-desktop.exe`
 
 **Solution**:
 ```bash
-# Build the app
+# Build the app (from project root)
 npm run desktop:build
 
 # Verify binary exists
-ls src/apps/desktop/target/release/
+# Windows
+dir target\release\bitfun-desktop.exe
+# Linux/macOS
+ls -la target/release/bitfun-desktop
 ```
 
 #### 3. Test timeouts
@@ -507,10 +449,6 @@ ls src/apps/desktop/target/release/
 ```typescript
 // Increase timeout for specific operation
 await page.waitForElement(selector, 30000);
-
-// Use environment settings
-import { environmentSettings } from '../config/capabilities';
-await page.waitForElement(selector, environmentSettings.pageLoadTimeout);
 
 // Add strategic waits
 await browser.pause(1000); // After clicking
@@ -531,7 +469,7 @@ const html = await browser.getPageSource();
 console.log('Page HTML:', html.substring(0, 1000));
 
 // 3. Take screenshot
-await page.takeScreenshot('debug-element-not-found');
+await browser.saveScreenshot('./reports/screenshots/debug.png');
 
 // 4. Verify data-testid in frontend code
 // Check src/web-ui/src/... for the component
@@ -551,12 +489,6 @@ await page.takeScreenshot('debug-element-not-found');
 // Use waitForElement instead of pause
 await page.waitForElement(selector);
 
-// Add retry logic
-await page.withRetry(async () => {
-  await page.clickButton();
-  expect(await page.isActionComplete()).toBe(true);
-});
-
 // Ensure test independence
 beforeEach(async () => {
   await page.resetState();
@@ -570,38 +502,24 @@ Run tests with debugging enabled:
 ```bash
 # Enable WebDriverIO debug logs
 npm test -- --spec ./specs/l0-smoke.spec.ts --log-level=debug
-
-# Keep browser open on failure
-# (Modify wdio.conf.ts: bail: 1)
 ```
 
 ### Screenshot Analysis
 
-Screenshots are saved to `tests/e2e/reports/screenshots/`:
-
-```typescript
-// Manual screenshot
-await page.takeScreenshot('my-debug-point');
-
-// Auto-capture on failure (add to test)
-afterEach(async function () {
-  if (this.currentTest?.state === 'failed') {
-    await saveFailureScreenshot(this.currentTest.title);
-  }
-});
-```
+Screenshots are automatically saved to `tests/e2e/reports/screenshots/` on test failure.
 
 ## Adding New Tests
 
 ### Step-by-Step Guide
 
 1. **Identify the test level** (L0/L1/L2)
-2. **Create test file** in appropriate directory
+2. **Create test file** in `specs/` directory
 3. **Add data-testid to UI elements** (if needed)
-4. **Create or update Page Objects**
+4. **Create or update Page Objects** in `page-objects/`
 5. **Write test following template**
-6. **Run test locally**
-7. **Add to CI/CD pipeline** (for L0/L1)
+6. **Run test locally** to verify
+7. **Add npm script** to `package.json` (optional)
+8. **Update config** to include new spec file
 
 ### Example: Adding L1 File Tree Test
 
@@ -628,10 +546,7 @@ afterEach(async function () {
    });
    ```
 5. Run: `npm test -- --spec ./specs/l1-file-tree.spec.ts`
-6. Update `package.json`:
-   ```json
-   "test:l1:filetree": "wdio run ./config/wdio.conf.ts --spec ./specs/l1-file-tree.spec.ts"
-   ```
+6. Update `config/wdio.conf_l1.ts` to include the new spec
 
 ## CI/CD Integration
 
@@ -645,18 +560,26 @@ on: [push, pull_request]
 
 jobs:
   l0-tests:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Build app
-        run: npm run desktop:build
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
       - name: Install tauri-driver
         run: cargo install tauri-driver --locked
+      - name: Build app
+        run: npm run desktop:build
+      - name: Install test dependencies
+        run: cd tests/e2e && npm install
       - name: Run L0 tests
         run: cd tests/e2e && npm run test:l0:all
         
   l1-tests:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     needs: l0-tests
     if: github.event_name == 'pull_request'
     steps:
@@ -670,66 +593,29 @@ jobs:
 ### Test Execution Matrix
 
 | Event | L0 | L1 | L2 |
-|-------|----|----|---- |
-| Every commit | ✅ | ❌ | ❌ |
-| Pull request | ✅ | ✅ | ❌ |
-| Nightly build | ✅ | ✅ | ✅ |
-| Pre-release | ✅ | ✅ | ✅ |
+|-------|----|----|-----|
+| Every commit | Yes | No | No |
+| Pull request | Yes | Yes | No |
+| Nightly build | Yes | Yes | Yes |
+| Pre-release | Yes | Yes | Yes |
 
-## Test Execution Results
+## Available npm Scripts
 
-### Latest Test Results (2026-03-03)
-
-**L0 Tests (Smoke Tests)**:
-- Passed: 8/8 (100%)
-- Run time: ~1.5 minutes
-- Status: All passing ✅
-
-**L1 Tests (Functional Tests)**:
-- Test Files: 11 passed, 1 failed, 12 total
-- Test Cases: 116 passing, 1 failing
-- Run time: ~3.5 minutes
-- Pass Rate: 99.1%
-
-**L1 Detailed Results by Test File**:
-
-| Test File | Passing | Failing | Notes |
-|-----------|---------|---------|-------|
-| l1-ui-navigation.spec.ts | 11 | 0 | Header, window controls working ✅ |
-| l1-workspace.spec.ts | 9 | 0 | Workspace state detection working ✅ |
-| l1-chat-input.spec.ts | 14 | 0 | All input interactions passing ✅ |
-| l1-navigation.spec.ts | 9 | 0 | All navigation tests passing ✅ |
-| l1-file-tree.spec.ts | 6 | 0 | File tree tests passing ✅ |
-| l1-editor.spec.ts | 6 | 0 | Editor tests passing ✅ |
-| l1-terminal.spec.ts | 5 | 0 | Terminal tests passing ✅ |
-| l1-git-panel.spec.ts | 9 | 0 | Git panel fully working ✅ |
-| l1-settings.spec.ts | 9 | 0 | All settings tests passing ✅ |
-| l1-session.spec.ts | 11 | 0 | Session management fully working ✅ |
-| l1-dialog.spec.ts | 13 | 0 | All dialog tests passing ✅ |
-| l1-chat.spec.ts | 14 | 1 | Chat display mostly working ⚠️ |
-
-**Fixed Issues** (2026-03-03 fixes):
-1. ✅ l1-chat-input: Multiline input handling - Using Shift+Enter for newlines
-2. ✅ l1-chat-input: Send button state detection - Enhanced state detection logic
-3. ✅ l1-navigation: Element interactability - Added scroll and retry logic
-4. ✅ l1-file-tree: File tree visibility - Enhanced selectors and view switching
-5. ✅ l1-settings: Settings button finding - Expanded selector coverage
-6. ✅ l1-session: Mode attribute validation - Fixed test logic to allow null
-7. ✅ l1-ui-navigation: Focus management - Added focus acquisition retry logic
-
-**Remaining Issues**:
-1. ⚠️ l1-chat: Input clearing timing after message send (edge case related to AI response processing)
-
-**L2 Tests (Integration Tests)**:
-- Status: Not yet implemented (0%)
-- Test Files: None
-
-**Improvements**:
-
-1. **L0 tests 100% passing**: Application startup and basic UI structure verified ✅
-2. **L1 tests 99.1% pass rate**: Improved from 91.7% (98/107) to 99.1% (116/117)
-3. **Fixed 7 core issues**: Input handling, navigation interaction, element detection
-4. **Test stability significantly improved**: Reduced 17 skipped tests, all tests now execute properly
+| Script | Description |
+|--------|-------------|
+| `npm run test` | Run all tests with default config |
+| `npm run test:l0` | Run L0 smoke test only |
+| `npm run test:l0:all` | Run all L0 tests |
+| `npm run test:l1` | Run all L1 tests |
+| `npm run test:l0:workspace` | Run workspace test |
+| `npm run test:l0:settings` | Run settings test |
+| `npm run test:l0:navigation` | Run navigation test |
+| `npm run test:l0:tabs` | Run tabs test |
+| `npm run test:l0:theme` | Run theme test |
+| `npm run test:l0:i18n` | Run i18n test |
+| `npm run test:l0:notification` | Run notification test |
+| `npm run test:l0:observe` | Run observation test (60s) |
+| `npm run clean` | Clean reports directory |
 
 ## Resources
 
