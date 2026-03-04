@@ -16,6 +16,7 @@ pub mod project_context; // Project context management
 pub mod runtime; // Managed runtime and capability management
 pub mod snapshot; // Snapshot-based change tracking
 pub mod system; // System command detection and execution
+pub mod remote_connect; // Remote Connect (phone → desktop)
 pub mod workspace; // Workspace management // Diff calculation and merge service
 
 // Terminal is a standalone crate; re-export it here.

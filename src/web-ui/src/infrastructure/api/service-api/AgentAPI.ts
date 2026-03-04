@@ -229,6 +229,14 @@ export class AgentAPI {
   
 
    
+  onSessionCreated(callback: (event: AgenticEvent) => void): () => void {
+    return api.listen<AgenticEvent>('agentic://session-created', callback);
+  }
+
+  onSessionDeleted(callback: (event: AgenticEvent) => void): () => void {
+    return api.listen<AgenticEvent>('agentic://session-deleted', callback);
+  }
+
   onSessionStateChanged(callback: (event: AgenticEvent) => void): () => void {
     return api.listen<AgenticEvent>('agentic://session-state-changed', callback);
   }

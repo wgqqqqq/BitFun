@@ -152,6 +152,7 @@ pub async fn create_session(
             max_turns: c.max_turns.unwrap_or(200),
             enable_context_compression: c.enable_context_compression.unwrap_or(true),
             compression_threshold: c.compression_threshold.unwrap_or(0.8),
+            workspace_path: None,
         })
         .unwrap_or_default();
 
@@ -184,6 +185,7 @@ pub async fn start_dialog_turn(
             request.user_input,
             request.turn_id,
             request.agent_type,
+            false,
         )
         .await
         .map_err(|e| format!("Failed to start dialog turn: {}", e))?;

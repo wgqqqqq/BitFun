@@ -27,6 +27,9 @@ pub enum AgenticEvent {
         session_id: String,
         session_name: String,
         agent_type: String,
+        /// Workspace path this session belongs to. None for locally-created sessions.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        workspace_path: Option<String>,
     },
 
     SessionStateChanged {

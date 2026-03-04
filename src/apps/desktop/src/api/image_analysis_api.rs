@@ -111,6 +111,7 @@ pub async fn send_enhanced_message(
             enhanced_message.clone(),
             Some(request.dialog_turn_id.clone()),
             request.agent_type.clone(),
+            false,
         )
         .await
         .map_err(|e| format!("Failed to send enhanced message: {}", e))?;

@@ -4,6 +4,8 @@ import { Tooltip } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 import { useSceneManager } from '../../../hooks/useSceneManager';
 import { useToolbarModeContext } from '@/flow_chat/components/toolbar-mode/ToolbarModeContext';
+import { useCurrentWorkspace } from '@/infrastructure/contexts/WorkspaceContext';
+import { useNotification } from '@/shared/notification-system';
 import NotificationButton from '../../TitleBar/NotificationButton';
 import { AboutDialog } from '../../AboutDialog';
 import { RemoteConnectDialog } from '../../RemoteConnectDialog';
@@ -12,6 +14,8 @@ const PersistentFooterActions: React.FC = () => {
   const { t } = useI18n('common');
   const { openScene } = useSceneManager();
   const { enableToolbarMode } = useToolbarModeContext();
+  const { hasWorkspace } = useCurrentWorkspace();
+  const { warning } = useNotification();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuClosing, setMenuClosing] = useState(false);
@@ -50,6 +54,10 @@ const PersistentFooterActions: React.FC = () => {
   };
 
   const handleRemoteConnect = () => {
+    if (!hasWorkspace) {
+      warning(t('header.remoteConnectRequiresWorkspace'));
+      return;
+    }
     closeMenu();
     setShowRemoteConnect(true);
   };
@@ -79,15 +87,22 @@ const PersistentFooterActions: React.FC = () => {
               className={`bitfun-nav-panel__footer-menu${menuClosing ? ' is-closing' : ''}`}
               role="menu"
             >
-              <button
-                type="button"
-                className="bitfun-nav-panel__footer-menu-item"
-                role="menuitem"
-                onClick={handleRemoteConnect}
+              <Tooltip
+                content={t('header.remoteConnectRequiresWorkspace')}
+                placement="right"
+                disabled={hasWorkspace}
               >
-                <Wifi size={14} />
-                <span>{t('header.remoteConnect')}</span>
-              </button>
+                <button
+                  type="button"
+                  className={`bitfun-nav-panel__footer-menu-item${!hasWorkspace ? ' is-disabled' : ''}`}
+                  role="menuitem"
+                  aria-disabled={!hasWorkspace}
+                  onClick={handleRemoteConnect}
+                >
+                  <Wifi size={14} />
+                  <span>{t('header.remoteConnect')}</span>
+                </button>
+              </Tooltip>
               <div className="bitfun-nav-panel__footer-menu-divider" />
               <button
                 type="button"

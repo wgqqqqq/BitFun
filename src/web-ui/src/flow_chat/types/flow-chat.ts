@@ -120,6 +120,7 @@ export interface DialogTurn {
   error?: string;
   tokenUsage?: TokenUsage;
   todos?: TodoItem[];
+  backendTurnIndex?: number;
 }
 
 export interface FlowChatState {
@@ -163,6 +164,10 @@ export interface Session {
   
   // Session mode is synced to the input when switching sessions.
   mode?: string;
+
+  // Workspace this session belongs to. Used for sidebar display filtering.
+  // Sessions are always kept in store for event processing; only display is filtered.
+  workspacePath?: string;
 }
 
 export interface SessionConfig {

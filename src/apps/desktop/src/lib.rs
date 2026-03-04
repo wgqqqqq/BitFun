@@ -155,6 +155,42 @@ pub async fn run() {
         .setup(move |app| {
             logging::register_runtime_log_state(startup_log_level, session_log_dir.clone());
 
+            // Register bundled mobile-web resource path for remote connect.
+            // tauri.conf.json maps "../../mobile-web/dist" -> "mobile-web/dist",
+            // so the primary candidate is "mobile-web/dist". Additional fallbacks
+            // handle legacy or non-standard bundle layouts.
+            {
+                let candidates = [
+                    "mobile-web/dist",
+                    "mobile-web",
+                    "dist",
+                ];
+                let mut found = false;
+                for candidate in &candidates {
+                    if let Ok(p) = app.path().resolve(candidate, tauri::path::BaseDirectory::Resource) {
+                        if p.join("index.html").exists() {
+                            log::info!("Found bundled mobile-web at: {}", p.display());
+                            api::remote_connect_api::set_mobile_web_resource_path(p);
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if !found {
+                    // Last resort: scan the resource root for any index.html
+                    if let Ok(res_dir) = app.path().resource_dir() {
+                        for sub in &["mobile-web/dist", "mobile-web", "dist", ""] {
+                            let p = if sub.is_empty() { res_dir.clone() } else { res_dir.join(sub) };
+                            if p.join("index.html").exists() {
+                                log::info!("Found mobile-web via resource root scan: {}", p.display());
+                                api::remote_connect_api::set_mobile_web_resource_path(p);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
             let app_handle = app.handle().clone();
             theme::create_main_window(&app_handle);
 
@@ -190,6 +226,10 @@ pub async fn run() {
 
             start_event_loop_with_transport(event_queue, event_router, transport);
 
+            // Eagerly initialize the remote connect service so previously
+            // paired bots start listening immediately on app startup.
+            api::remote_connect_api::init_on_startup();
+
             {
                 let _terminal_state: tauri::State<'_, api::terminal_api::TerminalState> =
                     app.state();
@@ -224,6 +264,7 @@ pub async fn run() {
                         {
                             log::info!("Main window close requested, cleaning up");
                             bitfun_core::util::process_manager::cleanup_all_processes();
+                            api::remote_connect_api::cleanup_on_exit();
 
                             window.app_handle().exit(0);
                         } else {
@@ -514,6 +555,15 @@ pub async fn run() {
             i18n_get_supported_languages,
             i18n_get_config,
             i18n_set_config,
+            // Remote Connect
+            api::remote_connect_api::remote_connect_get_device_info,
+            api::remote_connect_api::remote_connect_get_methods,
+            api::remote_connect_api::remote_connect_start,
+            api::remote_connect_api::remote_connect_stop,
+            api::remote_connect_api::remote_connect_stop_bot,
+            api::remote_connect_api::remote_connect_status,
+            api::remote_connect_api::remote_connect_configure_custom_server,
+            api::remote_connect_api::remote_connect_configure_bot,
         ])
         .run(tauri::generate_context!());
     if let Err(e) = run_result {

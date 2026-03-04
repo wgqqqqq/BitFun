@@ -61,6 +61,7 @@ impl AppState {
         };
 
         let workspace_service = Arc::new(workspace::WorkspaceService::new().await?);
+        workspace::set_global_workspace_service(workspace_service.clone());
         let filesystem_service = Arc::new(filesystem::FileSystemServiceFactory::create_default());
 
         ai_rules::initialize_global_ai_rules_service()

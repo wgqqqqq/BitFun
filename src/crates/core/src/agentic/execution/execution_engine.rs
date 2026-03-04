@@ -440,6 +440,10 @@ impl ExecutionEngine {
             }
 
             // Create round context
+            let mut round_context_vars = context.context.clone();
+            if context.skip_tool_confirmation {
+                round_context_vars.insert("skip_tool_confirmation".to_string(), "true".to_string());
+            }
             let round_context = RoundContext {
                 session_id: context.session_id.clone(),
                 subagent_parent_info: context.subagent_parent_info.clone(),
@@ -454,7 +458,7 @@ impl ExecutionEngine {
                     .cloned()
                     .unwrap_or_else(|| "default".to_string()),
                 agent_type: agent_type.clone(),
-                context_vars: context.context.clone(),
+                context_vars: round_context_vars,
                 cancellation_token: CancellationToken::new(),
             };
 

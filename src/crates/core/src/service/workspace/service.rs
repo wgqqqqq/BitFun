@@ -759,3 +759,19 @@ struct WorkspacePersistenceData {
     pub recent_workspaces: Vec<String>,
     pub saved_at: chrono::DateTime<chrono::Utc>,
 }
+
+// ── Global workspace service singleton ──────────────────────────────
+
+static GLOBAL_WORKSPACE_SERVICE: std::sync::OnceLock<Arc<WorkspaceService>> =
+    std::sync::OnceLock::new();
+
+pub fn set_global_workspace_service(service: Arc<WorkspaceService>) {
+    match GLOBAL_WORKSPACE_SERVICE.set(service) {
+        Ok(_) => info!("Global workspace service set"),
+        Err(_) => info!("Global workspace service already exists, skipping set"),
+    }
+}
+
+pub fn get_global_workspace_service() -> Option<Arc<WorkspaceService>> {
+    GLOBAL_WORKSPACE_SERVICE.get().cloned()
+}

@@ -85,6 +85,7 @@ impl Agent for CoreAgentAdapter {
             message.clone(),
             None,
             self.agent_type.clone(),
+            false,
         ).await?;
         
         let mut accumulated_text = String::new();

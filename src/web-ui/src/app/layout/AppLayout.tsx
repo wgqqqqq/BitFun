@@ -372,16 +372,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
             isMaximized={isMaximized}
             isEntering={transitionDir === 'entering'}
             isExiting={transitionDir === 'returning'}
+            sceneOverlay={!isWelcomeScene && !state.layout.chatCollapsed && isAgentScene ? (
+              <ChatInput onSendMessage={(_message: string) => {}} />
+            ) : undefined}
           />
         </main>
 
-        {/* Agent scene: centered ChatInput (only when workspace is open and not on welcome page) */}
-        {hasWorkspace && !isWelcomeScene && !state.layout.chatCollapsed && isAgentScene && (
-          <ChatInput onSendMessage={(_message: string) => {}} />
-        )}
-
         {/* Non-agent scenes: floating mini chat button */}
-        {hasWorkspace && !isWelcomeScene && !isAgentScene && <FloatingMiniChat />}
+        {!isWelcomeScene && !isAgentScene && <FloatingMiniChat />}
       </div>
 
       {/* Dialogs (previously owned by TitleBar) */}

@@ -82,9 +82,7 @@ impl ConversationCoordinator {
         agent_type: String,
         config: SessionConfig,
     ) -> BitFunResult<Session> {
-        self.session_manager
-            .create_session(session_name, agent_type, config)
-            .await
+        self.create_session_with_workspace(None, session_name, agent_type, config, None).await
     }
 
     /// Create a new session with optional session ID
@@ -95,8 +93,49 @@ impl ConversationCoordinator {
         agent_type: String,
         config: SessionConfig,
     ) -> BitFunResult<Session> {
-        self.session_manager
+        self.create_session_with_workspace(session_id, session_name, agent_type, config, None).await
+    }
+
+    /// Create a new session with optional session ID and workspace binding.
+    /// `workspace_path` is forwarded in the `SessionCreated` event and also stored
+    /// in the session's in-memory config so it can be retrieved without disk access.
+    pub async fn create_session_with_workspace(
+        &self,
+        session_id: Option<String>,
+        session_name: String,
+        agent_type: String,
+        mut config: SessionConfig,
+        workspace_path: Option<String>,
+    ) -> BitFunResult<Session> {
+        // Persist the workspace binding inside the session config so that SendMessage
+        // can retrieve it from memory (no slow disk search needed).
+        config.workspace_path = workspace_path.clone();
+        let session = self
+            .session_manager
             .create_session_with_id(session_id, session_name, agent_type, config)
+            .await?;
+        self.emit_event(AgenticEvent::SessionCreated {
+            session_id: session.session_id.clone(),
+            session_name: session.session_name.clone(),
+            agent_type: session.agent_type.clone(),
+            workspace_path,
+        })
+        .await;
+        Ok(session)
+    }
+
+    /// Create a subagent session for internal AI execution.
+    /// Unlike `create_session`, this does NOT emit `SessionCreated` to the transport layer,
+    /// because subagent sessions are internal implementation details of the execution engine
+    /// and must never appear as top-level items in the UI.
+    async fn create_subagent_session(
+        &self,
+        session_name: String,
+        agent_type: String,
+        config: SessionConfig,
+    ) -> BitFunResult<Session> {
+        self.session_manager
+            .create_session_with_id(None, session_name, agent_type, config)
             .await
     }
 
@@ -124,12 +163,14 @@ impl ConversationCoordinator {
 
     /// Start a new dialog turn
     /// Note: Events are sent to frontend via EventLoop, no Stream returned
+    /// skip_tool_confirmation: when true, all tool executions auto-approve (used by remote mobile messages)
     pub async fn start_dialog_turn(
         &self,
         session_id: String,
         user_input: String,
         turn_id: Option<String>,
         agent_type: String,
+        skip_tool_confirmation: bool,
     ) -> BitFunResult<()> {
         // Get latest session (re-fetch each time to ensure latest state)
         let session = self
@@ -290,6 +331,7 @@ impl ConversationCoordinator {
             agent_type: session.agent_type.clone(),
             context: context_vars,
             subagent_parent_info: None,
+            skip_tool_confirmation,
         };
 
         // Start async execution task
@@ -482,6 +524,16 @@ impl ConversationCoordinator {
         self.session_manager.get_messages(session_id).await
     }
 
+    /// Get session messages paginated
+    pub async fn get_messages_paginated(
+        &self,
+        session_id: &str,
+        limit: usize,
+        before_message_id: Option<&str>,
+    ) -> BitFunResult<(Vec<Message>, bool)> {
+        self.session_manager.get_messages_paginated(session_id, limit, before_message_id).await
+    }
+
     /// Subscribe to internal events
     ///
     /// For internal systems to subscribe to events (e.g., logging, monitoring)
@@ -548,9 +600,12 @@ impl ConversationCoordinator {
             }
         }
 
-        // Create independent subagent session
+        // Create independent subagent session.
+        // Use create_subagent_session (not create_session) so that no SessionCreated
+        // event is emitted to the transport layer — subagent sessions are internal
+        // implementation details and must not appear in the UI session list.
         let session = self
-            .create_session(
+            .create_subagent_session(
                 format!("Subagent: {}", task_description),
                 agent_type.clone(),
                 Default::default(),
@@ -604,6 +659,7 @@ impl ConversationCoordinator {
             agent_type: agent_type.clone(),
             context: context.unwrap_or_default(),
             subagent_parent_info: Some(subagent_parent_info),
+            skip_tool_confirmation: false,
         };
 
         let initial_messages = vec![Message::user(task_description)];

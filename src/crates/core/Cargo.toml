@@ -60,6 +60,7 @@ portable-pty = { workspace = true }
 # Command detection (cross-platform)
 which = { workspace = true }
 similar = { workspace = true }
+urlencoding = { workspace = true }
 
 grep-searcher = { workspace = true }
 grep-regex = { workspace = true }
@@ -90,6 +91,24 @@ terminal-core = { path = "src/service/terminal" }
 # I18n internationalization
 fluent-bundle = { workspace = true }
 unic-langid = { workspace = true }
+
+# Encryption (Remote Connect E2E)
+x25519-dalek = { workspace = true }
+aes-gcm = { workspace = true }
+sha2 = { workspace = true }
+rand = { workspace = true }
+
+# Device/Network info (Remote Connect)
+mac_address = { workspace = true }
+local-ip-address = { workspace = true }
+hostname = { workspace = true }
+
+# QR code generation
+qrcode = { workspace = true }
+image = { workspace = true }
+
+# WebSocket client
+tokio-tungstenite = { workspace = true }
 
 # Event layer dependency (lowest layer)
 bitfun-events = { path = "../events" }

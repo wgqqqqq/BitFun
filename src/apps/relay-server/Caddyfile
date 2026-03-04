@@ -1,0 +1,24 @@
+# Caddyfile for BitFun Relay Server
+# Replace YOUR_DOMAIN with your actual domain, or use :443 with self-signed cert.
+#
+# Option A: With a domain (Let's Encrypt auto-HTTPS)
+#   relay.yourdomain.com {
+#       reverse_proxy relay-server:9700
+#   }
+#
+# Option A2: With a /relay path prefix
+#   relay.yourdomain.com {
+#       handle_path /relay/* {
+#           reverse_proxy relay-server:9700
+#       }
+#   }
+#
+# Option B: IP-only with self-signed cert
+:443 {
+    tls internal
+    reverse_proxy relay-server:9700
+}
+
+:80 {
+    reverse_proxy relay-server:9700
+}

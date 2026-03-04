@@ -602,6 +602,22 @@ $_section-header-height: 24px;
     outline: 2px solid var(--color-accent-500);
     outline-offset: -1px;
   }
+
+  &.is-disabled,
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: auto;
+
+    &:hover {
+      color: var(--color-text-secondary);
+      background: transparent;
+
+      svg {
+        opacity: 0.7;
+      }
+    }
+  }
 }
 
 // ──────────────────────────────────────────────

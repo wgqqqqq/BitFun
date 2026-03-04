@@ -359,8 +359,12 @@ impl RoundExecutor {
                         (None, None, false) // Default: no timeout, requires confirmation
                     };
 
-                // If config skips confirmation, directly return false
-                let needs_confirm = if skip_confirmation {
+                let skip_from_context = context.context_vars
+                    .get("skip_tool_confirmation")
+                    .map(|v| v == "true")
+                    .unwrap_or(false);
+
+                let needs_confirm = if skip_confirmation || skip_from_context {
                     false
                 } else {
                     // Otherwise judge based on tool's needs_permissions()

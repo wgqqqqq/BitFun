@@ -137,6 +137,46 @@ export class FlowChatStore {
     });
   }
 
+  /**
+   * Add a session created externally (e.g., from mobile remote) without switching the active session.
+   * workspacePath is stored on the session so the sidebar can filter by current workspace.
+   */
+  public addExternalSession(sessionId: string, title: string, mode: string, workspacePath?: string): void {
+    import('../state-machine').then(({ stateMachineManager }) => {
+      stateMachineManager.getOrCreate(sessionId);
+    });
+
+    this.setState(prev => {
+      if (prev.sessions.has(sessionId)) {
+        return prev;
+      }
+
+      const session: Session = {
+        sessionId,
+        title: title || i18nService.t('flow-chat:session.new'),
+        titleStatus: 'generated',
+        dialogTurns: [],
+        status: 'idle',
+        config: { maxContextTokens: 128128, autoCompact: true, enableTools: true } as any,
+        createdAt: Date.now(),
+        lastActiveAt: Date.now(),
+        error: null,
+        maxContextTokens: 128128,
+        mode: mode || 'agentic',
+        isHistorical: false,
+        workspacePath,
+      };
+
+      const newSessions = new Map(prev.sessions);
+      newSessions.set(sessionId, session);
+
+      return {
+        ...prev,
+        sessions: newSessions,
+      };
+    });
+  }
+
   public switchSession(sessionId: string): void {
     let sessionMode: string | undefined;
     
@@ -1033,10 +1073,21 @@ export class FlowChatStore {
 
   /**
    * Initialize by loading historical session list from disk (metadata only)
-   * Merges with existing sessions instead of replacing to preserve new sessions in memory
+   * Clears sessions from other workspaces, then loads sessions for the target workspace.
    */
   public async initializeFromDisk(workspacePath: string): Promise<void> {
     try {
+      this.setState(prev => {
+        const newSessions = new Map<string, Session>();
+        for (const [id, session] of prev.sessions) {
+          if (!session.workspacePath || session.workspacePath === workspacePath) {
+            newSessions.set(id, session);
+          }
+        }
+        if (newSessions.size === prev.sessions.size) return prev;
+        return { ...prev, sessions: newSessions };
+      });
+
       const { conversationAPI } = await import('@/infrastructure/api');
       const sessions = await conversationAPI.getConversationSessions(workspacePath);
       
@@ -1108,6 +1159,7 @@ export class FlowChatStore {
             todos: (metadata as any).todos || [],
             maxContextTokens,
             mode: validatedAgentType,
+            workspacePath: (metadata as any).workspacePath || workspacePath,
           };
           
           const newSessions = new Map(prev.sessions);
@@ -1258,6 +1310,7 @@ export class FlowChatStore {
       timestamp: turn.timestamp,
       status: turn.status,
       startTime: turn.startTime,
+      backendTurnIndex: turn.turnIndex,
     }));
   }
 

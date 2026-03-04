@@ -22,7 +22,7 @@ pub use manager::{
 };
 pub use provider::{WorkspaceCleanupResult, WorkspaceProvider, WorkspaceSystemSummary};
 pub use service::{
-    BatchImportResult, BatchRemoveResult, WorkspaceCreateOptions, WorkspaceExport,
-    WorkspaceHealthStatus, WorkspaceImportResult, WorkspaceInfoUpdates, WorkspaceQuickSummary,
-    WorkspaceService,
+    get_global_workspace_service, set_global_workspace_service, BatchImportResult,
+    BatchRemoveResult, WorkspaceCreateOptions, WorkspaceExport, WorkspaceHealthStatus,
+    WorkspaceImportResult, WorkspaceInfoUpdates, WorkspaceQuickSummary, WorkspaceService,
 };

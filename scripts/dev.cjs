@@ -115,9 +115,11 @@ async function main() {
   
   printHeader(`BitFun ${modeLabel} Development`);
   printBlank();
-  
+
+  const totalSteps = mode === 'desktop' ? 4 : 3;
+
   // Step 1: Copy resources
-  printStep(1, 3, 'Copy resources');
+  printStep(1, totalSteps, 'Copy resources');
   const copyResult = runSilent('npm run copy-monaco --silent');
   if (copyResult.ok) {
     printSuccess('Monaco Editor resources ready');
@@ -137,7 +139,7 @@ async function main() {
   }
   
   // Step 2: Generate version info
-  printStep(2, 3, 'Generate version info');
+  printStep(2, totalSteps, 'Generate version info');
   const versionResult = runInherit('node scripts/generate-version.cjs');
   if (!versionResult.ok) {
     printError('Generate version info failed');
@@ -152,8 +154,30 @@ async function main() {
   
   const prepTime = ((Date.now() - startTime) / 1000).toFixed(1);
   
-  // Step 3: Start dev server
-  printStep(3, 3, 'Start dev server');
+  // Step 3: Build mobile-web (desktop only)
+  if (mode === 'desktop') {
+    printStep(3, 4, 'Build mobile-web');
+    const mobileWebDir = path.join(ROOT_DIR, 'src/mobile-web');
+    const mobileWebResult = runSilent('npm install --silent', mobileWebDir);
+    if (!mobileWebResult.ok) {
+      printError('mobile-web npm install failed');
+      const output = tailOutput(mobileWebResult.stderr || mobileWebResult.stdout);
+      if (output) printError(output);
+      process.exit(1);
+    }
+    const buildResult = runInherit('npm run build', mobileWebDir);
+    if (!buildResult.ok) {
+      printError('mobile-web build failed');
+      if (buildResult.error && buildResult.error.message) {
+        printError(buildResult.error.message);
+      }
+      process.exit(1);
+    }
+    printSuccess('mobile-web build complete');
+  }
+
+  // Final step: Start dev server
+  printStep(totalSteps, totalSteps, 'Start dev server');
   printInfo(`Prep took ${prepTime}s`);
   
   printComplete('Initialization complete');

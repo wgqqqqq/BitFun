@@ -16,6 +16,7 @@ import {
 } from '../EventBatcher';
 import { notificationService } from '../../../shared/notification-system';
 import { createLogger } from '@/shared/utils/logger';
+import { globalAPI } from '@/infrastructure/api';
 import type { FlowChatContext, DialogTurn, ModelRound, FlowToolItem } from './types';
 import { 
   debouncedSaveDialogTurn, 
@@ -138,6 +139,12 @@ export async function initializeEventListeners(
   });
 
   const callbacks: AgenticEventCallbacks = {
+    onSessionCreated: (event) => {
+      handleSessionCreated(context, event);
+    },
+    onSessionDeleted: (event) => {
+      handleSessionDeleted(event);
+    },
     onSessionStateChanged: (event) => {
       handleSessionStateChanged(event);
     },
@@ -180,6 +187,33 @@ export async function initializeEventListeners(
 }
 
 /**
+ * Handle session created event (e.g. remote mobile created a session)
+ */
+function handleSessionCreated(context: FlowChatContext, event: any): void {
+  const { sessionId, sessionName, agentType, workspacePath } = event;
+
+  const store = FlowChatStore.getInstance();
+  const existing = store.getState().sessions.get(sessionId);
+  if (existing) return;
+
+  store.addExternalSession(sessionId, sessionName || 'Remote Session', agentType || 'agentic', workspacePath);
+}
+
+/**
+ * Handle session deleted event (backend already deleted; only remove from store)
+ */
+function handleSessionDeleted(event: any): void {
+  const { sessionId } = event;
+  
+  const store = FlowChatStore.getInstance();
+  const existing = store.getState().sessions.get(sessionId);
+  if (!existing) return;
+
+  log.info('Remote session deleted', { sessionId });
+  store.clearSession(sessionId);
+}
+
+/**
  * Handle backend session state sync event
  */
 function handleSessionStateChanged(event: any): void {
@@ -210,8 +244,27 @@ function handleSessionStateChanged(event: any): void {
 /**
  * Handle dialog turn started event
  */
+/**
+ * Strip agent-internal XML wrapper tags from user input before displaying.
+ * Handles: <user_query>...</user_query> and trailing <system_reminder>...</system_reminder>
+ */
+function cleanRemoteUserInput(raw: string): string {
+  let s = raw.trim();
+  if (s.startsWith('<user_query>')) {
+    const endIdx = s.indexOf('</user_query>');
+    if (endIdx !== -1) {
+      s = s.slice('<user_query>'.length, endIdx).trim();
+    }
+  }
+  const reminderIdx = s.indexOf('<system_reminder>');
+  if (reminderIdx !== -1) {
+    s = s.slice(0, reminderIdx).trim();
+  }
+  return s;
+}
+
 function handleDialogTurnStarted(context: FlowChatContext, event: any): void {
-  const { sessionId, turnId, subagentParentInfo } = event;
+  const { sessionId, turnId, turnIndex, userInput, subagentParentInfo } = event;
 
   if (subagentParentInfo) {
     return;
@@ -220,16 +273,57 @@ function handleDialogTurnStarted(context: FlowChatContext, event: any): void {
   const store = FlowChatStore.getInstance();
   const state = store.getState();
   const session = state.sessions.get(sessionId);
-  
+
   if (!session) {
-    log.debug('Session not found', { sessionId, sessionsCount: state.sessions.size });
+    log.warn('DialogTurnStarted: session not in store, creating placeholder', { sessionId, sessionsCount: state.sessions.size });
+    store.addExternalSession(sessionId, 'Remote Session', 'agentic');
+    globalAPI.getCurrentWorkspacePath().then(workspacePath => {
+      if (workspacePath) {
+        store.setState(prev => {
+          const s = prev.sessions.get(sessionId);
+          if (!s || s.workspacePath) return prev;
+          const newSessions = new Map(prev.sessions);
+          newSessions.set(sessionId, { ...s, workspacePath });
+          return { ...prev, sessions: newSessions };
+        });
+      }
+    }).catch(() => { /* ignore */ });
+  }
+
+  const freshSession = store.getState().sessions.get(sessionId);
+  const dialogTurn = freshSession?.dialogTurns.find((turn: DialogTurn) => turn.id === turnId);
+  if (!dialogTurn) {
+    const newTurn: DialogTurn = {
+      id: turnId,
+      sessionId,
+      userMessage: {
+        id: `user_remote_${Date.now()}`,
+        content: cleanRemoteUserInput(userInput || ''),
+        timestamp: Date.now()
+      },
+      modelRounds: [],
+      status: 'pending',
+      startTime: Date.now(),
+      backendTurnIndex: typeof turnIndex === 'number' ? turnIndex : undefined,
+    };
+    store.addDialogTurn(sessionId, newTurn);
+
+    context.contentBuffers.set(sessionId, new Map());
+    context.activeTextItems.set(sessionId, new Map());
+
+    // Transition state machine to PROCESSING so subsequent events are not filtered
+    stateMachineManager.transition(sessionId, SessionExecutionEvent.START, {
+      taskId: sessionId,
+      dialogTurnId: turnId,
+    });
     return;
   }
 
-  const dialogTurn = session.dialogTurns.find((turn: DialogTurn) => turn.id === turnId);
-  if (!dialogTurn) {
-    log.debug('Backend turnId does not match frontend', { turnId, sessionId });
-    return;
+  if (typeof turnIndex === 'number' && dialogTurn.backendTurnIndex === undefined) {
+    store.updateDialogTurn(sessionId, turnId, turn => ({
+      ...turn,
+      backendTurnIndex: turnIndex,
+    }));
   }
 }
 

@@ -21,7 +21,7 @@ export type InputAction =
 export const initialInputState: InputState = {
   value: '',
   isExpanded: false,
-  isActive: false,
+  isActive: true,
 };
 
 export function inputReducer(state: InputState, action: InputAction): InputState {

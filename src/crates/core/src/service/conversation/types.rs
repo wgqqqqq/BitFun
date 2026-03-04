@@ -68,6 +68,10 @@ pub struct SessionMetadata {
     /// Todo list (for persisting the session's todo state)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub todos: Option<serde_json::Value>,
+
+    /// Workspace path this session belongs to (set at creation time)
+    #[serde(skip_serializing_if = "Option::is_none", alias = "workspace_path")]
+    pub workspace_path: Option<String>,
 }
 
 /// Session status
@@ -349,6 +353,7 @@ impl SessionMetadata {
             tags: Vec::new(),
             custom_metadata: None,
             todos: None,
+            workspace_path: None,
         }
     }
 

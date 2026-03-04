@@ -41,18 +41,6 @@ const WelcomeScene: React.FC = () => {
     [recentWorkspaces, currentWorkspace?.id],
   );
 
-  const handleNewCodeSession = useCallback(async () => {
-    try {
-      if (hasWorkspace) {
-        const flowChatManager = FlowChatManager.getInstance();
-        await flowChatManager.createChatSession({});
-      }
-    } catch (e) {
-      log.error('Failed to create code session', e);
-    }
-    openScene('session' as SceneTabId);
-  }, [hasWorkspace, openScene]);
-
   const handleOpenFolder = useCallback(async (preferredMode?: string) => {
     try {
       setIsSelecting(true);
@@ -75,6 +63,20 @@ const WelcomeScene: React.FC = () => {
       setIsSelecting(false);
     }
   }, [openWorkspace, openScene, t]);
+
+  const handleNewCodeSession = useCallback(async () => {
+    try {
+      if (hasWorkspace) {
+        const flowChatManager = FlowChatManager.getInstance();
+        await flowChatManager.createChatSession({});
+        openScene('session' as SceneTabId);
+        return;
+      }
+      await handleOpenFolder();
+    } catch (e) {
+      log.error('Failed to create code session', e);
+    }
+  }, [hasWorkspace, openScene, handleOpenFolder]);
 
   const handleNewCoworkSession = useCallback(async () => {
     try {
@@ -223,8 +225,16 @@ const WelcomeScene: React.FC = () => {
 
         <div className="welcome-scene__divider" />
 
-        {/* Cowork session — available even without a workspace */}
-        <div className="welcome-scene__sessions welcome-scene__sessions--single">
+        {/* Session actions */}
+        <div className="welcome-scene__sessions">
+          <button className="welcome-scene__session-btn" onClick={handleNewCodeSession}>
+            <MessageSquare size={16} />
+            <div className="welcome-scene__session-btn-text">
+              <span className="welcome-scene__session-btn-label">{t('welcomeScene.newCodeSession')}</span>
+              <span className="welcome-scene__session-btn-desc">{t('welcomeScene.newCodeSessionDesc')}</span>
+            </div>
+          </button>
+
           <button className="welcome-scene__session-btn" onClick={handleNewCoworkSession}>
             <Users size={16} />
             <div className="welcome-scene__session-btn-text">

@@ -59,14 +59,16 @@ pub async fn get_conversation_sessions(
 ) -> Result<Vec<SessionMetadata>, String> {
     let workspace_path = PathBuf::from(&request.workspace_path);
 
-    let manager = ConversationPersistenceManager::new(path_manager.inner().clone(), workspace_path)
+    let manager = ConversationPersistenceManager::new(path_manager.inner().clone(), workspace_path.clone())
         .await
         .map_err(|e| format!("Failed to create persistence manager: {}", e))?;
 
-    manager
+    let sessions = manager
         .get_session_list()
         .await
-        .map_err(|e| format!("Failed to get session list: {}", e))
+        .map_err(|e| format!("Failed to get session list: {}", e))?;
+
+    Ok(sessions)
 }
 
 #[tauri::command]

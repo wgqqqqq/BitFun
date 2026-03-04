@@ -16,6 +16,8 @@ type UnlistenFn = () => void;
 const logger = createLogger('AgenticEventListener');
 
 export interface AgenticEventCallbacks {
+  onSessionCreated?: (event: AgenticEvent) => void;
+  onSessionDeleted?: (event: AgenticEvent) => void;
   onSessionStateChanged?: (event: AgenticEvent) => void;
   onDialogTurnStarted?: (event: AgenticEvent) => void;
   onModelRoundStarted?: (event: AgenticEvent) => void;
@@ -43,6 +45,22 @@ export class AgenticEventListener {
     logger.info('Starting Agentic event listener');
 
     try {
+      if (callbacks.onSessionCreated) {
+        const unlisten = agentAPI.onSessionCreated((event) => {
+          logger.debug('Session created:', event);
+          callbacks.onSessionCreated?.(event);
+        });
+        this.unlistenFunctions.push(unlisten);
+      }
+
+      if (callbacks.onSessionDeleted) {
+        const unlisten = agentAPI.onSessionDeleted((event) => {
+          logger.debug('Session deleted:', event);
+          callbacks.onSessionDeleted?.(event);
+        });
+        this.unlistenFunctions.push(unlisten);
+      }
+
       if (callbacks.onSessionStateChanged) {
         const unlisten = agentAPI.onSessionStateChanged((event) => {
           logger.debug('Session state changed:', event);

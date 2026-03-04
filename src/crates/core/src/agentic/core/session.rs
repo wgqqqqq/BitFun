@@ -111,6 +111,10 @@ pub struct SessionConfig {
     pub enable_context_compression: bool,
     /// Compression threshold (token usage rate), compression triggered when exceeded
     pub compression_threshold: f32,
+    /// Workspace path bound to this session. Used to run AI in the correct workspace
+    /// without changing the desktop's foreground workspace.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace_path: Option<String>,
 }
 
 impl Default for SessionConfig {
@@ -123,6 +127,7 @@ impl Default for SessionConfig {
             max_turns: 200,
             enable_context_compression: true,
             compression_threshold: 0.8, // 80%
+            workspace_path: None,
         }
     }
 }

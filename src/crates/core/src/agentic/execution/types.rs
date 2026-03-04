@@ -14,6 +14,7 @@ pub struct ExecutionContext {
     pub agent_type: String,
     pub context: HashMap<String, String>,
     pub subagent_parent_info: Option<SubagentParentInfo>,
+    pub skip_tool_confirmation: bool,
 }
 
 /// Round context

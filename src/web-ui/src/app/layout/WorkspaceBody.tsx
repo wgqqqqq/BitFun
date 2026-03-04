@@ -27,6 +27,7 @@ interface WorkspaceBodyProps {
   onMaximize?: () => void;
   onClose?: () => void;
   isMaximized?: boolean;
+  sceneOverlay?: React.ReactNode;
 }
 
 const WorkspaceBody: React.FC<WorkspaceBodyProps> = ({
@@ -37,6 +38,7 @@ const WorkspaceBody: React.FC<WorkspaceBodyProps> = ({
   onMaximize,
   onClose,
   isMaximized = false,
+  sceneOverlay,
 }) => {
   const { workspace: currentWorkspace } = useCurrentWorkspace();
   const { state, toggleLeftPanel } = useApp();
@@ -109,6 +111,7 @@ const WorkspaceBody: React.FC<WorkspaceBodyProps> = ({
           workspacePath={currentWorkspace?.rootPath}
           isEntering={isEntering}
         />
+        {sceneOverlay}
       </div>
     </div>
   );
