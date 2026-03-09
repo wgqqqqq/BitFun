@@ -83,7 +83,7 @@ jobs:
           - os: windows-latest
             name: windows-x64
             target: x86_64-pc-windows-msvc
-            build_command: npm run desktop:build:nsis
+            build_command: npm run installer:build
 
     steps:
       - uses: actions/checkout@v4
@@ -106,6 +106,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Install installer dependencies
+        if: matrix.platform.name == 'windows-x64'
+        run: npm --prefix BitFun-Installer ci
 
       - name: Patch nightly version
         shell: bash
@@ -146,6 +150,7 @@ jobs:
             target/*/release/bundle
             target/release/bundle
             src/apps/desktop/target/release/bundle
+            BitFun-Installer/src-tauri/target/release/bitfun-installer.exe
 
   # ── Publish nightly pre-release ────────────────────────────────────
   publish-nightly:
@@ -191,4 +196,4 @@ jobs:
           prerelease: true
           files: |
             release-assets/**/*.dmg
-            release-assets/**/*setup.exe
+            release-assets/**/*bitfun-installer.exe
