@@ -26,6 +26,14 @@ bash deploy.sh
 
 `deploy.sh` must be run on the target server itself. It only deploys to the current machine and does not SSH to a remote host.
 
+After deployment, you can manage the service with:
+
+```bash
+bash start.sh
+bash stop.sh
+bash restart.sh
+```
+
 ### What URL should I fill in BitFun Desktop?
 
 In **Remote Connect → Self-Hosted → Server URL**, use one of:
@@ -141,6 +149,34 @@ bash deploy.sh
 
 This script must be executed in an SSH session on the target server. It builds the Docker image on that server and starts the container there. It will **automatically stop any previously running relay container** before restarting.
 
+### Service Operations
+
+Run these commands on the target server inside `src/apps/relay-server/`:
+
+```bash
+# Start the service only when it is not already running
+bash start.sh
+
+# Stop the running service
+bash stop.sh
+
+# Restart the service, or start it if it is currently stopped
+bash restart.sh
+
+# View current status
+docker compose ps
+
+# View logs
+docker compose logs -f relay-server
+```
+
+Behavior notes:
+
+- `start.sh` is idempotent. If the relay service is already running, it exits without starting it again.
+- `stop.sh` exits cleanly when the service is already stopped.
+- `restart.sh` restarts the service when it is running, and starts it when it is stopped.
+- The container uses `restart: unless-stopped`, so it will automatically come back after a server reboot as long as the Docker service itself is enabled and running.
+
 ### Option B: Remote Deploy (from your dev machine)
 
 Push code changes from your local dev machine to a remote server via SSH:
@@ -189,6 +225,9 @@ relay-server/
 ├── docker-compose.yml      # Docker Compose config
 ├── Caddyfile               # Caddy reverse proxy config (optional)
 ├── deploy.sh               # Deploy current machine (run on the target server itself)
+├── start.sh                # Start service if not already running
+├── stop.sh                 # Stop running service
+├── restart.sh              # Restart service, or start if stopped
 ├── remote-deploy.sh        # Remote deploy (run from dev machine via SSH)
 └── README.md
 ```
