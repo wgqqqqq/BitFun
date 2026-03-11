@@ -23,7 +23,6 @@ import { NewProjectDialog } from '../components/NewProjectDialog';
 import { AboutDialog } from '../components/AboutDialog';
 import { WorkspaceManager } from '../../tools/workspace';
 import { workspaceAPI } from '@/infrastructure/api';
-import { appManager } from '../';
 import { createLogger } from '@/shared/utils/logger';
 import { useI18n } from '@/infrastructure/i18n';
 import './AppLayout.scss';
@@ -48,10 +47,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
   const isAgentScene = activeSceneId === 'session';
   const isWelcomeScene = activeSceneId === 'welcome';
 
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const [isSweepGlowing, setIsSweepGlowing] = useState(false);
-  const [showStartupOverlay, setShowStartupOverlay] = useState(false);
-  const [transitionDir, setTransitionDir] = useState<TransitionDirection>(null);
+  const isTransitioning = false;
+  const transitionDir: TransitionDirection = null;
 
   // Auto-open last workspace on startup
   const autoOpenAttemptedRef = useRef(false);
@@ -120,43 +117,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
     })();
     return () => { unlistenFns.forEach(fn => fn()); unlistenFns = []; };
   }, [isMacOS, openWorkspace, handleNewProject, handleShowAbout]);
-
-  const handleWorkspaceSelected = useCallback(async (workspacePath: string, projectDescription?: string) => {
-    try {
-      log.info('Workspace selected', { workspacePath });
-
-      if (projectDescription && projectDescription.trim()) {
-        sessionStorage.setItem('pendingProjectDescription', projectDescription.trim());
-      }
-
-      setTransitionDir('entering');
-      setIsTransitioning(true);
-      setShowStartupOverlay(true);
-      await openWorkspace(workspacePath);
-
-      appManager.updateLayout({
-        leftPanelCollapsed: false,
-        rightPanelCollapsed: true,
-      });
-
-      setIsSweepGlowing(true);
-      setTimeout(() => setIsSweepGlowing(false), 1200);
-      setTimeout(() => {
-        setShowStartupOverlay(false);
-        setIsTransitioning(false);
-        setTransitionDir(null);
-      }, 700);
-
-    } catch (error) {
-      log.error('Failed to open workspace', error);
-      setIsTransitioning(false);
-
-      import('@/shared/notification-system').then(({ notificationService }) => {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        notificationService.error(errorMessage || t('appLayout.workspaceOpenFailed'), { duration: 5000 });
-      });
-    }
-  }, [openWorkspace, t]);
 
   // Initialize FlowChatManager
   React.useEffect(() => {

@@ -34,7 +34,7 @@ interface ContextState {
 export const useContextStore = create<ContextState>()(
   devtools(
     persist(
-      (set, get) => ({
+      (set, _get) => ({
         
         contexts: [],
         validationStates: new Map(),
@@ -136,7 +136,7 @@ export const useContextStore = create<ContextState>()(
       {
         name: 'bitfun-context-storage',
         
-        serialize: (state) => {
+        serialize: (state: any) => {
           return JSON.stringify({
             ...state.state,
             validationStates: Array.from(state.state.validationStates.entries()),
@@ -144,7 +144,7 @@ export const useContextStore = create<ContextState>()(
           });
         },
         
-        deserialize: (str) => {
+        deserialize: (str: string) => {
           const parsed = JSON.parse(str);
           return {
             ...parsed,
@@ -156,10 +156,10 @@ export const useContextStore = create<ContextState>()(
           };
         },
         
-        partialize: (state) => ({ 
-          contexts: state.contexts.filter(ctx => ctx.type !== 'image')
+        partialize: (state: any) => ({ 
+          contexts: state.contexts.filter((ctx: any) => ctx.type !== 'image')
         })
-      }
+      } as any
     ),
     {
       name: 'ContextStore',
@@ -193,7 +193,6 @@ export const cleanupImageContextsFromStorage = () => {
       const parsed = JSON.parse(stored);
       
       if (parsed.state && Array.isArray(parsed.state.contexts)) {
-        const originalCount = parsed.state.contexts.length;
         const imageCount = parsed.state.contexts.filter((ctx: any) => ctx.type === 'image').length;
         
         if (imageCount > 0) {
@@ -212,4 +211,3 @@ export const cleanupImageContextsFromStorage = () => {
 
 
 cleanupImageContextsFromStorage();
-

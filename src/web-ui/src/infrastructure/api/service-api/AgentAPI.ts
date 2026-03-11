@@ -357,6 +357,31 @@ export class AgentAPI {
     return api.listen<SessionTitleGeneratedEvent>('session_title_generated', callback);
   }
 
+  async cancelSession(sessionId: string): Promise<void> {
+    try {
+      await api.invoke<void>('cancel_session', {
+        request: { sessionId }
+      });
+    } catch (error) {
+      throw createTauriCommandError('cancel_session', error, { sessionId });
+    }
+  }
+
+  async getAgentInfo(agentType: string): Promise<ModeInfo & { agent_type: string; when_to_use: string; tools: string; location: string }> {
+    return {
+      id: agentType,
+      name: agentType,
+      description: `${agentType} agent`,
+      isReadonly: false,
+      toolCount: 0,
+      enabled: true,
+      agent_type: agentType,
+      when_to_use: `Use ${agentType} for related tasks`,
+      tools: 'all',
+      location: 'builtin',
+    };
+  }
+
   
 
    

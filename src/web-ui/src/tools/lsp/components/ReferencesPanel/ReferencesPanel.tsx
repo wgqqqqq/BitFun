@@ -93,15 +93,6 @@ export const ReferencesPanel: React.FC<ReferencesPanelProps> = ({
     return match ? match[0] : uri;
   }
 
-  function extractDirPath(uri: string): string {
-    let path = uri.replace(/^file:\/\/\//, '');
-    const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
-    if (lastSlash > 0) {
-      path = path.substring(0, lastSlash);
-    }
-    return path;
-  }
-
   const handleReferenceClick = useCallback(
     (ref: ReferenceLocation) => {
       onReferenceClick(ref);
@@ -315,4 +306,3 @@ export class ReferencesPanelController {
     return this.container !== null;
   }
 }
-

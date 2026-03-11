@@ -15,7 +15,7 @@ const log = createLogger('SubagentModule');
  * Supports "text" and "thinking" content types.
  */
 export function routeTextChunkToToolCard(
-  context: FlowChatContext,
+  _context: FlowChatContext,
   parentSessionId: string,
   parentToolId: string,
   data: SubagentTextChunkData

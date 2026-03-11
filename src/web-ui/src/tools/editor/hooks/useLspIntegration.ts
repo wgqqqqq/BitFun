@@ -20,7 +20,7 @@ export function useLspInitialization(workspacePath?: string) {
         await lspService.initialize();
         
         if (workspacePath) {
-          await lspService.setWorkspaceRoot(workspacePath);
+          await lspService.openWorkspace(workspacePath);
         }
       } catch (error) {
         log.warn('Failed to initialize LSP', error);
@@ -30,7 +30,6 @@ export function useLspInitialization(workspacePath?: string) {
     initLsp();
   }, [workspacePath]);
 }
-
 
 
 

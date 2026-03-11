@@ -143,24 +143,6 @@ export const MermaidInteractiveDisplay: React.FC<ToolCardProps> = ({
 
   const inputData = getInputData();
 
-  const getChartInfo = () => {
-    if (!inputData) return null;
-
-    const mermaidCode = inputData.mermaid_code || '';
-    const nodeMetadata = inputData.node_metadata || {};
-    const mode = inputData.mode || 'interactive';
-
-    const nodeCount = Object.keys(nodeMetadata).length;
-    
-    return {
-      mode,
-      nodeCount,
-      hasMetadata: nodeCount > 0,
-      codeLines: mermaidCode.split('\n').length
-    };
-  };
-
-  const chartInfo = getChartInfo();
   const title = inputData?.title || t('toolCards.diagram.mermaidInteractive');
 
   if ((status as string) === 'error') {

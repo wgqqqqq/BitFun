@@ -81,7 +81,9 @@ export const FlowTextBlock = React.memo<FlowTextBlockProps>(({
           isStreaming={isActivelyStreaming}
           onFileViewRequest={onFileViewRequest}
           onTabOpen={onTabOpen}
-          onOpenVisualization={onOpenVisualization}
+          onOpenVisualization={(visualization) => {
+            onOpenVisualization?.(visualization?.type, visualization?.data);
+          }}
         />
       ) : (
         <div className={`text-content ${isActivelyStreaming && hasContent ? 'text-content--streaming' : ''}`}>

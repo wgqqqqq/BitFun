@@ -1,8 +1,8 @@
 export * from './types';
-export * from './state';
 export * from './services';
 export * from './hooks';
 export * from './components';
+export { GitStateManager, gitStateManager } from './state';
 
 import { workspaceGitInitializer } from './services/WorkspaceGitInitializer';
 import { createLogger } from '@/shared/utils/logger';

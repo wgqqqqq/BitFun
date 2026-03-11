@@ -3,7 +3,17 @@
  * Prevents state loss when components remount
  */
 
-import { FlowChatState, Session, DialogTurn, ModelRound, FlowItem, SessionConfig } from '../types/flow-chat';
+import {
+  FlowChatState,
+  Session,
+  DialogTurn,
+  ModelRound,
+  FlowItem,
+  FlowImageAnalysisItem,
+  ImageAnalysisResult,
+  AnyFlowItem,
+  SessionConfig,
+} from '../types/flow-chat';
 import { createLogger } from '@/shared/utils/logger';
 import { i18nService } from '@/infrastructure/i18n/core/I18nService';
 
@@ -440,27 +450,25 @@ export class FlowChatStore {
     dialogTurnId: string, 
     imageContexts: import('@/shared/types/context').ImageContext[]
   ): void {
-    import('../types/flow-chat').then(({ FlowImageAnalysisItem }) => {
-      this.updateDialogTurn(sessionId, dialogTurnId, turn => {
-        const imageAnalysisItems: any[] = imageContexts.map((ctx, index) => ({
-          id: `img-analysis-${ctx.id}`,
-          type: 'image-analysis',
-          imageContext: ctx,
-          result: null,
-          status: 'analyzing',
-          timestamp: Date.now() + index,
-        }));
+    this.updateDialogTurn(sessionId, dialogTurnId, turn => {
+      const imageAnalysisItems: FlowImageAnalysisItem[] = imageContexts.map((ctx, index) => ({
+        id: `img-analysis-${ctx.id}`,
+        type: 'image-analysis',
+        imageContext: ctx,
+        result: null,
+        status: 'analyzing',
+        timestamp: Date.now() + index,
+      }));
 
-        return {
-          ...turn,
-          imageAnalysisPhase: {
-            items: imageAnalysisItems,
-            status: 'analyzing',
-            startTime: Date.now(),
-          },
-          status: 'image_analyzing',
-        };
-      });
+      return {
+        ...turn,
+        imageAnalysisPhase: {
+          items: imageAnalysisItems,
+          status: 'analyzing',
+          startTime: Date.now(),
+        },
+        status: 'image_analyzing',
+      };
     });
   }
 
@@ -470,7 +478,7 @@ export class FlowChatStore {
   public updateImageAnalysisResults(
     sessionId: string,
     dialogTurnId: string,
-    results: import('../types/flow-chat').ImageAnalysisResult[]
+    results: ImageAnalysisResult[]
   ): void {
       this.updateDialogTurn(sessionId, dialogTurnId, turn => {
         if (!turn.imageAnalysisPhase) {
@@ -478,13 +486,13 @@ export class FlowChatStore {
           return turn;
         }
 
-      const updatedItems = turn.imageAnalysisPhase.items.map(item => {
+      const updatedItems: FlowImageAnalysisItem[] = turn.imageAnalysisPhase.items.map(item => {
         const result = results.find(r => r.image_id === item.imageContext.id);
         if (result) {
           return {
             ...item,
             result,
-            status: 'completed',
+            status: 'completed' as const,
           };
         }
         return item;
@@ -566,7 +574,7 @@ export class FlowChatStore {
         ...round,
         items: round.items.map(item => {
           const update = updates.find(u => u.itemId === item.id);
-          return update ? { ...item, ...update.changes } : item;
+          return update ? ({ ...item, ...update.changes } as AnyFlowItem) : item;
         })
       }));
       
@@ -577,7 +585,7 @@ export class FlowChatStore {
     });
   }
 
-  public addModelRoundItem(sessionId: string, dialogTurnId: string, item: FlowItem, modelRoundId?: string): void {
+  public addModelRoundItem(sessionId: string, dialogTurnId: string, item: AnyFlowItem, modelRoundId?: string): void {
     this.updateDialogTurn(sessionId, dialogTurnId, turn => {
       let targetModelRoundIndex = turn.modelRounds.length - 1;
         if (modelRoundId) {
@@ -618,7 +626,7 @@ export class FlowChatStore {
    * Silent add ModelRound item (does not trigger listeners)
    * Used for batch update scenarios
    */
-  public addModelRoundItemSilent(sessionId: string, dialogTurnId: string, item: FlowItem, modelRoundId?: string): void {
+  public addModelRoundItemSilent(sessionId: string, dialogTurnId: string, item: AnyFlowItem, modelRoundId?: string): void {
     const prevSilentMode = this.silentMode;
     this.silentMode = true;
     try {
@@ -635,7 +643,7 @@ export class FlowChatStore {
    * @param parentToolId Parent tool ID
    * @param newItem New item to insert
    */
-  public insertModelRoundItemAfterTool(sessionId: string, dialogTurnId: string, parentToolId: string, newItem: FlowItem): void {
+  public insertModelRoundItemAfterTool(sessionId: string, dialogTurnId: string, parentToolId: string, newItem: AnyFlowItem): void {
     this.updateDialogTurn(sessionId, dialogTurnId, turn => {
       let parentRoundIndex = -1;
       let parentItemIndex = -1;
@@ -797,8 +805,7 @@ export class FlowChatStore {
     });
   }
 
-  public rollbackTokenUsage(sessionId: string): void {
-    void sessionId;
+  public rollbackTokenUsage(): void {
   }
 
   public updateSessionMaxContextTokens(sessionId: string, maxContextTokens: number): void {

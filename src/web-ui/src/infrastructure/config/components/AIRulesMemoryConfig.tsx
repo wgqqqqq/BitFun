@@ -221,7 +221,6 @@ function RulesPanel() {
   };
 
   const renderRuleSection = (level: RuleLevel) => {
-    const isUser = level === RuleLevel.User;
     const currentRules = level === RuleLevel.User ? userRules : projectRules;
     const rules = currentRules.rules;
     return (

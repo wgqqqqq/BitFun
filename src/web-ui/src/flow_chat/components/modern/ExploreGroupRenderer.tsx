@@ -185,15 +185,15 @@ const ExploreItemRenderer = React.memo<ExploreItemRendererProps>(({ item }) => {
   
   const handleOpenInEditor = useCallback((filePath: string) => {
     if (onFileViewRequest) {
-      onFileViewRequest(filePath);
+      onFileViewRequest(filePath, filePath.split(/[/\\]/).pop() || filePath);
     }
   }, [onFileViewRequest]);
   
   const handleOpenInPanel = useCallback((_panelType: string, data: any) => {
     if (onTabOpen) {
-      onTabOpen(data);
+      onTabOpen(data, sessionId);
     }
-  }, [onTabOpen]);
+  }, [onTabOpen, sessionId]);
   
   switch (item.type) {
     case 'text':

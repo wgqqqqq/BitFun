@@ -6,11 +6,8 @@
 import { normalizePath } from '@/shared/utils/pathUtils';
 import { getEditorType } from '@/infrastructure/language-detection';
 import type { LineRange } from '@/component-library/components/Markdown';
-import { createLogger } from '@/shared/utils/logger';
 import { enqueuePendingTab } from './pendingTabQueue';
-
-const log = createLogger('FileTabManager');
-
+import type { PendingTabDetail } from './pendingTabQueue';
 export interface FileTabOptions {
    
   filePath: string;
@@ -95,7 +92,7 @@ class FileTabManager {
     };
     
     
-    const eventDetail: Record<string, any> = {
+    const eventDetail: PendingTabDetail = {
       type: editorType,
       title: fileName,
       data: tabData,

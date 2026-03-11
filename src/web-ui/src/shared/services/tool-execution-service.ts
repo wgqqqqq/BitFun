@@ -12,7 +12,6 @@ import {
   FileToolResult,
   SearchToolResult,
   WebToolResult,
-  MemoryToolResult,
   AdvancedToolResult
 } from '../types/tool-display';
 import { createLogger } from '@/shared/utils/logger';
@@ -262,8 +261,6 @@ export class ToolExecutionService {
 
     // Extract content if it's in the expected format
     const content = result.content || result;
-    const toolType = result.type || 'unknown';
-
     const normalizedName = toolName.toLowerCase().replace(/[_-]/g, '');
 
     switch (normalizedName) {
@@ -324,7 +321,7 @@ export class ToolExecutionService {
     };
   }
 
-  private normalizeSearchResult(content: any, toolName: string): SearchToolResult {
+  private normalizeSearchResult(content: any, _toolName: string): SearchToolResult {
     return {
       pattern: content.pattern || content.query || '',
       results: content.results || content.matches || [],
@@ -333,7 +330,7 @@ export class ToolExecutionService {
     };
   }
 
-  private normalizeWebResult(content: any, toolName: string): WebToolResult {
+  private normalizeWebResult(content: any, _toolName: string): WebToolResult {
     return {
       url: content.url,
       query: content.query,

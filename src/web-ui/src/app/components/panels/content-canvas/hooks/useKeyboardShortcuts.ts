@@ -72,7 +72,6 @@ export const useKeyboardShortcuts = (options: UseKeyboardShortcutsOptions = {}) 
     secondaryGroup,
     activeGroupId,
     layout,
-    isMissionControlOpen,
     closeTab,
     switchToTab,
     reopenClosedTab,
@@ -81,7 +80,6 @@ export const useKeyboardShortcuts = (options: UseKeyboardShortcutsOptions = {}) 
     toggleMaximize,
     toggleMissionControl,
   } = useCanvasStore();
-
   // Execute shortcut action
   const executeAction = useCallback((action: ShortcutAction) => {
     const activeGroup = activeGroupId === 'primary' ? primaryGroup : secondaryGroup;

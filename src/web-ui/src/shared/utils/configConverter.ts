@@ -59,13 +59,6 @@ export async function invokeAICommand<T>(
     
     
     const rustConfig = convertToRustConfig(config);
-    
-    
-    const args = {
-      config: rustConfig,
-      ...additionalArgs
-    };
-    
     const result = await aiApi.invokeAICommand<T>(command, rustConfig, additionalArgs);
     return result;
     

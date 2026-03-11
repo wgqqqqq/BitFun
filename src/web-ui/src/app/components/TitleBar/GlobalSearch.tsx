@@ -18,11 +18,7 @@ import { useI18n } from '@/infrastructure/i18n';
 import { useWorkspaceContext } from '../../../infrastructure/contexts/WorkspaceContext';
 import { useFileSearch } from '@/hooks';
 import type { FileSearchResult } from '../../../infrastructure/api/service-api/tauri-commands';
-import { createLogger } from '@/shared/utils/logger';
 import './GlobalSearch.scss';
-
-const log = createLogger('GlobalSearch');
-
 // Initial result count and load-more batch size
 const INITIAL_DISPLAY_COUNT = 50;
 const LOAD_MORE_COUNT = 50;

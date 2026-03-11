@@ -3,10 +3,6 @@
 import { ITransportAdapter } from './base';
 import { TauriTransportAdapter } from './tauri-adapter';
 import { WebSocketTransportAdapter } from './websocket-adapter';
-import { createLogger } from '@/shared/utils/logger';
-
-const log = createLogger('TransportFactory');
-
 export * from './base';
 export * from './tauri-adapter';
 export * from './websocket-adapter';
@@ -62,5 +58,4 @@ export async function resetTransportAdapter(): Promise<void> {
 export function setTransportAdapter(adapter: ITransportAdapter): void {
   globalAdapter = adapter;
 }
-
 

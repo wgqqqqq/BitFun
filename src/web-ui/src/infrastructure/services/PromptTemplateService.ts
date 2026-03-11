@@ -3,8 +3,7 @@
 import { 
   PromptTemplate, 
   PromptTemplateConfig, 
-  TemplateSearchResult,
-  PresetTemplate 
+  TemplateSearchResult
 } from '@/shared/types/prompt-template';
 import { parseTemplate, fillTemplate, hasPlaceholders } from '@/shared/utils/templateParser';
 import { promptTemplateAPI } from '@/infrastructure/api/service-api/PromptTemplateAPI';
@@ -413,4 +412,3 @@ export class PromptTemplateService {
 
 
 export const promptTemplateService = PromptTemplateService.getInstance();
-

@@ -34,7 +34,7 @@ interface ModernFlowChatContainerProps {
 
   // Callbacks compatible with the legacy version.
   onFileViewRequest?: (filePath: string, fileName: string, lineRange?: LineRange) => void;
-  onTabOpen?: (tabInfo: any) => void;
+  onTabOpen?: (tabInfo: any, sessionId?: string, panelType?: string) => void;
   onOpenVisualization?: (type: string, data: any) => void;
   onSwitchToChatPanel?: () => void;
 }

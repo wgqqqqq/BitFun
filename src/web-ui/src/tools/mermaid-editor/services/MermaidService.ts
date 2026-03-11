@@ -40,7 +40,7 @@ export class MermaidService {
       fontFamily: '"Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif',
       fontSize: 13,
       ...config,
-    });
+    } as any);
   }
 
   /** Render a Mermaid diagram. */

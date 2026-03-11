@@ -32,7 +32,7 @@ function isValidColor(color: ColorValue): boolean {
 }
 
  
-function calculateContrast(color1: string, color2: string): number {
+function calculateContrast(_color1: string, _color2: string): number {
   
   
   return 4.5;
@@ -101,7 +101,7 @@ export class ThemeValidator {
   private validateColors(
     theme: ThemeConfig,
     errors: ThemeValidationResult['errors'],
-    warnings: ThemeValidationResult['warnings']
+    _warnings: ThemeValidationResult['warnings']
   ): void {
     if (!theme.colors) {
       errors.push({
@@ -120,7 +120,7 @@ export class ThemeValidator {
         code: 'MISSING_BACKGROUND_COLORS',
       });
     } else {
-      this.validateColorGroup('colors.background', theme.colors.background, errors);
+      this.validateColorGroup('colors.background', theme.colors.background as unknown as Record<string, ColorValue>, errors);
     }
     
     
@@ -131,7 +131,7 @@ export class ThemeValidator {
         code: 'MISSING_TEXT_COLORS',
       });
     } else {
-      this.validateColorGroup('colors.text', theme.colors.text, errors);
+      this.validateColorGroup('colors.text', theme.colors.text as unknown as Record<string, ColorValue>, errors);
     }
     
     
@@ -142,7 +142,7 @@ export class ThemeValidator {
         code: 'MISSING_ACCENT_COLORS',
       });
     } else {
-      this.validateColorGroup('colors.accent', theme.colors.accent, errors);
+      this.validateColorGroup('colors.accent', theme.colors.accent as unknown as Record<string, ColorValue>, errors);
     }
   }
   
@@ -166,7 +166,7 @@ export class ThemeValidator {
    
   private validateEffects(
     theme: ThemeConfig,
-    errors: ThemeValidationResult['errors'],
+    _errors: ThemeValidationResult['errors'],
     warnings: ThemeValidationResult['warnings']
   ): void {
     if (!theme.effects) {
@@ -235,4 +235,3 @@ export class ThemeValidator {
 
 
 export const themeValidator = new ThemeValidator();
-

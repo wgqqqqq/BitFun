@@ -6,8 +6,7 @@
 import { useCallback } from 'react';
 import { useCanvasStore } from '../stores';
 import type { SplitMode, AnchorPosition } from '../types';
-import { LAYOUT_CONFIG, clampSplitRatio, clampAnchorSize } from '../types';
-
+import { LAYOUT_CONFIG } from '../types';
 interface UseLayoutStateReturn {
   // State
   splitMode: SplitMode;

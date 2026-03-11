@@ -73,20 +73,20 @@ export function useMiniAppBridge(
           return;
         }
         if (method === 'dialog.open') {
-          reply(await dialogOpen(params as Parameters<typeof dialogOpen>[0]));
+          reply(await dialogOpen(params as unknown as Parameters<typeof dialogOpen>[0]));
           return;
         }
         if (method === 'dialog.save') {
-          reply(await dialogSave(params as Parameters<typeof dialogSave>[0]));
+          reply(await dialogSave(params as unknown as Parameters<typeof dialogSave>[0]));
           return;
         }
         if (method === 'dialog.message') {
-          reply(await dialogMessage(params as Parameters<typeof dialogMessage>[0]));
+          reply(await dialogMessage(params as unknown as Parameters<typeof dialogMessage>[0]));
           return;
         }
         replyError(`Unknown method: ${method}`);
       } catch (error) {
-        replyError(String(error));
+        replyError(typeof error === 'string' ? error : String(error));
       }
     };
     window.addEventListener('message', handler);

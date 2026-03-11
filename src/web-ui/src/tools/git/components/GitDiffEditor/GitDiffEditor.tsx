@@ -3,11 +3,10 @@
  * Adds Git-oriented actions (accept/reject) and optional dirty-state tracking.
  */
 
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DiffEditor } from '@/tools/editor';
-import { GitDiffService, DiffStats } from '../../services/gitDiffService';
-import { Check, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { createLogger } from '@/shared/utils/logger';
 import './GitDiffEditor.scss';
 
@@ -42,16 +41,10 @@ export const GitDiffEditor: React.FC<GitDiffEditorProps> = ({
   filePath,
   repositoryPath,
   language,
-  onAcceptAll,
-  onRejectAll,
-  onClose,
   onContentChange,
   onSave
 }) => {
   const { t } = useTranslation('panels/git');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isCompleted, setIsCompleted] = useState(false);
-  const [operationResult, setOperationResult] = useState<'accepted' | 'rejected' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentModifiedContent, setCurrentModifiedContent] = useState(modifiedContent);
   const [hasChanges, setHasChanges] = useState(false);
@@ -76,13 +69,6 @@ export const GitDiffEditor: React.FC<GitDiffEditorProps> = ({
   useEffect(() => {
     lastSavedContentRef.current = lastSavedContent;
   }, [lastSavedContent]);
-
-
-  const diffStats: DiffStats = useMemo(() => {
-
-    return GitDiffService.calculateStatsSync(originalContent, currentModifiedContent);
-  }, [originalContent, currentModifiedContent]);
-  
 
   const saveFileContent = useCallback(async () => {
     if (!filePath || !repositoryPath) {
@@ -156,130 +142,6 @@ export const GitDiffEditor: React.FC<GitDiffEditorProps> = ({
     }
   }, []);
 
-
-  const handleAcceptAll = useCallback(async () => {
-    if (isProcessing) return;
-
-
-    const confirmed = await window.confirm(t('diffEditor.confirmAcceptAll', {
-      filePath,
-      additions: diffStats.additions,
-      deletions: diffStats.deletions
-    }));
-
-    if (!confirmed) return;
-
-    setIsProcessing(true);
-    setError(null);
-
-    try {
-
-      if (currentModifiedContent !== modifiedContent) {
-        const { workspaceAPI } = await import('@/infrastructure/api');
-
-        await workspaceAPI.writeFileContent(repositoryPath, filePath, currentModifiedContent);
-      }
-
-      await GitDiffService.acceptAllChanges(repositoryPath, filePath);
-      
-      setOperationResult('accepted');
-      setIsCompleted(true);
-      
-
-      onAcceptAll?.();
-      
-      setTimeout(() => {
-        onClose?.();
-      }, 2000);
-      
-    } catch (err) {
-      log.error('Failed to accept changes', { filePath, repositoryPath, error: err });
-      setError(t('diffEditor.acceptFailedWithMessage', { error: String(err) }));
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [
-    isProcessing,
-    filePath,
-    repositoryPath,
-    currentModifiedContent,
-    modifiedContent,
-    diffStats,
-    onAcceptAll,
-    onClose,
-    t
-  ]);
-
-
-  const handleRejectAll = useCallback(async () => {
-    if (isProcessing) return;
-
-
-    const confirmed = await window.confirm(t('diffEditor.confirmRejectAll', {
-      filePath,
-      changes: diffStats.changes
-    }));
-
-    if (!confirmed) return;
-
-    setIsProcessing(true);
-    setError(null);
-
-    try {
-      await GitDiffService.rejectAllChanges(repositoryPath, filePath);
-      
-      setOperationResult('rejected');
-      setIsCompleted(true);
-      
-
-      onRejectAll?.();
-      
-      setTimeout(() => {
-        onClose?.();
-      }, 2000);
-      
-    } catch (err) {
-      log.error('Failed to reject changes', { filePath, repositoryPath, error: err });
-      setError(t('diffEditor.rejectFailedWithMessage', { error: String(err) }));
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [isProcessing, filePath, repositoryPath, diffStats, onRejectAll, onClose, t]);
-
-
-  if (isCompleted) {
-    return (
-      <div className="git-diff-editor git-diff-editor--completed">
-        <div className="git-diff-editor__completed-message">
-          <div className={`git-diff-editor__completed-icon git-diff-editor__completed-icon--${operationResult}`}>
-            {operationResult === 'accepted' ? <Check size={48} /> : <X size={48} />}
-          </div>
-          
-          <h2 className="git-diff-editor__completed-title">
-            {operationResult === 'accepted'
-              ? t('diffEditor.completed.acceptedTitle')
-              : t('diffEditor.completed.rejectedTitle')
-            }
-          </h2>
-          
-          <div className="git-diff-editor__completed-details">
-            <p className="git-diff-editor__file-path">{filePath}</p>
-            
-            {operationResult === 'accepted' ? (
-              <p className="git-diff-editor__result-text git-diff-editor__result-text--success">
-                {t('diffEditor.completed.stagedHint')}
-              </p>
-            ) : (
-              <p className="git-diff-editor__result-text git-diff-editor__result-text--warning">
-                {t('diffEditor.completed.rejectedHint')}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div 
       className="git-diff-editor"
@@ -314,16 +176,8 @@ export const GitDiffEditor: React.FC<GitDiffEditorProps> = ({
           {t('common.saving')}
         </div>
       )}
-
-      {isProcessing && (
-        <div className="git-diff-editor__processing-overlay">
-          <div className="git-diff-editor__spinner" />
-          <p>{t('common.processing')}</p>
-        </div>
-      )}
     </div>
   );
 };
 
 export default GitDiffEditor;
-

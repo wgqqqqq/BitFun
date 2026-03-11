@@ -45,7 +45,6 @@ export { lspConfigService } from './services/LspConfigService';
 // Initialization
 import { workspaceLspInitializer } from './services/WorkspaceLspInitializer';
 import { MonacoLspAdapter, GlobalAdapterRegistry } from './services/MonacoLspAdapter';
-import { lspDocumentService } from './services/LspDocumentService';
 import { lspExtensionRegistry } from './services/LspExtensionRegistry';
 import './services/LspDiagnostics'; // side-effect: registers global diagnostics helpers
 
@@ -96,7 +95,7 @@ function installLspDiagnosticTools() {
         adapterUris
       });
       
-      for (const [uri, adapter] of adapters.entries()) {
+      for (const [, adapter] of adapters.entries()) {
         (adapter as any).getDiagnosticInfo?.();
       }
     },

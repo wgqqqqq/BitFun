@@ -8,11 +8,7 @@ import { X, Pin, Split } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from '@/component-library';
 import type { CanvasTab, EditorGroupId, TabState } from '../types';
-import { createLogger } from '@/shared/utils/logger';
 import './Tab.scss';
-
-const log = createLogger('Tab');
-
 export interface TabProps {
   /** Tab data */
   tab: CanvasTab;

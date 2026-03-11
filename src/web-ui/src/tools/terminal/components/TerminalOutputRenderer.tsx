@@ -97,7 +97,7 @@ export const TerminalOutputRenderer: React.FC<TerminalOutputRendererProps> = mem
         foreground: '#d4d4d4',
         cursor: 'transparent',    // Hide cursor in read-only mode.
         cursorAccent: 'transparent',
-        selection: 'rgba(255, 255, 255, 0.2)',
+        selectionBackground: 'rgba(255, 255, 255, 0.2)',
         black: '#1e1e1e',
         red: '#e06c75',
         green: '#98c379',
@@ -179,7 +179,7 @@ export const TerminalOutputRenderer: React.FC<TerminalOutputRendererProps> = mem
           foreground: theme.colors.text.primary,
           cursor: 'transparent',
           cursorAccent: theme.colors.background.secondary,
-          selection: isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
+          selectionBackground: isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
 
           // Keep ANSI colors aligned with Terminal.tsx.
           black: '#000000',

@@ -99,7 +99,7 @@ function renderScene(id: SceneTabId, workspacePath?: string, isEntering?: boolea
     case 'session':
       return <SessionScene workspacePath={workspacePath} isEntering={isEntering} />;
     case 'terminal':
-      return <TerminalScene workspacePath={workspacePath} />;
+      return <TerminalScene />;
     case 'git':
       return <GitScene workspacePath={workspacePath} />;
     case 'settings':
@@ -107,7 +107,7 @@ function renderScene(id: SceneTabId, workspacePath?: string, isEntering?: boolea
     case 'file-viewer':
       return <FileViewerScene workspacePath={workspacePath} />;
     case 'profile':
-      return <ProfileScene workspacePath={workspacePath} />;
+      return <ProfileScene />;
     case 'agents':
       return <AgentsScene />;
     case 'skills':

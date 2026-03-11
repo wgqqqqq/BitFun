@@ -86,7 +86,7 @@ export interface FileTreeNodeProps {
   
   workspacePath?: string;
   
-  renamingPath?: string;
+  renamingPath?: string | null;
   onRename?: (path: string, newName: string) => void;
   onCancelRename?: () => void;
   

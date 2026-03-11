@@ -54,7 +54,6 @@ const StreamTextComponent: React.FC<StreamTextProps> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
-  const [charStates, setCharStates] = useState<number[]>([]);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pausedIndexRef = useRef<number>(0);
   const hasStartedRef = useRef(false);
@@ -70,8 +69,6 @@ const StreamTextComponent: React.FC<StreamTextProps> = ({
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
-
-      setCharStates([]);
 
       if (isComplete) {
         setDisplayedText(text);
@@ -129,10 +126,6 @@ const StreamTextComponent: React.FC<StreamTextProps> = ({
     if (index < text.length) {
       setDisplayedText(prev => prev + text[index]);
       setCurrentIndex(index + 1);
-      
-      if (charAnimation) {
-        setCharStates(prev => [...prev, Date.now()]);
-      }
       
       const progress = ((index + 1) / text.length) * 100;
       onProgress?.(progress);

@@ -2,7 +2,7 @@
  * Alert component
  */
 
-import React, { useState, useEffect, forwardRef, ReactNode } from 'react';
+import React, { useState, forwardRef, ReactNode } from 'react';
 import { useI18n } from '@/infrastructure/i18n';
 import './Alert.scss';
 

@@ -31,7 +31,7 @@ export interface EventListenerOptions {
 export class EventManager implements EventManagerInterface {
   private listeners: Map<string, EventListener[]> = new Map();
   private executionCounts: Map<string, Map<EventCallback, number>> = new Map();
-  private debugMode: boolean = false;
+  private readonly debugMode: boolean;
 
   constructor(debugMode: boolean = false) {
     this.debugMode = debugMode;
@@ -44,6 +44,10 @@ export class EventManager implements EventManagerInterface {
       once: false,
       priority: options.priority ?? 0
     };
+
+    if (this.debugMode) {
+      log.debug('Registering event listener', { event });
+    }
 
     if (!this.listeners.has(event)) {
       this.listeners.set(event, []);
@@ -95,6 +99,10 @@ export class EventManager implements EventManagerInterface {
     const eventListeners = this.listeners.get(event);
     if (!eventListeners || eventListeners.length === 0) {
       return;
+    }
+
+    if (this.debugMode) {
+      log.debug('Emitting event', { event, listenerCount: eventListeners.length });
     }
 
     const listenersToRemove: EventListener[] = [];
@@ -205,8 +213,6 @@ export class EventManager implements EventManagerInterface {
     return info;
   }
 }
-
-
 export namespace EventTypes {
   
   export const SESSION_START = 'session:start';

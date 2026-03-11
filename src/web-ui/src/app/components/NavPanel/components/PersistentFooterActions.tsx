@@ -4,7 +4,6 @@ import { Tooltip, Modal } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 import { useSceneManager } from '../../../hooks/useSceneManager';
 import { useNavSceneStore } from '../../../stores/navSceneStore';
-import { useSceneStore } from '../../../stores/sceneStore';
 import { useToolbarModeContext } from '@/flow_chat/components/toolbar-mode/ToolbarModeContext';
 import { useCurrentWorkspace } from '@/infrastructure/contexts/WorkspaceContext';
 import { useNotification } from '@/shared/notification-system';

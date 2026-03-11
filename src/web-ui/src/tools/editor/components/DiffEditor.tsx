@@ -101,8 +101,6 @@ export const DiffEditor: React.FC<DiffEditorProps> = ({
     minimap: { enabled: showMinimap, side: 'right', size: 'proportional' }
   });
   const [_currentThemeId, setCurrentThemeId] = useState<string>(BitFunDarkThemeMetadata.id);
-  void _currentThemeId;
-  
   const containerRef = useRef<HTMLDivElement>(null);
   const originalModelRef = useRef<monaco.editor.ITextModel | null>(null);
   const modifiedModelRef = useRef<monaco.editor.ITextModel | null>(null);

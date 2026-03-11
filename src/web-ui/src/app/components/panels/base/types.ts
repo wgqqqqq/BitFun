@@ -21,6 +21,9 @@ export type PanelContentType =
   | 'git-branch-history'
   | 'ai-session'
   | 'planner'
+  | 'ui-editor'
+  | 'ui-relation-graph'
+  | 'design-tokens'
   | 'task-detail'
   | 'plan-viewer'
   | 'terminal';
@@ -67,9 +70,8 @@ export interface TabbedFlexiblePanelRef {
 export interface PanelContentConfig {
   type: PanelContentType;
   displayName: string;
-  icon: React.ComponentType<{ size?: number }>;
+  icon: React.ComponentType<{ size?: string | number }>;
   supportsCopy: boolean;
   supportsDownload: boolean;
   showHeader: boolean;
 }
-

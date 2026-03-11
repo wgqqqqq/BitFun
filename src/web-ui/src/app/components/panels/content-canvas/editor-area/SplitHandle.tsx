@@ -6,7 +6,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from '@/component-library';
-import type { SplitMode } from '../types';
 import { LAYOUT_CONFIG, clampSplitRatio } from '../types';
 import './SplitHandle.scss';
 

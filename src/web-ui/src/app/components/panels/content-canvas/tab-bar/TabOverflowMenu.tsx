@@ -11,12 +11,8 @@ import { createPortal } from 'react-dom';
 import { LayoutGrid, ChevronDown, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from '@/component-library';
-import { createLogger } from '@/shared/utils/logger';
 import type { CanvasTab } from '../types';
 import './TabOverflowMenu.scss';
-
-const log = createLogger('TabOverflowMenu');
-
 export interface TabOverflowMenuProps {
   /** Overflow tabs */
   overflowTabs: CanvasTab[];

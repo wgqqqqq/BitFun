@@ -42,5 +42,3 @@ export * from './CubeLogo';
 export * from './CubeLoading';
 
 export * from './FlowChatCards';
-
-export { componentRegistry } from './registry';

@@ -12,9 +12,6 @@ export * from './types';
 export * from './services/ConfigManager';
 export * from './services/modelConfigs';
 
-// React hooks
-export * from './hooks';
-
 // Components
 export { default as AIModelConfig } from './components/AIModelConfig';
 

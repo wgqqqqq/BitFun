@@ -32,13 +32,11 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { gitStateManager } from '../state/GitStateManager';
 import {
   GitState,
-  GitStateLayer,
   UseGitStateOptions,
   UseGitStateReturn,
   RefreshOptions,
 } from '../state/types';
-import type { GitFileStatusDetail, GitBranch, GitCommit } from '../types/repository';
-
+import type { GitBranch, GitCommit } from '../types/repository';
 export function useGitState(options: UseGitStateOptions): UseGitStateReturn {
   const {
     repositoryPath,
@@ -78,7 +76,7 @@ export function useGitState(options: UseGitStateOptions): UseGitStateReturn {
 
     const unsubscribe = gitStateManager.subscribe(
       normalizedPath,
-      (newState, _prevState, changedLayers) => {
+      (newState, _prevState, _changedLayers) => {
         if (!mountedRef.current) return;
         if (selectorRef.current) {
           const selectedValue = selectorRef.current(newState);
@@ -270,4 +268,3 @@ function shallowEqual(a: any, b: any): boolean {
 
   return true;
 }
-

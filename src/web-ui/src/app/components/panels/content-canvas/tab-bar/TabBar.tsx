@@ -227,7 +227,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   const overflowTabs = visibleTabs.slice(visibleTabsCount);
 
   // Handle tab drag start
-  const handleTabDragStart = useCallback((tab: CanvasTab) => (e: React.DragEvent) => {
+  const handleTabDragStart = useCallback((tab: CanvasTab) => (_e: React.DragEvent) => {
     onDragStart({
       tabId: tab.id,
       sourceGroupId: groupId,

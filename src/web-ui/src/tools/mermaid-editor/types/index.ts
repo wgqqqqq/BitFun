@@ -3,6 +3,7 @@
  */
 
 export * from './MermaidPanelTypes';
+import type { NodeMetadata } from './MermaidPanelTypes';
 
 export interface MermaidEditorProps {
   initialSourceCode?: string;

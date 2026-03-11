@@ -3,7 +3,7 @@
  * Handles placeholder rendering, navigation, and fill state.
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import type { PromptTemplate, PlaceholderInfo, PlaceholderFillState } from '@/shared/types/prompt-template';
 import { parseTemplate } from '@/shared/utils/templateParser';
 import { createLogger } from '@/shared/utils/logger';
@@ -282,4 +282,3 @@ export function useTemplateEditor(props: UseTemplateEditorProps): UseTemplateEdi
     moveToPrevPlaceholder,
   };
 }
-

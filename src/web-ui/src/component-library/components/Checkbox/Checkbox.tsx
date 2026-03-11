@@ -3,7 +3,7 @@ import './Checkbox.scss';
 
 export interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
   /** Checkbox label */
-  label?: string;
+  label?: React.ReactNode;
   /** Description text */
   description?: string;
   /** Size */

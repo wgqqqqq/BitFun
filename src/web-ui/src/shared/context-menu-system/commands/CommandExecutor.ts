@@ -239,12 +239,12 @@ export class CommandExecutor {
         reject(new Error(`Command execution timeout after ${this.config.timeout}ms`));
       }, this.config.timeout);
 
-      command.execute(context)
-        .then(result => {
+      Promise.resolve(command.execute(context))
+        .then((result: CommandResult) => {
           clearTimeout(timer);
           resolve(result);
         })
-        .catch(error => {
+        .catch((error: unknown) => {
           clearTimeout(timer);
           reject(error);
         });
@@ -291,4 +291,3 @@ export class CommandExecutor {
  
 import { commandRegistry as registryInstance } from './CommandRegistry';
 export const commandExecutor = new CommandExecutor(registryInstance);
-

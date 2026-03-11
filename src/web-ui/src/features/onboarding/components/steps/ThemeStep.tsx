@@ -128,7 +128,7 @@ function ThemePreview({ theme }: ThemePreviewProps) {
         {/* Chat area */}
         <div 
           className="bitfun-onboarding-theme__preview-chat"
-          style={{ background: colors.background.flowchat }}
+          style={{ background: colors.background.scene }}
         >
           {/* User message */}
           <div 

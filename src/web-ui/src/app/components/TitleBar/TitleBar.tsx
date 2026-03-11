@@ -16,12 +16,11 @@ import './TitleBar.scss';
 
 import { Button, WindowControls, Tooltip } from '@/component-library';
 import { WorkspaceManager } from '../../../tools/workspace';
-import { CurrentSessionTitle, useToolbarModeContext } from '../../../flow_chat';
+import { CurrentSessionTitle } from '../../../flow_chat';
 import { createConfigCenterTab } from '@/shared/utils/tabUtils';
 import { workspaceAPI } from '@/infrastructure/api';
 import { NewProjectDialog } from '../NewProjectDialog';
 import { AboutDialog } from '../AboutDialog';
-import { GlobalSearch } from './GlobalSearch';
 import { AgentOrb } from './AgentOrb';
 import NotificationButton from './NotificationButton';
 import { createLogger } from '@/shared/utils/logger';
@@ -64,8 +63,6 @@ const TitleBar: React.FC<TitleBarProps> = ({
       navigator.platform.toUpperCase().includes('MAC')
     );
   }, []);
-
-  const { enableToolbarMode } = useToolbarModeContext();
 
   const lastMouseDownTimeRef = React.useRef<number>(0);
 

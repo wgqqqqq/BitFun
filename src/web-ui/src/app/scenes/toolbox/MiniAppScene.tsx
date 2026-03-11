@@ -13,6 +13,7 @@ import { useCurrentWorkspace } from '@/infrastructure/contexts/WorkspaceContext'
 import { createLogger } from '@/shared/utils/logger';
 import { IconButton, Button } from '@/component-library';
 import { useSceneManager } from '@/app/hooks/useSceneManager';
+import type { SceneTabId } from '@/app/components/SceneBar/types';
 import './MiniAppScene.scss';
 
 const log = createLogger('MiniAppScene');
@@ -64,7 +65,7 @@ const MiniAppScene: React.FC<MiniAppSceneProps> = ({ appId }) => {
   }, [appId, themeType, workspacePath]);
 
   useEffect(() => {
-    const tabId = `miniapp:${appId}`;
+    const tabId = `miniapp:${appId}` as SceneTabId;
     const shouldHandle = (payload?: { id?: string }) => payload?.id === appId;
 
     const unlistenUpdated = api.listen<{ id?: string }>('miniapp-updated', (payload) => {

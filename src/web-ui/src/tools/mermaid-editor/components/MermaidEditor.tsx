@@ -9,7 +9,7 @@ import { MermaidEditorProps, LayoutMode, MermaidComponent } from '../types';
 import { useContextStore } from '../../../shared/context-system';
 import type { MermaidDiagramContext } from '../../../shared/types/context';
 import { CubeLoading } from '@/component-library/components/CubeLoading';
-import { Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { aiApi } from '../../../infrastructure/api';
 import { useI18n } from '@/infrastructure/i18n';
 import './MermaidEditor.css';
@@ -332,7 +332,7 @@ export const MermaidEditor: React.FC<MermaidEditorProps> = React.memo(({
       if (subgraphStart >= 0 && subgraphEnd >= 0) {
         // Remove the subgraph wrapper but keep its contents.
         updated = lines.filter((_, i) => i !== subgraphStart && i !== subgraphEnd)
-          .map((line, _, arr) => {
+          .map((line, _, _arr) => {
             const origIdx = lines.indexOf(line);
             if (origIdx > subgraphStart && origIdx < subgraphEnd) {
               return line.replace(/^(\s{2,4})/, '');

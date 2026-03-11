@@ -51,34 +51,35 @@ export function useEditorConfig(options: UseEditorConfigOptions = {}): UseEditor
       setIsLoading(false);
       return;
     }
-    
-    const loadConfig = async () => {
-      try {
-        const { configManager } = await import('@/infrastructure/config/services/ConfigManager');
-        const config = await configManager.getConfig<any>('editor');
-        
-        if (config) {
-          const converted = convertSnakeToCamel(config);
-          setPersistedConfig(converted);
-        }
-        
-        const unsubscribe = configManager.subscribe('editor', (newConfig) => {
-          if (newConfig) {
-            const converted = convertSnakeToCamel(newConfig);
-            setPersistedConfig(converted);
-          }
-        });
-        
-        setIsLoading(false);
-        
-        return () => unsubscribe();
-      } catch (error) {
-        log.error('Failed to load config', error);
-        setIsLoading(false);
+
+    let unsubscribe: (() => void) | undefined;
+
+    const syncConfig = async (): Promise<void> => {
+      const { configManager } = await import('@/infrastructure/config/services/ConfigManager');
+      const config = await configManager.getConfig<Record<string, unknown> | null>('editor');
+
+      if (config) {
+        setPersistedConfig(convertSnakeToCamel(config));
       }
     };
-    
-    loadConfig();
+
+    void (async () => {
+      try {
+        const { configManager } = await import('@/infrastructure/config/services/ConfigManager');
+        await syncConfig();
+        unsubscribe = configManager.watch('editor', () => {
+          void syncConfig();
+        });
+      } catch (error) {
+        log.error('Failed to load config', error);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      unsubscribe?.();
+    };
   }, [loadPersisted]);
   
   /** Compute final configuration: defaults -> preset -> persisted -> overrides -> runtime */

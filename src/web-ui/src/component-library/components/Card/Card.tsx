@@ -51,7 +51,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(({
 
 Card.displayName = 'Card';
 
-export interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+export interface CardHeaderProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
   /** Title */
   title?: React.ReactNode;
   /** Subtitle */

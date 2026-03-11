@@ -15,6 +15,8 @@ export const PRESET_READONLY: EditorPresetConfig = {
   
   minimap: {
     enabled: false,
+    side: 'right',
+    size: 'proportional',
   },
   lineNumbers: 'on',
   renderLineHighlight: 'none',
@@ -47,6 +49,8 @@ export const PRESET_MINIMAL: EditorPresetConfig = {
   
   minimap: {
     enabled: false,
+    side: 'right',
+    size: 'proportional',
   },
   lineNumbers: 'on',
   
@@ -70,6 +74,8 @@ export const PRESET_STANDARD: EditorPresetConfig = {
   
   minimap: {
     enabled: true,
+    side: 'right',
+    size: 'proportional',
   },
   lineNumbers: 'on',
 };
@@ -85,6 +91,8 @@ export const PRESET_FULL: EditorPresetConfig = {
   
   minimap: {
     enabled: true,
+    side: 'right',
+    size: 'proportional',
   },
   lineNumbers: 'on',
   semanticHighlighting: true,
@@ -122,6 +130,8 @@ export const PRESET_DIFF: EditorPresetConfig = {
   
   minimap: {
     enabled: false,
+    side: 'right',
+    size: 'proportional',
   },
   lineNumbers: 'on',
   renderWhitespace: 'selection',

@@ -20,8 +20,7 @@ import { gitService } from '@/tools/git/services';
 import { useGitOperations } from '@/tools/git/hooks';
 import { useNotification } from '@/shared/notification-system';
 import { CreateBranchDialog } from '@/tools/git/components/CreateBranchDialog';
-import type { GitBranch as GitBranchType } from '@/infrastructure/api/service-api/GitAPI';
-import type { GitCommit as GitCommitType } from '@/infrastructure/api/service-api/GitAPI';
+import type { GitBranch as GitBranchType, GitCommit as GitCommitType, GitFileChange } from '@/tools/git/types/repository';
 import './BranchesView.scss';
 
 interface BranchesViewProps {
@@ -103,7 +102,7 @@ const BranchesView: React.FC<BranchesViewProps> = ({ workspacePath }) => {
   const filteredCommits = commitSearchQuery.trim()
     ? commits.filter(
         c =>
-          (c.summary ?? (c as any).message ?? '').toLowerCase().includes(commitSearchQuery.toLowerCase()) ||
+          (c.message ?? '').toLowerCase().includes(commitSearchQuery.toLowerCase()) ||
           ((c as any).author?.name ?? (c as any).author ?? '').toLowerCase().includes(commitSearchQuery.toLowerCase()) ||
           (c.hash ?? '').toLowerCase().includes(commitSearchQuery.toLowerCase())
       )
@@ -304,11 +303,11 @@ const BranchesView: React.FC<BranchesViewProps> = ({ workspacePath }) => {
           ) : (
             filteredCommits.map((commit, idx) => {
               const isExpanded = expandedCommits.has(commit.hash);
-              const msg = (commit as any).message ?? commit.summary ?? '';
+              const msg = commit.message ?? '';
               const summary = msg.split('\n')[0];
               const body = msg.split('\n').slice(1).join('\n').trim();
               const author = (commit as any).author?.name ?? (commit as any).author ?? t('common.unknown');
-              const files = (commit as any).files;
+              const files = commit.files;
               return (
                 <div
                   key={commit.hash ?? idx}
@@ -346,8 +345,8 @@ const BranchesView: React.FC<BranchesViewProps> = ({ workspacePath }) => {
                             <FileText size={12} /> {t('commit.changedFiles', { count: files.length })}
                           </span>
                           <ul>
-                            {(files as { path?: string }[]).map((f, i) => (
-                              <li key={i}>{f.path ?? f}</li>
+                            {(files as GitFileChange[]).map((file, i) => (
+                              <li key={i}>{file.path}</li>
                             ))}
                           </ul>
                         </div>

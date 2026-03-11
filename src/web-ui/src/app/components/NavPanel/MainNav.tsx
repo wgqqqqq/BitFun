@@ -485,6 +485,8 @@ const MainNav: React.FC<MainNavProps> = ({
           const sectionDir    = getSectionDepartDir(section.id);
           const sectionDepartCls = sectionDir ? ` is-departing-${sectionDir}` : '';
 
+          const sectionSceneId = section.sceneId;
+
           return (
             <div key={section.id} className={`bitfun-nav-panel__section${sectionDepartCls}`}>
               {section.label && (
@@ -493,7 +495,7 @@ const MainNav: React.FC<MainNavProps> = ({
                   collapsible={isCollapsible}
                   isOpen={isSectionOpen}
                   onToggle={() => toggleSection(section.id)}
-                  onSceneOpen={section.sceneId ? () => openScene(section.sceneId) : undefined}
+                  onSceneOpen={sectionSceneId ? () => openScene(sectionSceneId) : undefined}
                   actions={section.id === 'workspace' ? (
                     <div className="bitfun-nav-panel__workspace-action-wrap">
                       <button

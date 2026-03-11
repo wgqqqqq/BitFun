@@ -3,7 +3,7 @@
  * Core component for the right panel, aggregating submodules.
  */
 
-import React, { useEffect, useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { EditorArea } from './editor-area';
 import { AnchorZone } from './anchor-zone';
 import { MissionControl } from './mission-control';
@@ -11,11 +11,7 @@ import { EmptyState } from './empty-state';
 import { useCanvasStore } from './stores';
 import { useTabLifecycle, useKeyboardShortcuts, usePanelTabCoordinator } from './hooks';
 import type { AnchorPosition } from './types';
-import { createLogger } from '@/shared/utils/logger';
 import './ContentCanvas.scss';
-
-const log = createLogger('ContentCanvas');
-
 export interface ContentCanvasProps {
   /** Workspace path */
   workspacePath?: string;
@@ -31,12 +27,10 @@ export const ContentCanvas: React.FC<ContentCanvasProps> = ({
   workspacePath,
   mode = 'agent',
   onInteraction,
-  onBeforeClose,
 }) => {
   // Store state
   const {
     primaryGroup,
-    secondaryGroup,
     layout,
     isMissionControlOpen,
     setAnchorPosition,
@@ -44,7 +38,6 @@ export const ContentCanvas: React.FC<ContentCanvasProps> = ({
     closeMissionControl,
     openMissionControl,
   } = useCanvasStore();
-
   // Initialize hooks
   const { handleCloseWithDirtyCheck, handleCloseAllWithDirtyCheck } = useTabLifecycle({ mode });
   useKeyboardShortcuts({ enabled: true, handleCloseWithDirtyCheck });
@@ -137,7 +130,6 @@ export const ContentCanvas: React.FC<ContentCanvasProps> = ({
     </div>
   );
 };
-
 ContentCanvas.displayName = 'ContentCanvas';
 
 export default ContentCanvas;

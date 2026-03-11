@@ -57,7 +57,7 @@ export const SearchCard: React.FC<SearchCardProps> = ({
   const stats = useMemo(() => {
     if (searchMatches.length === 0) return { matches: 0, files: 0 };
     
-    const files = new Set(searchMatches.map(match => 
+    const files = new Set(searchMatches.map((match: any) => 
       match.file || match.filename || match.path || match
     )).size;
     
@@ -70,7 +70,7 @@ export const SearchCard: React.FC<SearchCardProps> = ({
   const topFiles = useMemo(() => {
     const fileMap = new Map();
     
-    searchMatches.forEach(match => {
+    searchMatches.forEach((match: any) => {
       const file = match.file || match.filename || match.path || match;
       if (file && typeof file === 'string') {
         fileMap.set(file, (fileMap.get(file) || 0) + 1);

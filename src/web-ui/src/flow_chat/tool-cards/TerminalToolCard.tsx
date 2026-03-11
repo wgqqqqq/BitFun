@@ -18,9 +18,8 @@ import type { ToolCardProps } from '../types/flow-chat';
 import { Terminal, Play, X, ExternalLink, Square, ChevronDown, ChevronUp } from 'lucide-react';
 import { createTerminalTab } from '@/shared/utils/tabUtils';
 import { BaseToolCard, ToolCardHeader } from './BaseToolCard';
-import { CubeLoading, IconButton, Input } from '../../component-library';
+import { CubeLoading, IconButton } from '../../component-library';
 import { TerminalOutputRenderer } from '@/tools/terminal/components';
-import { Tooltip } from '@/component-library';
 import { createLogger } from '@/shared/utils/logger';
 import './TerminalToolCard.scss';
 
@@ -530,4 +529,3 @@ export const TerminalToolCard: React.FC<TerminalToolCardProps> = ({
 };
 
 export default TerminalToolCard;
-

@@ -3,7 +3,6 @@
 import { api } from './ApiClient';
 import { createTauriCommandError } from '../errors/TauriCommandError';
 import type {
-  GetToolInfoRequest,
   ExecuteToolRequest,
   ValidateToolInputRequest
 } from './tauri-commands';

@@ -510,15 +510,15 @@ const SubagentItemRenderer = React.memo<{ item: FlowItem; turnId: string; roundI
   
   const handleOpenInEditor = useCallback((filePath: string) => {
     if (onFileViewRequest) {
-      onFileViewRequest(filePath);
+      onFileViewRequest(filePath, filePath.split(/[/\\]/).pop() || filePath);
     }
   }, [onFileViewRequest]);
   
   const handleOpenInPanel = useCallback((_panelType: string, data: any) => {
     if (onTabOpen) {
-      onTabOpen(data);
+      onTabOpen(data, sessionId);
     }
-  }, [onTabOpen]);
+  }, [onTabOpen, sessionId]);
   
   switch (item.type) {
     case 'text':
@@ -635,13 +635,13 @@ const FlowItemRenderer: React.FC<FlowItemRendererProps> = ({ item }) => {
           }}
           onOpenInEditor={(filePath: string) => {
             if (onFileViewRequest) {
-              onFileViewRequest(filePath);
+              onFileViewRequest(filePath, filePath.split(/[/\\]/).pop() || filePath);
             }
           }}
           onOpenInPanel={(_panelType: string, data: any) => {
             if (onTabOpen) {
               // data contains the full tabInfo payload.
-              onTabOpen(data);
+              onTabOpen(data, sessionId);
             }
           }}
           sessionId={sessionId}
@@ -652,4 +652,3 @@ const FlowItemRenderer: React.FC<FlowItemRendererProps> = ({ item }) => {
       return null;
   }
 };
-

@@ -3,7 +3,7 @@
  * Used to show file operations (Write/Edit/Delete) changes and provide confirmation actions
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import { CheckCircle, XCircle, Maximize2, FileText, Loader2, Clock } from 'lucide-react';
 import { useI18n } from '@/infrastructure/i18n';
 import { BaseToolCard, BaseToolCardProps } from '../BaseToolCard';
@@ -40,8 +40,6 @@ export const SnapshotCard: React.FC<SnapshotCardProps> = ({
   ...baseProps
 }) => {
   const { t } = useI18n('components');
-  const [isExpanded, setIsExpanded] = useState(false);
-
   const resolvedFilePath = filePath || input?.file_path || input?.target_file || input?.path || t('flowChatCards.snapshotCard.unspecifiedFile');
   const fileName = resolvedFilePath.split(/[/\\]/).pop() || t('flowChatCards.snapshotCard.file');
 

@@ -56,27 +56,16 @@ export class ContextResolver {
 
     
     let context: MenuContext | null = null;
-    let strategy = 'unknown';
-
     if (context = this.resolveSelection(baseContext)) {
-      strategy = 'Selection';
     } else if (context = this.resolveTerminal(baseContext)) {
-      strategy = 'Terminal';
     } else if (context = this.resolveFileNode(baseContext)) {
-      strategy = 'FileNode';
     } else if (context = this.resolveEditor(baseContext)) {
-      strategy = 'Editor';
     } else if (context = this.resolveFlowChat(baseContext)) {
-      strategy = 'FlowChat';
     } else if (context = this.resolveTab(baseContext)) {
-      strategy = 'Tab';
     } else if (context = this.resolvePanelHeader(baseContext)) {
-      strategy = 'PanelHeader';
     } else if (context = this.resolveCustom(baseContext)) {
-      strategy = 'Custom';
     } else {
       context = this.resolveEmptySpace(baseContext);
-      strategy = 'EmptySpace';
     }
 
     return context;
@@ -594,4 +583,3 @@ export class ContextResolver {
 
  
 export const contextResolver = new ContextResolver();
-

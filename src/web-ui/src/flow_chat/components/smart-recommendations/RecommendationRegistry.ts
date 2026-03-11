@@ -3,10 +3,6 @@
  */
 
 import { IRecommendationProvider, RecommendationProviderFactory } from './types';
-import { createLogger } from '@/shared/utils/logger';
-
-const log = createLogger('RecommendationRegistry');
-
 class RecommendationRegistry {
   private static instance: RecommendationRegistry;
   private providers: Map<string, IRecommendationProvider> = new Map();
@@ -64,4 +60,3 @@ class RecommendationRegistry {
 }
 
 export const recommendationRegistry = RecommendationRegistry.getInstance();
-

@@ -139,7 +139,7 @@ export const WebSearchCard: React.FC<ToolCardProps> = ({
       status={status}
       isExpanded={isExpanded}
       onClick={handleClick}
-      clickable={status === 'completed' && hasResults}
+      clickable={Boolean(status === 'completed' && hasResults)}
       header={
         <CompactToolCardHeader
           statusIcon={getStatusIcon()}

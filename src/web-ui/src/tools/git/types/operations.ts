@@ -1,8 +1,4 @@
-/**
- * Git operation types
- */
 
-import { GitFileChange, GitCommit } from './repository';
 
 export type GitOperationType = 
   | 'init'

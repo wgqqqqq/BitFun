@@ -3,8 +3,10 @@
  * Converts Mermaid code blocks into a renderable container.
  */
 import { visit } from 'unist-util-visit';
-import type { Root, Element } from 'hast';
 import { i18nService } from '@/infrastructure/i18n';
+
+type Root = any;
+type Element = any;
 
 export function rehypeMermaid() {
   return (tree: Root) => {
@@ -61,4 +63,3 @@ export function rehypeMermaid() {
     });
   };
 }
-

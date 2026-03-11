@@ -4,12 +4,8 @@
 
 import { FlowChatStore } from '../../store/FlowChatStore';
 import { parsePartialJson } from '../../../shared/utils/partialJsonParser';
-import { createLogger } from '@/shared/utils/logger';
 import type { FlowChatContext, FlowTextItem } from './types';
 import { THINKING_END_MARKER } from './types';
-
-const log = createLogger('TextChunkModule');
-
 /**
  * Process a normal text chunk without notifying the store.
  */
@@ -140,7 +136,7 @@ export function processThinkingChunkInternal(
  * Merge partial tool params without notifying the store.
  */
 export function processToolParamsPartialInternal(
-  context: FlowChatContext,
+  _context: FlowChatContext,
   sessionId: string,
   turnId: string,
   toolEvent: any
@@ -172,7 +168,7 @@ export function processToolParamsPartialInternal(
  * Update tool progress without notifying the store.
  */
 export function processToolProgressInternal(
-  context: FlowChatContext,
+  _context: FlowChatContext,
   sessionId: string,
   turnId: string,
   toolEvent: any

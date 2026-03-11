@@ -325,7 +325,7 @@ export class AgentService {
       
       
       
-      for (const [taskId, listener] of this.streamListeners.entries()) {
+      for (const listener of this.streamListeners.values()) {
         if (listener?.onToolConfirmation) {
           listener.onToolConfirmation(confirmationEvent);
           break; 
@@ -539,6 +539,15 @@ export class AgentService {
     };
 
     return this.executeAgentTask(request);
+  }
+
+  async executeAgentTask(request: AgentExecutionRequest): Promise<AgentExecutionResponse> {
+    const sessionId = await this.executeAgentTaskStream(request, {});
+    return {
+      id: sessionId,
+      status: 'started',
+      agent_type: request.agent_type,
+    };
   }
 
    

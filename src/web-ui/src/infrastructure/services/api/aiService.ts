@@ -140,8 +140,8 @@ class AIService {
       
       // Backend expects: content (string), workspace_path (Option<String>)
       const result = await aiApi.sendMessage({
-        content,
-        workspacePath
+        message: content,
+        context: workspacePath ? { workspacePath } : undefined,
       });
 
       

@@ -286,7 +286,7 @@ export function useFileTreeGitSync({
           setGitState(newState);
           
           if (!newState.isRefreshing) {
-            applyGitStatusToTreeRef.current(treeRef.current, newState, false);
+            applyGitStatusToTreeRef.current?.(treeRef.current, newState, false);
           }
         }
       },
@@ -309,7 +309,7 @@ export function useFileTreeGitSync({
     const handleSilentRefreshCompleted = (event: { path: string; fileTree: FileSystemNode[] }) => {
       const currentGitState = gitStateRef.current;
       if (currentGitState?.isRepository) {
-        applyGitStatusToTreeRef.current(event.fileTree, currentGitState, true);
+        applyGitStatusToTreeRef.current?.(event.fileTree, currentGitState, true);
       }
       
       refreshGitStatus();

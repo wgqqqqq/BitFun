@@ -6,7 +6,6 @@ import { useEditorHistory } from '../hooks/useEditorHistory'
 import { MermaidService } from '@/tools/mermaid-editor/services/MermaidService'
 import { loadLocalImages } from '../utils/loadLocalImages'
 import { 
-  isMacPlatform, 
   isModKey,
   toggleBold,
   toggleItalic,
@@ -793,4 +792,3 @@ const IRBlock: React.FC<IRBlockProps> = memo(({
 })
 
 IRBlock.displayName = 'IRBlock'
-

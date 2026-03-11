@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle, ArrowRight, AlertTriangle } from 'lucide-react';
+import { CheckCircle, ArrowRight } from 'lucide-react';
 import { useOnboardingStore, isModelConfigComplete } from '../../store/onboardingStore';
 
 interface CompletionStepProps {

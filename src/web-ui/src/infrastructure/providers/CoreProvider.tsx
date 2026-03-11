@@ -3,7 +3,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { initializeCore, destroyCore } from '../index';
 import { globalEventBus } from '../event-bus';
-import { globalStore } from '../state-management';
 import { createLogger } from '@/shared/utils/logger';
 import { useI18n } from '@/infrastructure/i18n';
 
@@ -14,7 +13,6 @@ interface CoreContextType {
   isLoading: boolean;
   error: string | null;
   eventBus: typeof globalEventBus;
-  store: typeof globalStore;
 }
 
 const CoreContext = createContext<CoreContextType | null>(null);
@@ -69,7 +67,6 @@ export const CoreProvider: React.FC<CoreProviderProps> = ({ children }) => {
     isLoading,
     error,
     eventBus: globalEventBus,
-    store: globalStore
   };
 
   if (isLoading) {
@@ -147,4 +144,3 @@ export const useCoreError = (): string | null => {
   const { error } = useCore();
   return error;
 };
-

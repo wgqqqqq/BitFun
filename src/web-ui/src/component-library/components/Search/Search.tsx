@@ -2,7 +2,7 @@
  * Search input component
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, forwardRef } from 'react';
 import { useI18n } from '@/infrastructure/i18n';
 import './Search.scss';
 
@@ -32,7 +32,7 @@ export interface SearchProps {
   suffixContent?: React.ReactNode;
 }
 
-export const Search: React.FC<SearchProps> = ({
+export const Search = forwardRef<HTMLInputElement, SearchProps>(({
   value,
   defaultValue = '',
   placeholder,
@@ -56,7 +56,7 @@ export const Search: React.FC<SearchProps> = ({
   searchButtonText,
   showSearchButton = false,
   suffixContent,
-}) => {
+}, ref) => {
   const { t } = useI18n('components');
   
   // Resolve i18n default values
@@ -68,7 +68,17 @@ export const Search: React.FC<SearchProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const setForwardedRef = useCallback((node: HTMLInputElement | null) => {
+    if (typeof ref === 'function') {
+      ref(node);
+      return;
+    }
+    if (ref) {
+      (ref as React.MutableRefObject<HTMLInputElement | null>).current = node;
+    }
+  }, [ref]);
 
   useEffect(() => {
     if (value !== undefined) {
@@ -201,7 +211,10 @@ export const Search: React.FC<SearchProps> = ({
         </div>
 
         <input
-          ref={inputRef}
+          ref={(node) => {
+            inputRef.current = node;
+            setForwardedRef(node);
+          }}
           type="text"
           className="search__input"
           value={inputValue}
@@ -258,5 +271,6 @@ export const Search: React.FC<SearchProps> = ({
       )}
     </div>
   );
-};
+});
 
+Search.displayName = 'Search';

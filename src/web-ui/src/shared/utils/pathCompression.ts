@@ -14,7 +14,7 @@ export interface CompressedNode extends Omit<FileTreeNode, 'children'> {
 function canCompress(node: FileTreeNode): boolean {
   return (
     node.isDirectory &&
-    node.children &&
+    !!node.children &&
     node.children.length === 1 &&
     node.children[0].isDirectory
   );
@@ -146,7 +146,7 @@ export function shouldCompressPaths(options?: {
   };
   
   const finalOptions = { ...defaultOptions, ...options };
-  return finalOptions.enabled;
+  return finalOptions.enabled ?? true;
 }
 
  

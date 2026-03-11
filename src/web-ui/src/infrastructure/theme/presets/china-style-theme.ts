@@ -71,6 +71,8 @@ export const bitfunChinaStyleTheme: ThemeConfig = {
       info: '#2e5e8a',             
       infoBg: 'rgba(46, 94, 138, 0.08)',
       infoBorder: 'rgba(46, 94, 138, 0.25)',
+      highlight: '#2e5e8a',
+      highlightBg: 'rgba(46, 94, 138, 0.12)',
     },
     
     border: {
@@ -357,4 +359,3 @@ export const bitfunChinaStyleTheme: ThemeConfig = {
     },
   },
 };
-

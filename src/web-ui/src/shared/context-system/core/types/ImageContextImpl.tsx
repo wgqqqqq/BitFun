@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Image as ImageIcon, X, Eye } from 'lucide-react';
-import { Modal, Button, IconButton } from '@/component-library';
+import { Image as ImageIcon, Eye } from 'lucide-react';
+import { Modal, Button } from '@/component-library';
 import type { ImageContext, ValidationResult, RenderOptions } from '../../../types/context';
 import type { 
   ContextTransformer, 
@@ -230,4 +230,3 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
-

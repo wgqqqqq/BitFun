@@ -2,7 +2,7 @@
  * Mermaid diagram preview with pan/zoom and tooltip support.
  */
 
-import React, { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
 import { mermaidService, MERMAID_THEME_CHANGE_EVENT } from '../services/MermaidService';
 import { usePanZoom } from '../hooks/usePanZoom';

@@ -8,11 +8,7 @@ import type {
   DropPosition,
   PanelContent,
 } from '../types';
-import { createLogger } from '@/shared/utils/logger';
 import './EditorArea.scss';
-
-const log = createLogger('EditorArea');
-
 export interface EditorAreaProps {
   workspacePath?: string;
   onOpenMissionControl?: () => void;
@@ -49,6 +45,7 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
     reorderTab,
     handleDrop,
     setSplitRatio,
+    setSplitRatio2,
     setActiveGroup,
     updateTabContent,
     setTabDirty,
@@ -190,7 +187,6 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
   }
 
   if (splitMode === 'grid') {
-    const setSplitRatio2 = (r: number) => useCanvasStore.setState((s) => ({ layout: { ...s.layout, splitRatio2: r } }));
     return (
       <div ref={containerRef} className="canvas-editor-area is-grid">
         <div ref={topRowRef} className="canvas-editor-area__top-row" style={{ flex: `0 0 calc(${splitRatio * 100}% - 2px)` }}>

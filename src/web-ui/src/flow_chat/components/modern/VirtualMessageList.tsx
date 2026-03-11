@@ -538,7 +538,9 @@ export const VirtualMessageList = forwardRef<VirtualMessageListRef>((_, ref) => 
       <Virtuoso
         ref={virtuosoRef}
         data={virtualItems}
-        computeItemKey={(index, item) => `${item.type}-${item.turnId}-${item.data?.id || index}`}
+        computeItemKey={(index, item) =>
+          `${item.type}-${item.turnId}-${'data' in item && item.data && typeof item.data === 'object' && 'id' in item.data ? item.data.id : index}`
+        }
         itemContent={(index, item) => (
           <VirtualItemRenderer 
             item={item}

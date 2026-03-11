@@ -5,7 +5,8 @@
  */
 
 import { diffLines, diffWords, Change } from 'diff';
-import { diffAPI, DiffResult, DiffHunk } from '@/infrastructure/api';
+import { diffAPI } from '@/infrastructure/api';
+import type { DiffResult } from '@/infrastructure/api/service-api/DiffAPI';
 
 export interface DiffOptions {
   ignoreWhitespace?: boolean;
@@ -223,7 +224,7 @@ export class DiffService {
   private convertBackendResult(
     result: DiffResult,
     original: string,
-    modified: string
+    _modified: string
   ): DiffComputeResult {
     const lines: DiffLine[] = [];
     const hunks: DiffHunkData[] = [];
@@ -302,7 +303,7 @@ export class DiffService {
     return lines.join('\n');
   }
 
-  rejectHunk(content: string, hunk: DiffHunkData): string {
+  rejectHunk(content: string, _hunk: DiffHunkData): string {
     return content;
   }
 

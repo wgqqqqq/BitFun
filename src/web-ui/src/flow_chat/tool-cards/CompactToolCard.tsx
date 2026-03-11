@@ -13,7 +13,17 @@ import './CompactToolCard.scss';
 
 export interface CompactToolCardProps {
   /** Tool status */
-  status: 'pending' | 'preparing' | 'streaming' | 'running' | 'completed' | 'error' | 'cancelled';
+  status:
+    | 'pending'
+    | 'preparing'
+    | 'streaming'
+    | 'running'
+    | 'completed'
+    | 'error'
+    | 'cancelled'
+    | 'analyzing'
+    | 'pending_confirmation'
+    | 'confirmed';
   /** Whether expanded */
   isExpanded?: boolean;
   /** Card click callback */
@@ -99,4 +109,3 @@ export const CompactToolCardHeader: React.FC<CompactToolCardHeaderProps> = ({
     </>
   );
 };
-

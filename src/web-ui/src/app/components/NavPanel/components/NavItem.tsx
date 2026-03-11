@@ -71,6 +71,7 @@ const NavItem: React.FC<NavItemProps> = ({
         .filter(Boolean)
         .join(' ')}
       onClick={onClick}
+      title={tooltipContent ?? displayLabel}
     >
       <span className="bitfun-nav-panel__item-icon" aria-hidden="true">
         <Icon size={15} />

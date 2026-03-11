@@ -29,7 +29,7 @@ export abstract class BaseCommand implements ICommand {
   }
 
    
-  canExecute(context: MenuContext): boolean | Promise<boolean> {
+  canExecute(_context: MenuContext): boolean | Promise<boolean> {
     return true;
   }
 

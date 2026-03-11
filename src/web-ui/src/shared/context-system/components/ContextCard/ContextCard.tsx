@@ -106,11 +106,12 @@ export const ContextCard: React.FC<ContextCardProps> = ({
               validationState.valid ? (
                 <CheckCircle size={14} className="bitfun-context-card__icon--success" />
               ) : (
-                <AlertCircle 
-                  size={14} 
-                  className="bitfun-context-card__icon--error"
-                  title={validationState.error}
-                />
+                <span title={validationState.error}>
+                  <AlertCircle 
+                    size={14} 
+                    className="bitfun-context-card__icon--error"
+                  />
+                </span>
               )
             ) : null}
           </div>
@@ -152,4 +153,3 @@ export const ContextCard: React.FC<ContextCardProps> = ({
 };
 
 export default ContextCard;
-

@@ -103,30 +103,6 @@ function computeLineDiff(originalContent: string, modifiedContent: string): Diff
 }
 
 /**
- * Diff computation with timeout protection.
- */
-async function computeDiffWithTimeout(
-  originalContent: string,
-  modifiedContent: string,
-  timeout: number = 5000
-): Promise<DiffLine[]> {
-  return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      reject(new Error('Diff computation timeout'));
-    }, timeout);
-    
-    try {
-      const result = computeLineDiff(originalContent, modifiedContent);
-      clearTimeout(timeoutId);
-      resolve(result);
-    } catch (error) {
-      clearTimeout(timeoutId);
-      reject(error);
-    }
-  });
-}
-
-/**
  * Context-collapsed diff view.
  * Hides long unchanged sections and keeps context around changes.
  */

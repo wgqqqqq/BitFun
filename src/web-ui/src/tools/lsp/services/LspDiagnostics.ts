@@ -18,7 +18,7 @@ export class LspDiagnostics {
   static async checkBackendStatus(workspacePath: string): Promise<LspDiagnosticInfo> {
     try {
       const startTime = Date.now();
-      const states = await invoke('lsp_get_all_server_states', {
+      await invoke('lsp_get_all_server_states', {
         request: { workspacePath }
       });
       const elapsed = Date.now() - startTime;
@@ -95,4 +95,3 @@ export class LspDiagnostics {
 if (typeof window !== 'undefined') {
   (window as any).LspDiagnostics = LspDiagnostics;
 }
-

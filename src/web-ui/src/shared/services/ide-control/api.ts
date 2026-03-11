@@ -14,11 +14,6 @@ import {
 } from './types';
 import { PanelContent, TabData } from '@/app/components/panels/base/types';
 import type { LineRange } from '@/component-library/components/Markdown';
-import { createLogger } from '@/shared/utils/logger';
-
-const log = createLogger('IdeControl');
-
- 
 const panelController = new PanelController();
 
  

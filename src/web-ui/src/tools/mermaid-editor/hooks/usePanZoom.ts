@@ -245,10 +245,6 @@ export function usePanZoom(options: PanZoomOptions = {}): UsePanZoomReturn {
   const handleDoubleClick = useCallback(() => {
     resetView();
   }, [resetView]);
-  
-  // Expose current transform for external checks.
-  const getTransform = useCallback(() => transform, [transform]);
-
   // ==================== Global mouse events ====================
 
   useEffect(() => {

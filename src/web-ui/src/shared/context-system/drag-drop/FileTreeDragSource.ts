@@ -5,10 +5,6 @@ import type { FileContext, DirectoryContext, ImageContext, ContextItem } from '.
 import type { IDragSource, DragPayload, PreviewData } from '../../types/drag';
 import { isImageFile, getMimeTypeFromFilename } from '../../../flow_chat/utils/imageUtils';
 import { i18nService } from '@/infrastructure/i18n';
-import { createLogger } from '@/shared/utils/logger';
-
-const log = createLogger('FileTreeDragSource');
-
 export class FileTreeDragSource implements IDragSource<FileSystemNode> {
   readonly sourceId = 'file-tree-primary';
   readonly sourceType = 'file-tree' as const;
@@ -111,11 +107,11 @@ export class FileTreeDragSource implements IDragSource<FileSystemNode> {
     };
   }
   
-  onDragStart(payload: DragPayload<ContextItem>): void {
+  onDragStart(): void {
     
   }
   
-  onDragEnd(payload: DragPayload<ContextItem>, success: boolean): void {
+  onDragEnd(): void {
     
   }
   

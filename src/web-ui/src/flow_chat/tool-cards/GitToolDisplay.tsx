@@ -8,7 +8,6 @@ import { ChevronDown, ChevronUp, GitBranch, Check, X, AlertTriangle } from 'luci
 import { CubeLoading, IconButton } from '../../component-library';
 import type { ToolCardProps } from '../types/flow-chat';
 import { BaseToolCard, ToolCardHeader } from './BaseToolCard';
-import { Tooltip } from '@/component-library';
 import { createLogger } from '@/shared/utils/logger';
 import './GitToolDisplay.scss';
 
@@ -337,4 +336,3 @@ export const GitToolDisplay: React.FC<ToolCardProps> = ({
     />
   );
 };
-

@@ -3,12 +3,12 @@
 import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { FileIcon, CheckCircle } from 'lucide-react';
-import type { FileContext, ValidationResult, RenderOptions } from '../../types/context';
+import type { FileContext, ValidationResult, RenderOptions } from '../../../types/context';
 import type { 
   ContextTransformer, 
   ContextValidator, 
   ContextCardRenderer 
-} from '../../services/ContextRegistry';
+} from '../../../services/ContextRegistry';
 import { i18nService } from '@/infrastructure/i18n';
 
 
@@ -172,4 +172,3 @@ export function formatFilePath(path: string, maxLength: number = 50): string {
   
   return `${parts[0]}/.../${parts.slice(-2).join('/')}`;
 }
-

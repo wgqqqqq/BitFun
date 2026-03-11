@@ -4,12 +4,6 @@ import { PanelState, AppMode } from '../types/tab';
 import { createLogger } from '@/shared/utils/logger';
 
 const log = createLogger('PanelStateManager');
-
-interface PanelStateKey {
-  panelKey: string;
-  mode: AppMode;
-}
-
 class PanelStateManager {
   private states = new Map<string, PanelState>();
 

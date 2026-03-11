@@ -1,6 +1,6 @@
  
 
-import { MenuItem, MenuItemType, MenuGroup } from '../types/menu.types';
+import { MenuItem, MenuItemType } from '../types/menu.types';
 import { MenuContext } from '../types/context.types';
 import { IMenuProvider, MenuMergeStrategy, MenuMergeConfig } from '../types/provider.types';
 import { createLogger } from '@/shared/utils/logger';
@@ -285,4 +285,3 @@ export class MenuBuilder {
 
  
 export const menuBuilder = new MenuBuilder();
-

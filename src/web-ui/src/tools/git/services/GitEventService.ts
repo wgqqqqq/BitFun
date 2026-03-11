@@ -7,11 +7,10 @@ import {
   GitEvent, 
   GitEventType, 
   GitEventListener, 
-  IGitEventEmitter,
   GitEventSubscriptionOptions
 } from '../types';
 
-export class GitEventService implements IGitEventEmitter {
+export class GitEventService {
   private static instance: GitEventService;
   private readonly eventPrefix = 'git:';
 
@@ -47,10 +46,10 @@ export class GitEventService implements IGitEventEmitter {
     };
 
     if (options?.once) {
-      return globalEventBus.once(eventName, wrappedListener);
-    } else {
-      return globalEventBus.on(eventName, wrappedListener);
+      return globalEventBus.once(eventName, wrappedListener as any);
     }
+
+    return globalEventBus.on(eventName, wrappedListener as any);
   }
 
   once<T extends GitEventType>(
@@ -73,8 +72,8 @@ export class GitEventService implements IGitEventEmitter {
     data: Extract<GitEvent, { type: T }>['data']
   ): void {
     const eventName = this.getEventName(eventType);
-    globalEventBus.emit(eventName, data);
-    globalEventBus.emit('git:event', { type: eventType, data });
+    globalEventBus.emit(eventName, data as any);
+    globalEventBus.emit('git:event', { type: eventType, data } as any);
   }
 
   removeAllListeners(eventType?: GitEventType): void {

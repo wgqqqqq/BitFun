@@ -5,7 +5,6 @@ import { MenuItem } from '../types/menu.types';
 import { MenuContext, ContextType, FileNodeContext } from '../types/context.types';
 import { commandExecutor } from '../commands/CommandExecutor';
 import { globalEventBus } from '../../../infrastructure/event-bus';
-import { workspaceAPI } from '../../../infrastructure/api';
 import { i18nService } from '../../../infrastructure/i18n';
 
 export class FileExplorerMenuProvider implements IMenuProvider {
@@ -256,4 +255,3 @@ export class FileExplorerMenuProvider implements IMenuProvider {
     return parts.join(separator);
   }
 }
-

@@ -1,46 +1,10 @@
 /**
  * Content-related type definitions.
- * Reuses existing FlexiblePanel content types.
+ * Reuses the shared FlexiblePanel content contract.
  */
 
-/**
- * Panel content types.
- */
-export type PanelContentType =
-  | 'empty'
-  | 'code-preview'
-  | 'code-viewer'
-  | 'code-editor'
-  | 'markdown-viewer'
-  | 'markdown-editor'
-  | 'mermaid-editor'
-  | 'text-viewer'
-  | 'file-viewer'
-  | 'image-viewer'
-  | 'diff-code-editor'
-  | 'git-diff'
-  | 'git-settings'
-  | 'git-graph'
-  | 'git-branch-history'
-  | 'ai-session'
-  | 'planner'
-  | 'task-detail'
-  | 'plan-viewer'
-  | 'terminal';
-
-/**
- * Panel content interface.
- */
-export interface PanelContent {
-  /** Content type */
-  type: PanelContentType;
-  /** Display title */
-  title: string;
-  /** Content data */
-  data?: any;
-  /** Metadata (dedupe, navigation, etc.) */
-  metadata?: Record<string, any>;
-}
+export type { PanelContentType, PanelContent } from '../../base/types';
+import type { PanelContentType } from '../../base/types';
 
 /**
  * File viewer types (code, markdown, images, etc.).

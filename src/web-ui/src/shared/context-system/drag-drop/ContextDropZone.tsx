@@ -7,11 +7,7 @@ import { useContextStore } from '../../stores/contextStore';
 import type { IDropTarget } from '../../types/drag';
 import type { DragPayload } from '../../types/drag';
 import type { ContextItem, ContextType } from '../../types/context';
-import { createLogger } from '@/shared/utils/logger';
 import './ContextDropZone.scss';
-
-const log = createLogger('ContextDropZone');
-
 export interface ContextDropZoneProps {
   acceptedTypes?: ContextType[];
   children?: React.ReactNode;
@@ -77,7 +73,7 @@ export const ContextDropZone: React.FC<ContextDropZoneProps> = ({
       setCanAccept(false);
     },
     
-    onDragOver: (event: DragEvent) => {
+    onDragOver: () => {
       
     }
   }), [acceptedTypesArray, addContext, setValidating, updateValidation, onContextAdded]);
@@ -181,4 +177,3 @@ export const ContextDropZone: React.FC<ContextDropZoneProps> = ({
 };
 
 export default ContextDropZone;
-

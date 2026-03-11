@@ -97,7 +97,6 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
   onClose,
   anchorEl,
   currentFilePath,
-  workspacePath,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: 0, left: 0 });
@@ -233,7 +232,6 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({
 
   return createPortal(menuContent, document.body);
 };
-
 export const EditorBreadcrumb: React.FC<EditorBreadcrumbProps> = ({
   filePath,
   workspacePath,

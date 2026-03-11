@@ -121,7 +121,7 @@ export const MCPResourceBrowser: React.FC<MCPResourceBrowserProps> = ({ serverId
         <div className="header-actions">
           <Button
             variant="secondary"
-            size="sm"
+            size="small"
             onClick={loadResources}
           >
             {t('resourceBrowser.actions.refresh')}
@@ -129,7 +129,7 @@ export const MCPResourceBrowser: React.FC<MCPResourceBrowserProps> = ({ serverId
           {onClose && (
             <Button
               variant="ghost"
-              size="sm"
+              size="small"
               onClick={onClose}
             >
               {t('resourceBrowser.actions.close')}
@@ -214,4 +214,3 @@ export const MCPResourceBrowser: React.FC<MCPResourceBrowserProps> = ({ serverId
 };
 
 export default MCPResourceBrowser;
-

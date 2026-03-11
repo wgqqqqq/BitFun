@@ -3,8 +3,10 @@
  * Marks local image paths for async post-processing after render.
  */
 import { visit } from 'unist-util-visit';
-import type { Root, Element } from 'hast';
 import { createLogger } from '@/shared/utils/logger';
+
+type Root = any;
+type Element = any;
 
 const log = createLogger('rehypeLocalImages');
 
@@ -133,4 +135,3 @@ export function rehypeLocalImages(options: RehypeLocalImagesOptions = {}) {
     });
   };
 }
-

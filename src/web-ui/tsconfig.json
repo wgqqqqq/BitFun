@@ -35,5 +35,17 @@
     }
   },
   "include": ["src"],
+  "exclude": [
+    "src/**/*.example.tsx",
+    "src/component-library/preview/**",
+    "src/component-library/components/registry.tsx",
+    "src/shared/context-system/core/types/**",
+    "src/shared/crypto/**",
+    "src/shared/context-menu-system/examples/**",
+    "src/infrastructure/services/api/index.ts",
+    "src/infrastructure/services/infra/index.ts",
+    "src/tools/mermaid-editor/examples/**",
+    "src/flow_chat/components/ImageAnalysisCard.tsx"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

@@ -1071,7 +1071,7 @@ export class MonacoLspAdapter {
   }
 
   
-  async provideDocumentHighlights(model: monaco.editor.ITextModel, position: monaco.Position) {
+  async provideDocumentHighlights(_model: monaco.editor.ITextModel, position: monaco.Position) {
     try {
       const highlights = await this.workspaceManager.getDocumentHighlight(
         this.serverLanguage,
@@ -1208,7 +1208,7 @@ export class MonacoLspAdapter {
           }
         },
         
-        releaseDocumentSemanticTokens: (resultId) => {
+        releaseDocumentSemanticTokens: (_resultId) => {
           // cleanup
         }
       }
@@ -1219,7 +1219,7 @@ export class MonacoLspAdapter {
   }
 
   
-  async provideSemanticTokens(model: monaco.editor.ITextModel) {
+  async provideSemanticTokens(_model: monaco.editor.ITextModel) {
     try {
       const semanticTokens = await this.workspaceManager.getSemanticTokens(
         this.serverLanguage,
@@ -1276,18 +1276,6 @@ export class MonacoLspAdapter {
       log.error('Failed to update diagnostics', { uri: this.uri, count: diagnostics.length, error });
     }
   }
-  
-  
-  private getSeverityName(severity: monaco.MarkerSeverity): string {
-    switch (severity) {
-      case monaco.MarkerSeverity.Error: return 'Error';
-      case monaco.MarkerSeverity.Warning: return 'Warning';
-      case monaco.MarkerSeverity.Info: return 'Info';
-      case monaco.MarkerSeverity.Hint: return 'Hint';
-      default: return 'Unknown';
-    }
-  }
-
   
   private convertDiagnosticSeverity(severity?: number): monaco.MarkerSeverity {
 

@@ -18,7 +18,7 @@ interface VirtualItemRendererProps {
 }
 
 export const VirtualItemRenderer = React.memo<VirtualItemRendererProps>(
-  ({ item, index }) => {
+  ({ item }) => {
     const content = (() => {
       switch (item.type) {
         case 'user-message':
@@ -79,6 +79,4 @@ export const VirtualItemRenderer = React.memo<VirtualItemRendererProps>(
     prev.index === next.index
   )
 );
-
 VirtualItemRenderer.displayName = 'VirtualItemRenderer';
-

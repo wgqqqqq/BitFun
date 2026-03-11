@@ -62,6 +62,12 @@ export interface FlowImageAnalysisItem extends FlowItem {
   error?: string;
 }
 
+export type AnyFlowItem =
+  | FlowTextItem
+  | FlowThinkingItem
+  | FlowToolItem
+  | FlowImageAnalysisItem;
+
 export interface ImageAnalysisResult {
   image_id: string;
   summary: string;              // Short summary.
@@ -75,7 +81,7 @@ export interface ImageAnalysisResult {
 export interface ModelRound {
   id: string;
   index: number;
-  items: (FlowTextItem | FlowToolItem | FlowImageAnalysisItem | FlowThinkingItem)[];
+  items: AnyFlowItem[];
   isStreaming: boolean;
   isComplete: boolean;
   status: 'pending' | 'streaming' | 'completed' | 'cancelled' | 'error' | 'pending_confirmation';
@@ -157,6 +163,7 @@ export interface Session {
   config: SessionConfig;
   createdAt: number;
   lastActiveAt: number;
+  updatedAt?: number;
   
   // Persist the last error; real-time errors come from context.errorMessage.
   error: string | null;
@@ -179,6 +186,7 @@ export interface Session {
 
 export interface SessionConfig {
   modelName?: string;
+  agentType?: string;
   context?: Record<string, string>;
 }
 
@@ -270,5 +278,4 @@ export interface FlowChatConfig {
   enableVirtualScroll: boolean;
   theme: 'light' | 'dark' | 'auto';
 }
-
 

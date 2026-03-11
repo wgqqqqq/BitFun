@@ -54,7 +54,6 @@ const ShellNav: React.FC = () => {
     createHubTerminal,
     promoteToHub,
     openTerminal,
-    startTerminal,
     stopTerminal,
     deleteTerminal,
     openEditModal,
@@ -62,7 +61,6 @@ const ShellNav: React.FC = () => {
     closeWorktreeTerminals,
     removeWorktreeConfig,
   } = useShellEntries();
-
   const {
     workspacePath,
     isGitRepo,

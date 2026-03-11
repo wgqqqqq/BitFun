@@ -15,6 +15,7 @@ import type { FlowChatState, Session } from '../../../../../flow_chat/types/flow
 import { useSceneStore } from '../../../../stores/sceneStore';
 import { useApp } from '../../../../hooks/useApp';
 import type { SceneTabId } from '../../../SceneBar/types';
+import type { SessionMode } from '../../../../stores/sessionModeStore';
 import { useWorkspaceContext } from '@/infrastructure/contexts/WorkspaceContext';
 import { createLogger } from '@/shared/utils/logger';
 import './SessionsSection.scss';

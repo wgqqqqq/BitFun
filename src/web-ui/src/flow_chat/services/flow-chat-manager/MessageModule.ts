@@ -3,7 +3,6 @@
  * Handles message sending, cancellation, and other operations
  */
 
-import { FlowChatStore } from '../../store/FlowChatStore';
 import { agentAPI } from '@/infrastructure/api/service-api/AgentAPI';
 import { aiExperienceConfigService } from '@/infrastructure/config/services';
 import { notificationService } from '../../../shared/notification-system';
@@ -108,9 +107,8 @@ export async function sendMessage(
     const currentAgentType = agentType || 'agentic';
     const workspacePath = updatedSession.workspacePath;
     
-    let turnResponse;
     try {
-      turnResponse = await agentAPI.startDialogTurn({
+      await agentAPI.startDialogTurn({
         sessionId: sessionId,
         userInput: message,
         turnId: dialogTurnId,
@@ -127,7 +125,7 @@ export async function sendMessage(
         
         await retryCreateBackendSession(context, sessionId);
         
-        turnResponse = await agentAPI.startDialogTurn({
+        await agentAPI.startDialogTurn({
           sessionId: sessionId,
           userInput: message,
           turnId: dialogTurnId,

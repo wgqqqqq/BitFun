@@ -1,78 +1,8 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { FileTreeNode } from './FileTreeNode';
-import { FileTreeProps, FileSystemNode } from '../types';
+import { FileTreeProps } from '../types';
 import { lazyCompressFileTree, shouldCompressPaths, CompressedNode } from '../utils/pathCompression';
-import { Input } from '@/component-library';
-import { FileText, FolderOpen } from 'lucide-react';
 import { useI18n } from '@/infrastructure/i18n';
-
-interface RenameInputProps {
-  node: FileSystemNode;
-  onRename: (newName: string) => void;
-  onCancel?: () => void;
-}
-
-const RenameInput: React.FC<RenameInputProps> = ({ node, onRename, onCancel }) => {
-  const [value, setValue] = useState(node.name);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const input = document.querySelector('.bitfun-file-explorer__rename-input-wrapper input') as HTMLInputElement;
-      if (input) {
-        input.focus();
-        // Select filename without extension.
-        const dotIndex = node.name.lastIndexOf('.');
-        if (dotIndex > 0 && !node.isDirectory) {
-          input.setSelectionRange(0, dotIndex);
-        } else {
-          input.select();
-        }
-      }
-    }, 10);
-    
-    return () => clearTimeout(timer);
-  }, [node.name, node.isDirectory]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const newName = value.trim();
-      if (newName && newName !== node.name) {
-        onRename(newName);
-      } else {
-        onCancel?.();
-      }
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      onCancel?.();
-    }
-  };
-
-  const handleBlur = () => {
-    const newName = value.trim();
-    if (newName && newName !== node.name) {
-      onRename(newName);
-    } else {
-      onCancel?.();
-    }
-  };
-
-  return (
-    <div className="bitfun-file-explorer__rename-input-wrapper" onClick={(e) => e.stopPropagation()}>
-      <Input
-        type="text"
-        variant="filled"
-        inputSize="small"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={handleBlur}
-        prefix={node.isDirectory ? <FolderOpen size={14} /> : <FileText size={14} />}
-        autoFocus
-      />
-    </div>
-  );
-};
 
 export const FileTree: React.FC<FileTreeProps> = ({
   nodes,

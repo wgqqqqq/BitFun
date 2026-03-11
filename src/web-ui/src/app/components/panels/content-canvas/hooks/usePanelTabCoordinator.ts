@@ -13,10 +13,6 @@ import { useCanvasStore } from '../stores';
 import { useApp } from '@/app/hooks/useApp';
 import { TAB_EVENTS } from '../types';
 import { loadPanelWidth, STORAGE_KEYS, RIGHT_PANEL_CONFIG } from '@/app/layout/panelConfig';
-import { createLogger } from '@/shared/utils/logger';
-
-const log = createLogger('usePanelTabCoordinator');
-
 interface UsePanelTabCoordinatorOptions {
   /** Auto-collapse when all tabs are closed */
   autoCollapseOnEmpty?: boolean;

@@ -2,12 +2,12 @@
 
 import React from 'react';
 import { Code } from 'lucide-react';
-import type { CodeSnippetContext, ValidationResult, RenderOptions } from '../../types/context';
+import type { CodeSnippetContext, ValidationResult, RenderOptions } from '../../../types/context';
 import type { 
   ContextTransformer, 
   ContextValidator, 
   ContextCardRenderer 
-} from '../../services/ContextRegistry';
+} from '../../../services/ContextRegistry';
 import { i18nService } from '@/infrastructure/i18n';
 
 
@@ -194,4 +194,3 @@ export function getLanguageColor(language?: string): string {
   
   return language ? (colorMap[language] || '#858585') : '#858585';
 }
-

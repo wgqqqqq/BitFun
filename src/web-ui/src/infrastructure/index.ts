@@ -5,9 +5,6 @@
 // Event bus
 export * from './event-bus';
 
-// State management
-export * from './state-management';
-
 // API layer
 export * from './api';
 
@@ -22,7 +19,6 @@ export * from './config';
 export * from './hooks/useAIInitialization';
 
 // Infrastructure lifecycle
-import { initializeGlobalState } from './state-management';
 import { initializeConfigInfrastructure } from './config';
 import { globalEventBus } from './event-bus';
 
@@ -34,9 +30,6 @@ export async function initializeInfrastructure(): Promise<void> {
   log.info('Initializing infrastructure systems');
   
   try {
-    // Initialize global state
-    initializeGlobalState();
-    
     // Initialize configuration infrastructure
     await initializeConfigInfrastructure();
     

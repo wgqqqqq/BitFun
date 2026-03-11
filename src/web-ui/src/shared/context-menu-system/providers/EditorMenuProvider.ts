@@ -6,11 +6,7 @@ import { MenuContext, ContextType, EditorContext } from '../types/context.types'
 import { commandExecutor } from '../commands/CommandExecutor';
 import { globalEventBus } from '@/infrastructure/event-bus';
 import { i18nService } from '@/infrastructure/i18n';
-import { createLogger } from '@/shared/utils/logger';
 import { lspExtensionRegistry } from '@/tools/lsp/services/LspExtensionRegistry';
-
-const log = createLogger('EditorMenuProvider');
-
 export class EditorMenuProvider implements IMenuProvider {
   readonly id = 'editor';
   readonly name = i18nService.t('common:contextMenu.editorMenu.name');
@@ -244,4 +240,3 @@ export class EditorMenuProvider implements IMenuProvider {
     return true;
   }
 }
-

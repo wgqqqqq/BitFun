@@ -7,7 +7,7 @@
  * Does not include: file IO, LSP integration (via Extension), UI components.
  */
 
-import React, { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
 import * as monaco from 'monaco-editor';
 import { createLogger } from '@/shared/utils/logger';
 import { monacoInitManager } from '../services/MonacoInitManager';

@@ -55,8 +55,7 @@ export const SessionFileModificationsBar: React.FC<SessionFileModificationsBarPr
   compact = false,
 }) => {
   const { t } = useTranslation('flow-chat');
-  const { files, loading: loadingFiles } = useSnapshotState(sessionId);
-
+  const { files } = useSnapshotState(sessionId);
   const { workspace: currentWorkspace } = useCurrentWorkspace();
 
   const [isExpanded, setIsExpanded] = useState(false);

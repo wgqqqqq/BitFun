@@ -6,7 +6,7 @@
 import { FlowChatStore } from '../../store/FlowChatStore';
 import { parsePartialJson } from '../../../shared/utils/partialJsonParser';
 import { createLogger } from '@/shared/utils/logger';
-import type { FlowChatContext, FlowToolItem, ToolEventOptions, DialogTurn, ModelRound } from './types';
+import type { FlowChatContext, FlowToolItem, ToolEventOptions, DialogTurn } from './types';
 import { immediateSaveDialogTurn } from './PersistenceModule';
 
 const log = createLogger('ToolEventModule');
@@ -316,7 +316,7 @@ function handleCancelled(
 ): void {
   const existingToolItem = store.findToolItem(sessionId, turnId, toolEvent.tool_id);
   const currentStatus = existingToolItem?.status;
-  const finalStatus = currentStatus === 'rejected' ? 'rejected' : 'cancelled';
+  const finalStatus = currentStatus === 'confirmed' ? 'confirmed' : 'cancelled';
   
   store.updateModelRoundItem(sessionId, turnId, toolEvent.tool_id, {
     toolResult: {

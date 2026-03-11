@@ -35,7 +35,6 @@ export const AnchorZone: React.FC<AnchorZoneProps> = ({
   size,
   isMaximized = false,
   onSizeChange,
-  onPositionChange,
   onClose,
   onToggleMaximize,
   children,
@@ -97,10 +96,6 @@ export const AnchorZone: React.FC<AnchorZoneProps> = ({
   }, [isCollapsed]);
 
   // Toggle position
-  const togglePosition = useCallback(() => {
-    onPositionChange(isBottom ? 'right' : 'bottom');
-  }, [isBottom, onPositionChange]);
-
   return (
     <div
       ref={containerRef}

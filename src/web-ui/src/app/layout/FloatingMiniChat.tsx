@@ -26,6 +26,9 @@ import { ModernFlowChatContainer } from '../../flow_chat/components/modern/Moder
 import { Tooltip, Input } from '@/component-library';
 import './FloatingMiniChat.scss';
 
+const getSessionTimestamp = (updatedAt?: number, lastActiveAt?: number) =>
+  updatedAt ?? lastActiveAt ?? 0;
+
 export const FloatingMiniChat: React.FC = () => {
   const { t } = useTranslation('flow-chat');
   const { toolbarState } = useToolbarModeContext();
@@ -55,7 +58,7 @@ export const FloatingMiniChat: React.FC = () => {
 
   const sessions = useMemo(() => {
     return Array.from(flowChatState.sessions.values())
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .sort((a, b) => getSessionTimestamp(b.updatedAt, b.lastActiveAt) - getSessionTimestamp(a.updatedAt, a.lastActiveAt))
       .slice(0, 10);
   }, [flowChatState]);
 

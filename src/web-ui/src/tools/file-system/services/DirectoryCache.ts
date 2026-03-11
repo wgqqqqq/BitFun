@@ -1,8 +1,4 @@
 import { FileSystemNode, DirectoryCacheEntry } from '../types';
-import { createLogger } from '@/shared/utils/logger';
-
-const log = createLogger('DirectoryCache');
-
 interface DirectoryCacheConfig {
   maxEntries: number;
   ttl: number;

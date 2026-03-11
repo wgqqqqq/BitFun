@@ -5,7 +5,6 @@
 import type { FlowChatStore } from '../../store/FlowChatStore';
 import type { EventBatcher } from '../EventBatcher';
 import type { processingStatusManager } from '../ProcessingStatusManager';
-import type { DialogTurn, FlowToolItem, FlowTextItem } from '../../types/flow-chat';
 
 /**
  * Shared context for FlowChatManager modules.

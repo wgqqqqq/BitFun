@@ -71,12 +71,9 @@ export function useOnboarding(
     skipOnboarding: storeSkipOnboarding,
     completeOnboarding: storeCompleteOnboarding,
     startOnboarding: storeStartOnboarding,
-    resetOnboarding: storeResetOnboarding,
     setLanguage: storeSetLanguage,
     setTheme: storeSetTheme,
-    forceShowOnboarding
   } = useOnboardingStore();
-
   // Initialize
   useEffect(() => {
     if (autoInitialize) {

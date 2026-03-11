@@ -70,12 +70,12 @@ export interface CommandMetadata {
 }
 
  
-export interface CommandExecutionContext extends MenuContext {
+export type CommandExecutionContext = MenuContext & {
    
   commandId: CommandId;
    
   params?: Record<string, any>;
-}
+};
 
  
 export interface CommandHistory {

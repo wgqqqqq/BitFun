@@ -27,4 +27,3 @@ export * from './lsp';
 export * from './mermaid-editor';
 export * from './snapshot_system';
 export * from './terminal';
-export * from './workspace';

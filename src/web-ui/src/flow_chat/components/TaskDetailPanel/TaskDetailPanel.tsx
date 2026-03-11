@@ -167,8 +167,8 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ data }) => {
     if (!filePath) return;
     
     try {
-      const { useCanvasStore } = await import('@/app/components/panels/content-canvas/stores/canvasStore');
-      const store = useCanvasStore.getState();
+      const { useAgentCanvasStore } = await import('@/app/components/panels/content-canvas/stores/canvasStore');
+      const store = useAgentCanvasStore.getState();
       
       if (store.layout.splitMode === 'none') {
         store.setSplitMode('horizontal');
@@ -195,7 +195,6 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ data }) => {
           <FlowTextBlock
             key={item.id}
             textItem={item as FlowTextItem}
-            enableTypewriter={false}
           />
         );
       

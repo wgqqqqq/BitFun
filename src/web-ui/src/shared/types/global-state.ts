@@ -3,6 +3,11 @@
  */
 import { globalAPI } from '@/infrastructure/api';
 import { workspaceAPI } from '@/infrastructure/api';
+import type {
+  ApplicationState as APIApplicationState,
+  AppStatus as APIAppStatus,
+  WorkspaceInfo as APIWorkspaceInfo,
+} from '@/infrastructure/api/service-api/GlobalAPI';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('GlobalStateAPI');
@@ -132,6 +137,69 @@ export interface GlobalStateAPI {
   getWatchedPaths(): Promise<string[]>;
 }
 
+function mapAppStatusToApi(status: AppStatus): APIAppStatus {
+  switch (status) {
+    case AppStatus.Initializing:
+      return { isInitialized: false, hasError: false };
+    case AppStatus.Error:
+      return { isInitialized: true, hasError: true, errorMessage: 'Application error' };
+    default:
+      return { isInitialized: true, hasError: false };
+  }
+}
+
+function mapApiStatus(status: APIAppStatus): AppStatus {
+  if (status.hasError) return AppStatus.Error;
+  if (!status.isInitialized) return AppStatus.Initializing;
+  return AppStatus.Running;
+}
+
+function createDefaultUserSettings(): UserSettings {
+  return {
+    theme: 'system',
+    language: 'en-US',
+    autoSaveInterval: 0,
+    maxCachedGraphs: 0,
+    debugMode: false,
+    customSettings: {},
+  };
+}
+
+function mapWorkspaceInfo(workspace: APIWorkspaceInfo): WorkspaceInfo {
+  const now = new Date().toISOString();
+  return {
+    id: workspace.rootPath,
+    name: workspace.name,
+    rootPath: workspace.rootPath,
+    workspaceType: WorkspaceType.Other,
+    languages: [],
+    openedAt: now,
+    lastAccessed: now,
+    description: workspace.type,
+    tags: [],
+    statistics: {
+      totalFiles: workspace.filesCount,
+      totalLines: 0,
+      totalSize: 0,
+      filesByLanguage: {},
+      filesByExtension: {},
+      lastUpdated: now,
+    },
+  };
+}
+
+function mapApplicationState(state: APIApplicationState): ApplicationState {
+  const now = new Date().toISOString();
+  return {
+    appId: 'bitfun',
+    startupTime: new Date(Date.now() - state.uptime).toISOString(),
+    version: state.version,
+    userSettings: createDefaultUserSettings(),
+    status: mapApiStatus(state.status),
+    lastActivity: now,
+  };
+}
+
  
 export function createGlobalStateAPI(): GlobalStateAPI {
   return {
@@ -142,11 +210,11 @@ export function createGlobalStateAPI(): GlobalStateAPI {
 
     
     async getAppState(): Promise<ApplicationState> {
-      return await globalAPI.getAppState();
+      return mapApplicationState(await globalAPI.getAppState());
     },
 
     async updateAppStatus(status: AppStatus): Promise<void> {
-      return await globalAPI.updateAppStatus(status);
+      return await globalAPI.updateAppStatus(mapAppStatusToApi(status));
     },
 
     
@@ -162,7 +230,7 @@ export function createGlobalStateAPI(): GlobalStateAPI {
         throw new Error('Path parameter is required and cannot be empty');
       }
       
-      return await globalAPI.openWorkspace(path);
+      return mapWorkspaceInfo(await globalAPI.openWorkspace(path));
     },
 
     async closeWorkspace(workspaceId: string): Promise<void> {
@@ -170,25 +238,27 @@ export function createGlobalStateAPI(): GlobalStateAPI {
     },
 
     async setActiveWorkspace(workspaceId: string): Promise<WorkspaceInfo> {
-      return await globalAPI.setActiveWorkspace(workspaceId);
+      return mapWorkspaceInfo(await globalAPI.setActiveWorkspace(workspaceId));
     },
 
     async getCurrentWorkspace(): Promise<WorkspaceInfo | null> {
-      return await globalAPI.getCurrentWorkspace();
+      const workspace = await globalAPI.getCurrentWorkspace();
+      return workspace ? mapWorkspaceInfo(workspace) : null;
     },
 
     async getOpenedWorkspaces(): Promise<WorkspaceInfo[]> {
-      return await globalAPI.getOpenedWorkspaces();
+      return (await globalAPI.getOpenedWorkspaces()).map(mapWorkspaceInfo);
     },
 
     async getRecentWorkspaces(): Promise<WorkspaceInfo[]> {
-      const workspaces = await globalAPI.getRecentWorkspaces();
+      const workspaces = (await globalAPI.getRecentWorkspaces()).map(mapWorkspaceInfo);
       logger.debug('getRecentWorkspaces returned', workspaces);
       return workspaces;
     },
 
     async scanWorkspaceInfo(workspacePath: string): Promise<WorkspaceInfo | null> {
-      return await globalAPI.scanWorkspaceInfo(workspacePath);
+      const workspace = await globalAPI.scanWorkspaceInfo(workspacePath);
+      return workspace ? mapWorkspaceInfo(workspace) : null;
     },
 
     

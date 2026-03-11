@@ -7,8 +7,6 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   UseAppReturn,
   AppState,
-  AppEvent,
-  Agent,
   AgentConfig,
   ChatSession,
   TabInfo,
@@ -24,7 +22,7 @@ export const useApp = (): UseAppReturn => {
 
   // Listen for app state changes
   useEffect(() => {
-    const unsubscribe = appManager.addEventListener((event: AppEvent) => {
+    const unsubscribe = appManager.addEventListener(() => {
       // Update state on each event
       setState(appManager.getState());
     });

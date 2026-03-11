@@ -6,6 +6,7 @@ import { Upload } from 'lucide-react';
 import { useTheme, useThemeManagement, ThemeMetadata, ThemeConfig as ThemeConfigType } from '@/infrastructure/theme';
 import { themeService } from '@/infrastructure/theme/core/ThemeService';
 import { useLanguageSelector } from '@/infrastructure/i18n';
+import type { LocaleId } from '@/infrastructure/i18n/types';
 import {
   ConfigPageHeader,
   ConfigPageLayout,
@@ -91,7 +92,7 @@ export function ThemeConfig() {
             <div className="theme-config__language-select">
               <Select
                 value={currentLanguage}
-                onChange={(value) => selectLanguage(value as string)}
+                onChange={(value) => selectLanguage(String(Array.isArray(value) ? value[0] ?? '' : value) as LocaleId)}
                 options={supportedLocales.map((locale) => ({
                   value: locale.id,
                   label: locale.nativeName,
@@ -136,7 +137,7 @@ export function ThemeConfig() {
             <div className="theme-config__theme-picker">
               <div className="theme-config__theme-select">
                 <Select
-                  value={themeId}
+                  value={themeId ?? ''}
                   onChange={(value) => handleThemeChange(value as string)}
                   disabled={loading}
                   options={themes.map((theme) => ({
@@ -291,7 +292,7 @@ function ThemePreviewThumbnail({ theme }: ThemePreviewThumbnailProps) {
         
         <div 
           className="theme-preview-thumbnail__chat"
-          style={{ background: colors.background.flowchat }}
+          style={{ background: colors.background.scene }}
         >
           
           <div 

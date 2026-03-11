@@ -9,7 +9,7 @@ import type { LocaleId, I18nNamespace, LocaleMetadata } from '../types';
  
 export interface UseI18nReturn {
    
-  t: (key: string, options?: object) => string;
+  t: (key: string, options?: Record<string, unknown>) => string;
    
   i18n: ReturnType<typeof i18nService.getI18nInstance>;
    
@@ -97,7 +97,7 @@ export function useI18n(
   );
 
   return {
-    t,
+    t: (key, translationOptions) => String(t(key, translationOptions as any)),
     i18n,
     currentLanguage,
     currentLocaleMetadata,

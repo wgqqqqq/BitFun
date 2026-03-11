@@ -152,8 +152,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     minimap: { enabled: showMinimap, side: 'right', size: 'proportional' }
   });
   const [_currentThemeId, setCurrentThemeId] = useState<string>(BitFunDarkThemeMetadata.id);
-  void _currentThemeId;
-  
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
   const [selection, setSelection] = useState({ chars: 0, lines: 0 });
   const [statusBarPopover, setStatusBarPopover] = useState<null | 'position' | 'indent' | 'encoding' | 'language'>(null);

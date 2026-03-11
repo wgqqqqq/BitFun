@@ -1,14 +1,10 @@
  
 
 import { i18nService } from '@/infrastructure/i18n';
-import { createLogger } from '@/shared/utils/logger';
 import { fileTabManager } from '@/shared/services/FileTabManager';
 import type { FileTabOptions } from '@/shared/services/FileTabManager';
 import { resolveAndFocusOpenTarget } from '@/shared/services/sceneOpenTargetResolver';
 import type { OpenSource } from '@/shared/services/sceneOpenTargetResolver';
-
-const log = createLogger('TabUtils');
-
 export type TabTargetMode = 'agent' | 'project' | 'git';
 
 export interface TabCreationOptions {

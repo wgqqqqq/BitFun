@@ -801,7 +801,7 @@ function handleTokenUsageUpdate(event: any): void {
 /**
  * Handle context compression started event
  */
-function handleCompressionStarted(context: FlowChatContext, event: any): void {
+function handleCompressionStarted(_context: FlowChatContext, event: any): void {
   const { sessionId, turnId, compressionId, trigger, tokensBefore, contextWindow, threshold } = event;
   
   log.info('Context compression started', {
@@ -924,7 +924,7 @@ function handleCompressionFailed(context: FlowChatContext, event: any): void {
 function handleDialogTurnComplete(
   context: FlowChatContext,
   event: any,
-  onTodoWriteResult: (sessionId: string, turnId: string, result: any) => void
+  _onTodoWriteResult: (sessionId: string, turnId: string, result: any) => void
 ): void {
   const { sessionId, turnId, subagentParentInfo } = event;
 
@@ -1081,7 +1081,7 @@ function handleDialogTurnFailed(context: FlowChatContext, event: any): void {
 function handleDialogTurnCancelled(
   context: FlowChatContext,
   event: any,
-  onTodoWriteResult: (sessionId: string, turnId: string, result: any) => void
+  _onTodoWriteResult: (sessionId: string, turnId: string, result: any) => void
 ): void {
   const { sessionId, turnId, subagentParentInfo } = event;
 

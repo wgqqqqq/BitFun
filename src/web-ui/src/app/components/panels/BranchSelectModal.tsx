@@ -14,6 +14,11 @@ import './BranchSelectModal.scss';
 
 const log = createLogger('BranchSelectModal');
 
+type SelectableBranch = GitBranchType & {
+  isCurrent?: boolean;
+  hasWorktree?: boolean;
+};
+
 export interface BranchSelectResult {
   branch: string;
   isNew: boolean;
@@ -93,7 +98,7 @@ export const BranchSelectModal: React.FC<BranchSelectModalProps> = ({
     }
   };
 
-  const filteredBranches = useMemo(() => {
+  const filteredBranches = useMemo<SelectableBranch[]>(() => {
     let result = branches;
 
     if (searchTerm.trim()) {
@@ -103,8 +108,8 @@ export const BranchSelectModal: React.FC<BranchSelectModalProps> = ({
       );
     }
 
-    const availableBranches: GitBranchType[] = [];
-    const unavailableBranches: GitBranchType[] = [];
+    const availableBranches: SelectableBranch[] = [];
+    const unavailableBranches: SelectableBranch[] = [];
     const existingWorktreeSet = new Set(existingWorktreeBranches);
 
     result.forEach(branch => {
@@ -217,9 +222,7 @@ export const BranchSelectModal: React.FC<BranchSelectModalProps> = ({
                 )}
 
                 {filteredBranches.map((branch) => {
-                  // @ts-ignore
                   const isDisabled = branch.isCurrent || branch.hasWorktree;
-                  // @ts-ignore
                   const hasWorktree = branch.hasWorktree;
 
                   return (

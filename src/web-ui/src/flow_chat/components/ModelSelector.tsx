@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Cpu, ChevronDown, Check, Sparkles, Zap } from 'lucide-react';
+import { Cpu, ChevronDown, Check, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { configManager } from '@/infrastructure/config/services/ConfigManager';
 import { globalEventBus } from '@/infrastructure/event-bus';
@@ -46,8 +46,6 @@ const isSpecialModel = (value: string): value is 'primary' | 'fast' => {
 export const ModelSelector: React.FC<ModelSelectorProps> = ({
   currentMode,
   className = '',
-  sessionId,
-  ...restProps
 }) => {
   const { t } = useTranslation('flow-chat');
   const [allModels, setAllModels] = useState<AIModelConfig[]>([]);
@@ -315,5 +313,4 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     </div>
   );
 };
-
 export default ModelSelector;

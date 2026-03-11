@@ -8,6 +8,7 @@ import {
   SessionConfig, 
   DialogTurn, 
   ModelRound,
+  AnyFlowItem,
   FlowItem,
   FlowTextItem
 } from '../types/flow-chat';
@@ -74,14 +75,12 @@ export const useFlowChat = () => {
   useEffect(() => {
     let unlisten: UnlistenFn | null = null;
 
-    agentAPI.onSessionTitleGenerated((event) => {
+    unlisten = agentAPI.onSessionTitleGenerated((event) => {
       flowChatStore.updateSessionTitle(
         event.sessionId,
         event.title,
         'generated'
       );
-    }).then(fn => {
-      unlisten = fn;
     });
 
     return () => {
@@ -334,7 +333,7 @@ export const useFlowChat = () => {
     }));
   }, [state.activeSessionId]);
 
-  const addModelRoundItem = useCallback((dialogTurnId: string, item: FlowItem, modelRoundId?: string) => {
+  const addModelRoundItem = useCallback((dialogTurnId: string, item: AnyFlowItem, modelRoundId?: string) => {
     const activeSessionId = state.activeSessionId;
     if (!activeSessionId) return;
 

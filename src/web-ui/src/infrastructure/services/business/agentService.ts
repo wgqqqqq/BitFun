@@ -233,54 +233,6 @@ export class AgentService {
   }
 
    
-  private static mapAgentType(frontendType: AgentType): string {
-    const typeMap: Record<AgentType, string> = {
-      'project_qa': 'general-purpose',
-      'requirement_clarification': 'general-purpose',
-      'core': 'general-purpose'
-    };
-    return typeMap[frontendType] || 'general-purpose';
-  }
-
-   
-  private static simulateBatchProcessing(allResponses: Record<string, string | null>): AgentResponse {
-    const completedCount = Object.values(allResponses).filter(v => v !== null && v.trim()).length;
-    const skippedCount = Object.values(allResponses).filter(v => v === null).length;
-    const totalCount = Object.keys(allResponses).length;
-    
-    
-    const mockInteractiveSections = Object.entries(allResponses).map(([id, response], index) => ({
-      id,
-      title: i18nService.t('common:agentService.clarificationItemTitle', { index: index + 1 }),
-      content: i18nService.t('common:agentService.clarificationItemProcessed'),
-      section_type: response === null ? 'Skipped' : 'Completed',
-      user_input: response || '',
-      status: response === null ? 'Skipped' : 'Completed',
-      importance: 3,
-      required: false,
-      position: `${index + 1}`
-    }));
-
-    
-    const completenessScore = Math.round((completedCount / totalCount) * 100);
-    const mockEvaluation = {
-      completeness_score: completenessScore,
-      total_sections: totalCount,
-      completed_sections: completedCount,
-      skipped_sections: skippedCount,
-      phase: 'Completed'
-    };
-
-    return {
-      content: i18nService.t('common:agentService.clarificationBatchCompleted'),
-      metadata: {
-        interactive_sections: mockInteractiveSections,
-        evaluation: mockEvaluation,
-        phase: 'Completed'
-      }
-    };
-  }
-
    
   static requiresSpecialVisualization(agentType: AgentType, metadata?: Record<string, any>): boolean {
     if (agentType === 'requirement_clarification') {
@@ -293,5 +245,4 @@ export class AgentService {
 
 
 }
-
 export default AgentService;

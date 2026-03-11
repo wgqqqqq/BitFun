@@ -5,8 +5,8 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GitBranch, X, AlertCircle } from 'lucide-react';
-import { Button, Modal, Input, IconButton } from '@/component-library';
+import { GitBranch } from 'lucide-react';
+import { Button, Modal, Input } from '@/component-library';
 import './CreateBranchDialog.scss';
 
 export interface CreateBranchDialogProps {
@@ -191,4 +191,3 @@ export const CreateBranchDialog: React.FC<CreateBranchDialogProps> = ({
 };
 
 export default CreateBranchDialog;
-

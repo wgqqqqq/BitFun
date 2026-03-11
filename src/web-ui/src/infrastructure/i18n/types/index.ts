@@ -34,7 +34,11 @@ export type I18nNamespace =
   | 'settings'         
   | 'errors'           
   | 'notifications'    
-  | 'components';      
+  | 'components'
+  | 'panels/git'
+  | 'panels/terminal'
+  | 'mermaid-editor'
+  | 'settings/prompt-templates';      
 
  
 export interface I18nConfig {

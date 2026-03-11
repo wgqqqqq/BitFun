@@ -172,8 +172,6 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
     if (content?.type !== 'mermaid-editor') return null;
     
     const mermaidData = content.data || {};
-    const metadata = content.metadata || {};
-    
     return {
       initialSourceCode: mermaidData.sourceCode || t('flexiblePanel.fallback.mermaidDefaultCode'),
       onSave: async (sourceCode: string) => {
@@ -514,7 +512,7 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
                   onDirtyStateChange(hasChanges);
                 }
               }}
-              onSave={(savedContent) => {
+              onSave={() => {
                 if (onDirtyStateChange) {
                   onDirtyStateChange(false);
                 }
@@ -793,4 +791,3 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
 FlexiblePanel.displayName = 'FlexiblePanel';
 
 export default FlexiblePanel;
-

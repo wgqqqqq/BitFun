@@ -32,7 +32,6 @@ interface GetFileDiffResult {
 
 export const GetFileDiffDisplay: React.FC<ToolCardProps> = React.memo(({
   toolItem,
-  onOpenInEditor
 }) => {
   const { t } = useTranslation('flow-chat');
   const { toolCall, toolResult, status } = toolItem;

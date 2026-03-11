@@ -56,15 +56,9 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
   
   const {
     files,
-    loading,
     error,
-    acceptFile,
-    rejectFile,
-    acceptBlock: _acceptBlock,
-    rejectBlock: _rejectBlock,
     clearError
   } = useSnapshotState(sessionId);
-
   const eventBus = SnapshotEventBus.getInstance();
   const { workspace: currentWorkspace } = useCurrentWorkspace();
 
@@ -117,20 +111,6 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
       }, sessionId, currentFilePath);
     }
   }, [status, toolResult, sessionId, currentFilePath, toolItem.toolName, eventBus]);
-
-  const handleFileAction = useCallback(async (action: 'accept' | 'reject') => {
-    if (!currentFilePath) return;
-    
-    try {
-      if (action === 'accept') {
-        await acceptFile(currentFilePath);
-      } else {
-        await rejectFile(currentFilePath);
-      }
-    } catch (error) {
-      log.error('File action failed', { action, filePath: currentFilePath, error });
-    }
-  }, [currentFilePath, acceptFile, rejectFile]);
 
   const getToolDisplayInfo = () => {
     const toolMap: Record<string, { icon: string; name: string }> = {

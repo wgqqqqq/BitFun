@@ -6,11 +6,6 @@ import {
   NotificationRecord,
   NotificationConfig 
 } from '../types';
-import { createLogger } from '@/shared/utils/logger';
-
-const log = createLogger('NotificationStore');
-
-
 const DEFAULT_CONFIG: NotificationConfig = {
   maxActiveNotifications: 3,
   defaultDuration: 3000,
@@ -284,4 +279,3 @@ class NotificationStore {
 
 
 export const notificationStore = new NotificationStore();
-

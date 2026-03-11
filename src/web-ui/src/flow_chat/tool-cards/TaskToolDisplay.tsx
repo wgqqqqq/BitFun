@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
+import {
   ChevronDown,
   ChevronUp,
   Split,
@@ -11,7 +11,7 @@ import {
   PanelRightOpen
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { CubeLoading, Tooltip, Button, IconButton } from '../../component-library';
+import { CubeLoading, Button, IconButton } from '../../component-library';
 import type { ToolCardProps } from '../types/flow-chat';
 import { BaseToolCard } from './BaseToolCard';
 import { taskCollapseStateManager } from '../store/TaskCollapseStateManager';

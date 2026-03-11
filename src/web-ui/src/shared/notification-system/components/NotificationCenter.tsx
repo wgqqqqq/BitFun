@@ -7,11 +7,7 @@ import { useI18n } from '@/infrastructure/i18n';
 import { useNotificationHistory, useCenterOpen, useAllProgressNotifications, useAllLoadingNotifications } from '../hooks/useNotificationState';
 import { notificationService } from '../services/NotificationService';
 import { NotificationFilter, NotificationRecord, Notification } from '../types';
-import { createLogger } from '@/shared/utils/logger';
 import './NotificationCenter.scss';
-
-const log = createLogger('NotificationCenter');
-
 export const NotificationCenter: React.FC = () => {
   const isOpen = useCenterOpen();
   const history = useNotificationHistory();

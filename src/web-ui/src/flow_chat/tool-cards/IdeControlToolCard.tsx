@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Loader2, Settings, Clock, Check } from 'lucide-react';
+import { Loader2, Clock, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ToolCardProps } from '../types/flow-chat';
 import { CompactToolCard, CompactToolCardHeader } from './CompactToolCard';
@@ -15,7 +15,7 @@ export const IdeControlToolCard: React.FC<ToolCardProps> = ({
   toolItem
 }) => {
   const { t } = useTranslation('flow-chat');
-  const { toolCall, toolResult, status } = toolItem;
+  const { toolCall, status } = toolItem;
   const toolInput = toolCall?.input;
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -169,7 +169,7 @@ export const IdeControlToolCard: React.FC<ToolCardProps> = ({
       isExpanded={isExpanded}
       onClick={handleCardClick}
       className="ide-control-card"
-      clickable={hasDetails}
+      clickable={Boolean(hasDetails)}
       header={
         <CompactToolCardHeader
           statusIcon={getStatusIcon()}
@@ -180,4 +180,3 @@ export const IdeControlToolCard: React.FC<ToolCardProps> = ({
     />
   );
 };
-

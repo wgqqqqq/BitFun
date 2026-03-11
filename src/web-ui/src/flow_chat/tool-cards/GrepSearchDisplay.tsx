@@ -7,10 +7,6 @@ import { Loader2, Clock, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ToolCardProps } from '../types/flow-chat';
 import { CompactToolCard, CompactToolCardHeader } from './CompactToolCard';
-import { createLogger } from '@/shared/utils/logger';
-
-const log = createLogger('GrepSearchDisplay');
-
 export const GrepSearchDisplay: React.FC<ToolCardProps> = ({
   toolItem,
   onExpand

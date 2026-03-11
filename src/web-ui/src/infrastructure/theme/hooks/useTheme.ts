@@ -2,9 +2,7 @@
 
 import { useEffect, useMemo } from 'react';
 import { useThemeStore } from '../store/themeStore';
-import { ThemeConfig, ThemeId, ThemeType } from '../types';
-
- 
+import { ThemeType } from '../types';
 export function useTheme() {
   const {
     currentTheme,
@@ -138,7 +136,6 @@ export function useThemeToggle() {
     isLight,
   };
 }
-
 
 
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { snapshotAPI, TurnSnapshot } from '@/infrastructure/api';
+import { snapshotAPI } from '@/infrastructure/api';
+import type { TurnSnapshot } from '@/infrastructure/api/service-api/SnapshotAPI';
 import { TurnRollbackButton } from './TurnRollbackButton';
 import { createLogger } from '@/shared/utils/logger';
 import './TurnHistoryPanel.scss';
@@ -82,7 +83,7 @@ export const TurnHistoryPanel: React.FC<TurnHistoryPanelProps> = ({ sessionId })
               <div className="turn-item-files">
                 <span className="files-label">Modified files:</span>
                 <ul className="files-list">
-                  {turn.modifiedFiles.slice(0, 3).map((file, fileIndex) => (
+                  {turn.modifiedFiles.slice(0, 3).map((file: string, fileIndex: number) => (
                     <li key={fileIndex} className="file-item">{file}</li>
                   ))}
                   {turn.modifiedFiles.length > 3 && (
@@ -103,5 +104,4 @@ export const TurnHistoryPanel: React.FC<TurnHistoryPanelProps> = ({ sessionId })
     </div>
   );
 };
-
 

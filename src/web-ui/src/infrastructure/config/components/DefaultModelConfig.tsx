@@ -28,6 +28,9 @@ const OPTIONAL_CAPABILITY_TYPES: OptionalCapabilityType[] = [
   'speech_recognition'
 ];
 
+const normalizeSelectValue = (value: string | number | (string | number)[]): string | number =>
+  Array.isArray(value) ? (value[0] ?? '') : value;
+
 export const DefaultModelConfig: React.FC = () => {
   const { t } = useTranslation('settings/default-model');
   const renderOptionalLabel = (text: string) => (
@@ -89,10 +92,8 @@ export const DefaultModelConfig: React.FC = () => {
 
   
   const handleDefaultModelChange = async (slot: 'primary' | 'fast', modelId: string | number) => {
+    const modelIdStr = modelId ? String(modelId) : null;
     try {
-      const modelIdStr = modelId ? String(modelId) : null;
-
-      
       const currentConfig = await configManager.getConfig<any>('ai.default_models') || {};
 
       
@@ -122,10 +123,8 @@ export const DefaultModelConfig: React.FC = () => {
 
   
   const handleCapabilityChange = async (capability: OptionalCapabilityType, modelId: string | number) => {
+    const modelIdStr = modelId ? String(modelId) : null;
     try {
-      const modelIdStr = modelId ? String(modelId) : null;
-
-      
       const currentConfig = await configManager.getConfig<any>('ai.default_models') || {};
 
       
@@ -192,9 +191,9 @@ export const DefaultModelConfig: React.FC = () => {
         description={t('core.primary.description')}
         align="center"
       >
-        <Select
-          value={defaultModels.primary || ''}
-          onChange={(value) => handleDefaultModelChange('primary', value)}
+          <Select
+            value={defaultModels.primary || ''}
+            onChange={(value) => handleDefaultModelChange('primary', normalizeSelectValue(value))}
           placeholder={t('core.primary.placeholder')}
           options={enabledModels.map(model => ({
             label: model.name,
@@ -212,7 +211,7 @@ export const DefaultModelConfig: React.FC = () => {
       >
         <Select
           value={defaultModels.fast || ''}
-          onChange={(value) => handleDefaultModelChange('fast', value)}
+          onChange={(value) => handleDefaultModelChange('fast', normalizeSelectValue(value))}
           placeholder={t('core.fast.placeholder')}
           options={[
             { label: t('core.fast.notSet'), value: '' },
@@ -238,7 +237,7 @@ export const DefaultModelConfig: React.FC = () => {
           >
             <Select
               value={configuredModelId || ''}
-              onChange={(value) => handleCapabilityChange(capability, value)}
+              onChange={(value) => handleCapabilityChange(capability, normalizeSelectValue(value))}
               placeholder={t('optional.selectModel')}
               disabled={availableModels.length === 0}
               options={[

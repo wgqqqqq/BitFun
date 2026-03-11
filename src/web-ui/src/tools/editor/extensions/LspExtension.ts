@@ -38,11 +38,11 @@ export function createLspExtension(config: LspExtensionConfig = { enabled: true 
     name: 'LSP Extension',
     priority: ExtensionPriority.HIGH,
     
-    async onEditorCreated(
+    onEditorCreated(
       editor: monaco.editor.IStandaloneCodeEditor,
       model: monaco.editor.ITextModel,
       context: EditorExtensionContext
-    ): Promise<monaco.IDisposable | undefined> {
+    ): void {
       if (!config.enabled || !context.enableLsp) {
         return;
       }
@@ -57,47 +57,47 @@ export function createLspExtension(config: LspExtensionConfig = { enabled: true 
         return;
       }
       
-      try {
-        // Dynamic import to avoid circular dependencies
-        const { lspAdapterManager } = await import('@/tools/lsp/services/LspAdapterManager');
-        const { lspExtensionRegistry } = await import('@/tools/lsp/services/LspExtensionRegistry');
-        
-        if (!lspExtensionRegistry.isInitialized()) {
-          log.warn('LSP extension registry not initialized yet');
-          return;
+      void (async () => {
+        try {
+          // Dynamic import to avoid circular dependencies
+          const { lspAdapterManager } = await import('@/tools/lsp/services/LspAdapterManager');
+          const { lspExtensionRegistry } = await import('@/tools/lsp/services/LspExtensionRegistry');
+
+          if (!lspExtensionRegistry.isInitialized()) {
+            log.warn('LSP extension registry not initialized yet');
+            return;
+          }
+
+          if (!lspExtensionRegistry.isLanguageSupported(context.language)) {
+            return;
+          }
+
+          lspAdapterManager.getOrCreateAdapter(
+            model,
+            context.language,
+            context.filePath,
+            workspacePath
+          );
+
+          lspAdapterManager.registerEditor(model, editor);
+        } catch (error) {
+          log.error('Failed to initialize LSP', error);
         }
-        
-        if (!lspExtensionRegistry.isLanguageSupported(context.language)) {
-          return;
-        }
-        
-        lspAdapterManager.getOrCreateAdapter(
-          model,
-          context.language,
-          context.filePath,
-          workspacePath
-        );
-        
-        lspAdapterManager.registerEditor(model, editor);
-        
-        return {
-          dispose: () => {
-            lspAdapterManager.unregisterEditor(model, editor);
-          },
-        };
-        
-      } catch (error) {
-        log.error('Failed to initialize LSP', error);
-        return;
-      }
+      })();
     },
     
     onEditorWillDispose(
-      _editor: monaco.editor.IStandaloneCodeEditor,
-      _model: monaco.editor.ITextModel,
+      editor: monaco.editor.IStandaloneCodeEditor,
+      model: monaco.editor.ITextModel,
       _context: EditorExtensionContext
     ): void {
-      // Cleanup handled by disposable returned from onEditorCreated
+      void import('@/tools/lsp/services/LspAdapterManager')
+        .then(({ lspAdapterManager }) => {
+          lspAdapterManager.unregisterEditor(model, editor);
+        })
+        .catch(error => {
+          log.error('Failed to dispose LSP editor binding', error);
+        });
     },
   };
 }

@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo } from 'react';
-import { gitService } from '../services';
 import { GitOperationResult, GitMergeParams, GitStashParams } from '../types';
 import { createLogger } from '@/shared/utils/logger';
 import { useI18n } from '@/infrastructure/i18n';

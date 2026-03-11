@@ -10,7 +10,7 @@ import type { LineRange } from '@/component-library';
 export interface FlowChatContextValue {
   // File and panel actions
   onFileViewRequest?: (filePath: string, fileName: string, lineRange?: LineRange) => void;
-  onTabOpen?: (tabInfo: any) => void;
+  onTabOpen?: (tabInfo: any, sessionId?: string, panelType?: string) => void;
   onOpenVisualization?: (type: string, data: any) => void;
   onSwitchToChatPanel?: () => void;
 
@@ -55,6 +55,5 @@ export const FlowChatContext = createContext<FlowChatContextValue>({});
 export const useFlowChatContext = () => {
   return useContext(FlowChatContext);
 };
-
 
 

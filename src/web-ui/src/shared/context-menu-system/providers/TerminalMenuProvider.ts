@@ -5,10 +5,6 @@ import { MenuItem } from '../types/menu.types';
 import { MenuContext, ContextType, TerminalContext } from '../types/context.types';
 import { globalEventBus } from '@/infrastructure/event-bus';
 import { i18nService } from '@/infrastructure/i18n';
-import { createLogger } from '@/shared/utils/logger';
-
-const log = createLogger('TerminalMenuProvider');
-
 export class TerminalMenuProvider implements IMenuProvider {
   readonly id = 'terminal';
   readonly name = i18nService.t('common:contextMenu.terminalMenu.name');

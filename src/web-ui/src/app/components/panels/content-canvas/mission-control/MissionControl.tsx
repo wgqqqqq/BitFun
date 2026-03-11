@@ -29,8 +29,7 @@ export const MissionControl: React.FC<MissionControlProps> = ({
   const { t } = useTranslation('components');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroups, setSelectedGroups] = useState<Set<EditorGroupId>>(new Set(['primary', 'secondary', 'tertiary']));
-  const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
-
+  const [, setDraggingTabId] = useState<string | null>(null);
   const {
     primaryGroup,
     secondaryGroup,
@@ -40,10 +39,8 @@ export const MissionControl: React.FC<MissionControlProps> = ({
     switchToTab,
     closeTab,
     togglePinTab,
-    closeMissionControl,
     setSplitMode,
   } = useCanvasStore();
-
   // Organize tabs by group
   const organizedTabs = useMemo(() => {
     const primary = primaryGroup.tabs
@@ -144,7 +141,7 @@ export const MissionControl: React.FC<MissionControlProps> = ({
   }, [togglePinTab]);
 
   // Drag start
-  const handleDragStart = useCallback((tabId: string) => (e: React.DragEvent) => {
+  const handleDragStart = useCallback((tabId: string) => (_e: React.DragEvent) => {
     setDraggingTabId(tabId);
   }, []);
 

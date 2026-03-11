@@ -111,6 +111,9 @@ interface CanvasStoreActions {
   
   /** Set split ratio */
   setSplitRatio: (ratio: number) => void;
+
+  /** Set secondary split ratio used by grid top row */
+  setSplitRatio2: (ratio: number) => void;
   
   /** Set anchor position */
   setAnchorPosition: (position: AnchorPosition) => void;
@@ -984,6 +987,12 @@ const createCanvasStoreHook = () => create<CanvasStore>()(
       setSplitRatio: (ratio) => {
         set((draft) => {
           draft.layout.splitRatio = clampSplitRatio(ratio);
+        });
+      },
+
+      setSplitRatio2: (ratio) => {
+        set((draft) => {
+          draft.layout.splitRatio2 = clampSplitRatio(ratio);
         });
       },
       

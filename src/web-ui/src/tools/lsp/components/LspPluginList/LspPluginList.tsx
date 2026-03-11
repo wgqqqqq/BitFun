@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Package, Trash2, CheckCircle, AlertCircle, ChevronDown, ChevronRight, Upload } from 'lucide-react';
-import { Button, IconButton, Card, CardBody } from '@/component-library';
+import { Button, Card, CardBody } from '@/component-library';
 import { useLspPlugins } from '../../hooks/useLsp';
 import type { LspPlugin } from '../../types';
 import { useNotification } from '@/shared/notification-system';
@@ -23,9 +23,7 @@ export interface LspPluginListProps {
 
 export const LspPluginList: React.FC<LspPluginListProps> = ({
   className,
-  onInitialize,
   onInstallPlugin,
-  isInitializing = false,
   isInstalling = false,
   onMountReload,
 }) => {
@@ -126,7 +124,6 @@ export const LspPluginList: React.FC<LspPluginListProps> = ({
     </div>
   );
 };
-
 interface PluginItemProps {
   plugin: LspPlugin;
   isExpanded: boolean;
@@ -236,5 +233,4 @@ const PluginItem: React.FC<PluginItemProps> = ({ plugin, isExpanded, onToggle, o
     </Card>
   );
 };
-
 

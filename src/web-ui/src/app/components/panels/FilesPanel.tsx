@@ -82,7 +82,6 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
     selectedFile,
     expandedFolders,
     loading,
-    silentRefreshing,
     error,
     loadFileTree,
     selectFile,
@@ -97,13 +96,12 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
     enableAutoWatch: true,
     enableLazyLoad: true
   });
-
   const handleTreeUpdate = useCallback((updatedTree: FileSystemNode[]) => {
     log.debug('File tree updated', { nodeCount: updatedTree.length });
     setFileTree(updatedTree);
   }, [setFileTree]);
 
-  const handleNodeExpandLazy = useCallback((path: string, expanded: boolean) => {
+  const handleNodeExpandLazy = useCallback((path: string) => {
     expandFolderLazy(path);
   }, [expandFolderLazy]);
 

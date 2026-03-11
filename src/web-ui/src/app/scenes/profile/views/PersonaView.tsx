@@ -215,11 +215,10 @@ interface ModelPillProps {
   slotDesc: string;
   currentId: string;
   models: AIModelConfig[];
-  defaultModels: DefaultModelsConfig | null;
   onChange: (id: string) => void;
 }
 const ModelPill: React.FC<ModelPillProps> = ({
-  slotKey, slotLabel, slotDesc, currentId, models, defaultModels, onChange,
+  slotKey, slotLabel, slotDesc, currentId, models, onChange,
 }) => {
   const { t } = useTranslation('scenes/profile');
 
@@ -293,7 +292,6 @@ const ModelPill: React.FC<ModelPillProps> = ({
     </div>
   );
 };
-
 const PersonaView: React.FC<{ workspacePath: string }> = ({ workspacePath }) => {
   const { t } = useTranslation('scenes/profile');
 
@@ -311,7 +309,7 @@ const PersonaView: React.FC<{ workspacePath: string }> = ({ workspacePath }) => 
   const descInputRef = useRef<HTMLInputElement>(null);
 
   const [models, setModels] = useState<AIModelConfig[]>([]);
-  const [defaultModels, setDefaultModels] = useState<DefaultModelsConfig | null>(null);
+  const [, setDefaultModels] = useState<DefaultModelsConfig | null>(null);
   const [funcAgentModels, setFuncAgentModels] = useState<Record<string, string>>({});
   const [rules, setRules] = useState<AIRule[]>([]);
   const [memories, setMemories] = useState<AIMemory[]>([]);
@@ -1061,7 +1059,6 @@ const PersonaView: React.FC<{ workspacePath: string }> = ({ workspacePath }) => 
                       slotDesc={t(`modelSlots.${key}.desc`)}
                       currentId={slotIds[key]}
                       models={models}
-                      defaultModels={defaultModels}
                       onChange={id => handleModelChange(key, id)}
                     />
                   ))}
@@ -1076,7 +1073,6 @@ const PersonaView: React.FC<{ workspacePath: string }> = ({ workspacePath }) => 
                       slotDesc={t(`modelSlots.${key}.desc`)}
                       currentId={slotIds[key]}
                       models={models}
-                      defaultModels={defaultModels}
                       onChange={id => handleModelChange(key, id)}
                     />
                   ))}
@@ -1231,7 +1227,7 @@ const PersonaView: React.FC<{ workspacePath: string }> = ({ workspacePath }) => 
                       </span>
                     );
                   })}
-                  <button type="button" className={`${C}-link`} onClick={() => navToSettings('mcp')}>
+                  <button type="button" className={`${C}-link`} onClick={() => navToSettings('mcp-tools')}>
                     {t('actions.manage')} <ChevronRight size={11} />
                   </button>
                 </div>

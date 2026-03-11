@@ -4,7 +4,7 @@
  */
 
 import { gitAPI } from '@/infrastructure/api';
-import { diffService, DiffStats as UnifiedDiffStats } from '@/tools/editor/services';
+import { diffService } from '@/tools/editor/services';
 import { createLogger } from '@/shared/utils/logger';
 
 const log = createLogger('gitDiffService');
@@ -164,4 +164,3 @@ export class GitDiffService {
 }
 
 export default GitDiffService;
-

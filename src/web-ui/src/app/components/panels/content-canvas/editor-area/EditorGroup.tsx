@@ -15,7 +15,6 @@ import type {
   DropPosition,
   PanelContent,
   SplitMode,
-  CanvasTab,
 } from '../types';
 import './EditorGroup.scss';
 

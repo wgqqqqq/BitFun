@@ -10,7 +10,6 @@ import {
   GitBranch, 
   Eye,
   Edit3,
-  Terminal as TerminalIcon,
   BookOpen,
   Settings,
   ClipboardList,
@@ -125,6 +124,22 @@ export const PANEL_CONTENT_CONFIGS: Record<PanelContentType, PanelContentConfig>
     supportsDownload: false,
     showHeader: false
   },
+  'git-graph': {
+    type: 'git-graph',
+    displayName: 'Git Graph',
+    icon: GitBranch,
+    supportsCopy: false,
+    supportsDownload: false,
+    showHeader: false
+  },
+  'git-branch-history': {
+    type: 'git-branch-history',
+    displayName: 'Git Branch History',
+    icon: GitBranch,
+    supportsCopy: false,
+    supportsDownload: false,
+    showHeader: false
+  },
   'ai-session': {
     type: 'ai-session',
     displayName: 'AI Session',
@@ -177,6 +192,14 @@ export const PANEL_CONTENT_CONFIGS: Record<PanelContentType, PanelContentConfig>
     type: 'plan-viewer',
     displayName: 'Plan Viewer',
     icon: ClipboardList,
+    supportsCopy: false,
+    supportsDownload: false,
+    showHeader: false
+  },
+  'terminal': {
+    type: 'terminal',
+    displayName: 'Terminal',
+    icon: Code,
     supportsCopy: false,
     supportsDownload: false,
     showHeader: false
@@ -282,4 +305,3 @@ export const generateFileName = (type: PanelContentType, title: string): string 
       return `${baseName}.txt`;
   }
 };
-

@@ -35,8 +35,7 @@ interface UseGitOperationsReturn {
 }
 
 export function useGitOperations(options: UseGitOperationsOptions): UseGitOperationsReturn {
-  const { repositoryPath, autoRefresh = true } = options;
-
+  const { repositoryPath } = options;
   const [isOperating, setIsOperating] = useState(false);
   const [currentOperation, setCurrentOperation] = useState<GitOperationType | null>(null);
   const [error, setError] = useState<string | null>(null);

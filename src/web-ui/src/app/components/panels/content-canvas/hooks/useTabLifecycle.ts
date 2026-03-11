@@ -12,12 +12,8 @@ import { useCallback, useEffect } from 'react';
 import { useCanvasStore, useAgentCanvasStore, useProjectCanvasStore, useGitCanvasStore } from '../stores';
 import type { EditorGroupId, PanelContent, CreateTabEventDetail } from '../types';
 import { TAB_EVENTS } from '../types';
-import { createLogger } from '@/shared/utils/logger';
 import { useI18n } from '@/infrastructure/i18n';
 import { drainPendingTabs } from '@/shared/services/pendingTabQueue';
-
-const log = createLogger('useTabLifecycle');
-
 interface UseTabLifecycleOptions {
   /** App mode / target canvas */
   mode?: 'agent' | 'project' | 'git';
@@ -136,12 +132,9 @@ export const useTabLifecycle = (options: UseTabLifecycleOptions = {}): UseTabLif
 
     if (tab.isDirty) {
       // Show confirmation and ensure correct return handling
-      const resultPromise = window.confirm(
+      const result = window.confirm(
         t('tabs.confirmCloseWithDirty', { title: tab.title })
       );
-
-      // Await if confirm returns a Promise
-      const result = resultPromise instanceof Promise ? await resultPromise : resultPromise;
 
       if (!result) {
         return false;
@@ -166,12 +159,9 @@ export const useTabLifecycle = (options: UseTabLifecycleOptions = {}): UseTabLif
 
     // Show confirmation with list of dirty files
     const fileList = dirtyTabs.map(t => `  - ${t.title}`).join('\n');
-    const resultPromise = window.confirm(
+    const result = window.confirm(
       t('tabs.confirmCloseAllWithDirty', { count: dirtyTabs.length, fileList })
     );
-
-    // Await if confirm returns a Promise
-    const result = resultPromise instanceof Promise ? await resultPromise : resultPromise;
 
     if (!result) {
       return false;

@@ -261,7 +261,6 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({ workspace, isActive, isSi
           workspaceId={workspace.id}
           workspacePath={workspace.rootPath}
           isActiveWorkspace={isActive}
-          showCreateActions={false}
         />
       </div>
 
