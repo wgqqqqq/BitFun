@@ -12,14 +12,18 @@ export class ChatPage extends BasePage {
     inputContainer: '[data-testid="chat-input-container"], .chat-input-container',
     textarea: '[data-testid="chat-input-textarea"], .chat-input textarea, textarea[class*="chat-input"]',
     sendBtn: '[data-testid="chat-input-send-btn"], .chat-input__send-btn, button[class*="send"]',
+    cancelBtn: '[data-testid="chat-input-cancel-btn"], .chat-input__cancel-btn, button[class*="cancel"]',
     messageList: '[data-testid="message-list"], .message-list, .chat-messages',
-    userMessage: '[data-testid^="user-message-"], .user-message, [class*="user-message"]',
+    userMessage: '[data-testid^="user-message-"], .user-message-item, .user-message, [class*="user-message"]',
+    latestUserMessageItem: '.user-message-item:last-of-type',
+    rollbackButton: '.user-message-item__rollback-btn',
     modelResponse: '[data-testid^="model-response-"], .model-response, [class*="model-response"], [class*="assistant-message"]',
     modelSelector: '[data-testid="model-selector"], .model-selector, [class*="model-select"]',
     modelDropdown: '[data-testid="model-selector-dropdown"], .model-dropdown',
     toolCard: '[data-testid^="tool-card-"], .tool-card, [class*="tool-card"]',
     loadingIndicator: '[data-testid="loading-indicator"], .loading-indicator, [class*="loading"]',
     streamingIndicator: '[data-testid="streaming-indicator"], .streaming-indicator, [class*="streaming"]',
+    processingIndicator: '.processing-indicator',
   };
 
   async waitForLoad(): Promise<void> {
@@ -115,20 +119,122 @@ export class ChatPage extends BasePage {
     return texts;
   }
 
-  async getModelResponses(): Promise<string[]> {
-    const responses = await $$(this.selectors.modelResponse);
-    const texts: string[] = [];
+  async getVisibleUserMessageCount(): Promise<number> {
+    const candidates = await $$(this.selectors.userMessage);
+    let visibleCount = 0;
 
-    for (const resp of responses) {
+    for (const candidate of candidates) {
       try {
-        const text = await resp.getText();
-        texts.push(text);
-      } catch (e) {
-        // Skip
+        if (await candidate.isDisplayed()) {
+          visibleCount += 1;
+        }
+      } catch {
+        // Ignore stale or hidden elements.
       }
     }
 
-    return texts;
+    return visibleCount;
+  }
+
+  async hoverLatestUserMessage(): Promise<void> {
+    const candidates = await $$(this.selectors.userMessage);
+
+    for (let i = candidates.length - 1; i >= 0; i -= 1) {
+      try {
+        if (await candidates[i].isDisplayed()) {
+          await candidates[i].moveTo();
+          return;
+        }
+      } catch {
+        // Try previous candidate.
+      }
+    }
+
+    throw new Error('No visible user message found to hover');
+  }
+
+  async waitForRollbackButton(timeout: number = 5000): Promise<WebdriverIO.Element> {
+    await browser.waitUntil(
+      async () => {
+        const buttons = await $$(this.selectors.rollbackButton);
+        for (const button of buttons) {
+          try {
+            if (await button.isDisplayed()) {
+              return true;
+            }
+          } catch {
+            // Continue checking.
+          }
+        }
+        return false;
+      },
+      {
+        timeout,
+        timeoutMsg: `Rollback button not visible within ${timeout}ms`,
+      }
+    );
+
+    const buttons = await $$(this.selectors.rollbackButton);
+    for (const button of buttons) {
+      try {
+        if (await button.isDisplayed()) {
+          return button;
+        }
+      } catch {
+        // Continue checking.
+      }
+    }
+
+    throw new Error('Rollback button not found after wait');
+  }
+
+  async clickLatestRollbackButton(): Promise<void> {
+    await this.hoverLatestUserMessage();
+    const button = await this.waitForRollbackButton();
+    await button.click();
+  }
+
+  async waitForProcessingIndicatorVisible(timeout: number = 10000): Promise<void> {
+    await browser.waitUntil(
+      async () => {
+        const indicator = await $(this.selectors.processingIndicator);
+        return indicator.isExisting();
+      },
+      {
+        timeout,
+        timeoutMsg: `Processing indicator not found within ${timeout}ms`,
+      }
+    );
+  }
+
+  async waitForProcessingIndicatorHidden(timeout: number = 10000): Promise<void> {
+    await browser.waitUntil(
+      async () => {
+        const indicator = await $(this.selectors.processingIndicator);
+        const exists = await indicator.isExisting();
+        if (!exists) {
+          return true;
+        }
+
+        const ariaHidden = await indicator.getAttribute('aria-hidden');
+        return ariaHidden === 'true';
+      },
+      {
+        timeout,
+        timeoutMsg: `Processing indicator still visible after ${timeout}ms`,
+      }
+    );
+  }
+
+  async hasVisibleProcessingIndicator(): Promise<boolean> {
+    const indicator = await $(this.selectors.processingIndicator);
+    const exists = await indicator.isExisting();
+    if (!exists) {
+      return false;
+    }
+
+    const ariaHidden = await indicator.getAttribute('aria-hidden');
+    return ariaHidden !== 'true';
   }
 
   async getLastModelResponse(): Promise<string> {

@@ -10,6 +10,8 @@ import type { DialogTurn } from '../../types/flow-chat';
 import { useFlowChatContext } from './FlowChatContext';
 import { useActiveSession } from '../../store/modernFlowChatStore';
 import { flowChatStore } from '../../store/FlowChatStore';
+import { useActiveSessionState } from '../../hooks/useActiveSessionState';
+import { SessionExecutionEvent, stateMachineManager } from '../../state-machine';
 import { snapshotAPI } from '@/infrastructure/api';
 import { notificationService } from '@/shared/notification-system';
 import { globalEventBus } from '@/infrastructure/event-bus';
@@ -29,6 +31,7 @@ export const UserMessageItem = React.memo<UserMessageItemProps>(
     const { t } = useTranslation('flow-chat');
     const { config, sessionId } = useFlowChatContext();
     const activeSession = useActiveSession();
+    const { isProcessing } = useActiveSessionState();
     const [copied, setCopied] = useState(false);
     const [expanded, setExpanded] = useState(false);
     const [hasOverflow, setHasOverflow] = useState(false);
@@ -41,6 +44,7 @@ export const UserMessageItem = React.memo<UserMessageItemProps>(
     const dialogTurn = turnIndex >= 0 ? activeSession?.dialogTurns[turnIndex] : null;
     const isFailed = dialogTurn?.status === 'error';
     const canRollback = !!sessionId && turnIndex >= 0 && !isRollingBack;
+    const rollbackNeedsCancel = isProcessing && turnIndex === (activeSession?.dialogTurns.length ?? 0) - 1;
 
     
     // Avoid zero-size errors by rendering a placeholder instead of null.
@@ -111,12 +115,23 @@ export const UserMessageItem = React.memo<UserMessageItemProps>(
 
       setIsRollingBack(true);
       try {
+        if (rollbackNeedsCancel && dialogTurn?.id) {
+          const cancelled = await stateMachineManager.transition(sessionId, SessionExecutionEvent.USER_CANCEL);
+          if (!cancelled) {
+            flowChatStore.cancelSessionTask(sessionId);
+            stateMachineManager.reset(sessionId);
+          }
+        }
+
         const restoredFiles = await snapshotAPI.rollbackToTurn(sessionId, turnIndex, true);
 
         // 1) Truncate local dialog turns from this index.
         flowChatStore.truncateDialogTurnsFrom(sessionId, turnIndex);
 
-        // 2) Refresh file tree and open editors.
+        // 2) Ensure the session state machine leaves processing state after rollback.
+        stateMachineManager.reset(sessionId);
+
+        // 3) Refresh file tree and open editors.
         const { globalEventBus } = await import('@/infrastructure/event-bus');
         globalEventBus.emit('file-tree:refresh');
         restoredFiles.forEach(filePath => {
@@ -130,7 +145,7 @@ export const UserMessageItem = React.memo<UserMessageItemProps>(
       } finally {
         setIsRollingBack(false);
       }
-    }, [canRollback, sessionId, t, turnIndex]);
+    }, [canRollback, dialogTurn?.id, rollbackNeedsCancel, sessionId, t, turnIndex]);
     
     // Toggle expanded state.
     const handleToggleExpand = useCallback(() => {
