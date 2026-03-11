@@ -557,10 +557,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   }, [currentSessionId, workspacePath, derivedState?.isProcessing]);
   
-  const handleInputChange = useCallback((text: string) => {
+  const handleInputChange = useCallback((text: string, activeContexts: import('../../shared/types/context').ContextItem[]) => {
     if (!inputState.isActive && text.length > 0) {
       dispatchInput({ type: 'ACTIVATE' });
     }
+
+    const activeContextIds = new Set(activeContexts.map(context => context.id));
+    contexts.forEach(context => {
+      if (!activeContextIds.has(context.id)) {
+        removeContext(context.id);
+      }
+    });
     
     dispatchInput({ type: 'SET_VALUE', payload: text });
     
@@ -584,7 +591,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         });
       }
     }
-  }, [derivedState, setQueuedInput, inputState.isActive, slashCommandState.isActive]);
+  }, [contexts, derivedState, inputState.isActive, removeContext, setQueuedInput, slashCommandState.isActive]);
   
   const handleSendOrCancel = useCallback(async () => {
     if (!derivedState) return;

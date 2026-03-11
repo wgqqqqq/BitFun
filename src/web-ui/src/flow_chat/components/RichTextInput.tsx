@@ -302,13 +302,20 @@ export const RichTextInput = React.forwardRef<HTMLDivElement, RichTextInputProps
     if (isComposingRef.current) return;
     
     const textContent = extractTextContent();
-    onChange(textContent, contexts);
+    const visibleContextIds = new Set(
+      Array.from(internalRef.current?.querySelectorAll<HTMLElement>('[data-context-id]') ?? [])
+        .map(element => element.dataset.contextId)
+        .filter((id): id is string => !!id)
+    );
+    const visibleContexts = contexts.filter(context => visibleContextIds.has(context.id));
+
+    onChange(textContent, visibleContexts);
     
     // Ensure detection runs after DOM updates
     requestAnimationFrame(() => {
       detectMention();
     });
-  }, [contexts, onChange, detectMention]);
+  }, [contexts, onChange, detectMention, internalRef]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     e.preventDefault();
