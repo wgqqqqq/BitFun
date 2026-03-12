@@ -76,21 +76,18 @@
     "general_chat": "Text Generation",
     "multimodal": "Image Understanding",
     "image_generation": "Image Generation",
-    "search_enhanced": "Information Retrieval",
     "speech_recognition": "Speech Recognition"
   },
   "categoryIcons": {
     "general_chat": "Text",
     "multimodal": "Vision",
     "image_generation": "Image",
-    "search_enhanced": "Search",
     "speech_recognition": "Speech"
   },
   "categoryHints": {
     "general_chat": "Text Generation: Generate text responses, code, etc. for most conversation scenarios",
     "multimodal": "Image Understanding: Understand image content and have mixed text-image conversations",
     "image_generation": "Image Generation: Generate images from text descriptions",
-    "search_enhanced": "Information Retrieval: Search the web for real-time information, only need name, API URL and key",
     "speech_recognition": "Speech Recognition: Convert speech to text (e.g., GLM-ASR)"
   },
   "form": {
@@ -101,7 +98,6 @@
     "baseUrl": "API URL",
     "resolvedUrlLabel": "Request URL: ",
     "forceUrlHint": "Append # to force use the exact URL you entered",
-    "searchApiHint": "Zhipu AI search API URL, or other compatible search API URL",
     "apiKey": "API Key",
     "apiKeyPlaceholder": "Enter your API Key",
     "provider": "Request Format",
@@ -152,7 +148,6 @@
     "text_chat": "Chat",
     "image_understanding": "Vision",
     "image_generation": "Image",
-    "search": "Search",
     "function_calling": "Tools",
     "speech_recognition": "Speech"
   },

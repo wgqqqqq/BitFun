@@ -1,40 +1,34 @@
 //! Web tool implementation - WebSearchTool and URLFetcherTool
 
 use crate::agentic::tools::framework::{Tool, ToolResult, ToolUseContext, ValidationResult};
-use crate::infrastructure::get_path_manager_arc;
-use crate::service::config::types::GlobalConfig;
 use crate::util::errors::{BitFunError, BitFunResult};
 use async_trait::async_trait;
-use log::{debug, error, info, warn};
+use log::{error, info};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::env;
-use std::fs;
+use std::time::Duration;
 
-/// ZhipuAI Web Search API response
-#[derive(Debug, Deserialize)]
-struct ZhipuSearchResponse {
-    search_result: Vec<ZhipuSearchResult>,
-}
+const EXA_URL: &str = "https://mcp.exa.ai/mcp";
+const EXA_RESULTS: u64 = 5;
+const EXA_CONTEXT: u64 = 8_000;
 
 #[derive(Debug, Deserialize)]
-struct ZhipuSearchResult {
-    title: String,
-    content: String,
-    link: String,
-    #[serde(default)]
-    media: String,
+struct ExaRes {
+    result: Option<ExaData>,
 }
 
-/// Search API configuration
-#[derive(Debug, Clone)]
-struct SearchApiConfig {
-    api_key: String,
-    base_url: String,
-    model_name: String,
+#[derive(Debug, Deserialize)]
+struct ExaData {
+    content: Vec<ExaContent>,
 }
 
-/// Web search tool - supports reading API configuration from config file or environment variables
+#[derive(Debug, Deserialize)]
+struct ExaContent {
+    #[serde(rename = "type")]
+    kind: String,
+    text: Option<String>,
+}
+
 pub struct WebSearchTool;
 
 impl WebSearchTool {
@@ -42,191 +36,166 @@ impl WebSearchTool {
         Self
     }
 
-    /// Load search API configuration from config file
-    async fn load_search_config(&self) -> Option<SearchApiConfig> {
-        // 1. Prefer environment variables
-        if let Ok(api_key) = env::var("ZHIPU_API_KEY").or_else(|_| env::var("API_KEY")) {
-            info!("WebSearchTool: Loaded API key from environment variable");
-            return Some(SearchApiConfig {
-                api_key,
-                base_url: "https://open.bigmodel.cn/api/paas/v4/web_search".to_string(),
-                model_name: "ZhipuAI Web Search".to_string(),
-            });
-        }
-
-        // 2. Read from config file
-        match self.load_config_from_file().await {
-            Ok(Some(config)) => {
-                info!(
-                    "WebSearchTool: Loaded search API config from file: {}",
-                    config.model_name
-                );
-                Some(config)
-            }
-            Ok(None) => {
-                warn!("WebSearchTool: Search API not configured, will return mock data");
-                None
-            }
-            Err(e) => {
-                warn!(
-                    "WebSearchTool: Failed to load config, will return mock data: {}",
-                    e
-                );
-                None
-            }
-        }
-    }
-
-    /// Load from config file
-    async fn load_config_from_file(&self) -> BitFunResult<Option<SearchApiConfig>> {
-        // Get config file path
-        let path_manager = get_path_manager_arc();
-        let config_file = path_manager.app_config_file();
-
-        if !config_file.exists() {
-            debug!("Config file does not exist: {:?}", config_file);
-            return Ok(None);
-        }
-
-        // Read and parse config file
-        let config_content = fs::read_to_string(&config_file)
-            .map_err(|e| BitFunError::tool(format!("Failed to read config file: {}", e)))?;
-
-        let global_config: GlobalConfig = serde_json::from_str(&config_content)
-            .map_err(|e| BitFunError::tool(format!("Failed to parse config file: {}", e)))?;
-
-        // Get search model ID
-        let search_model_id = match global_config.ai.default_models.search {
-            Some(id) if !id.is_empty() => id,
-            _ => {
-                debug!("Search model not configured");
-                return Ok(None);
-            }
-        };
-
-        // Find corresponding model configuration
-        let model_config = global_config
-            .ai
-            .models
-            .iter()
-            .find(|m| m.id == search_model_id)
-            .ok_or_else(|| {
-                BitFunError::tool(format!(
-                    "Search model config not found: {}",
-                    search_model_id
-                ))
-            })?;
-
-        // Validate API Key
-        if model_config.api_key.trim().is_empty() {
-            warn!("Search model API key not configured: {}", model_config.name);
-            return Ok(None);
-        }
-
-        Ok(Some(SearchApiConfig {
-            api_key: model_config.api_key.clone(),
-            base_url: model_config.base_url.clone(),
-            model_name: model_config.name.clone(),
-        }))
-    }
-
-    /// Call search API (supports ZhipuAI and other compatible search APIs)
-    async fn search_api(
+    async fn search(
         &self,
-        config: &SearchApiConfig,
         query: &str,
-        count: u64,
-        search_engine: &str,
-        content_size: &str,
-        recency_filter: &str,
-    ) -> BitFunResult<Vec<Value>> {
-        info!(
-            "Search API call: model={}, query={}, engine={}, content_size={}, recency={}",
-            config.model_name, query, search_engine, content_size, recency_filter
-        );
-
-        // Create HTTP client
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
+        num: u64,
+        kind: &str,
+        crawl: &str,
+        ctx: u64,
+    ) -> BitFunResult<String> {
+        let cli = reqwest::Client::builder()
+            .timeout(Duration::from_secs(25))
             .build()
-            .map_err(|e| BitFunError::tool(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|err| BitFunError::tool(format!("Failed to create HTTP client: {}", err)))?;
 
-        // Build request (ZhipuAI format)
-        let request_body = json!({
-            "search_query": query,
-            "search_engine": search_engine,
-            "search_intent": true,  // Always enable search intent recognition
-            "count": count,
-            "content_size": content_size,
-            "search_recency_filter": recency_filter
+        let body = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "web_search_exa",
+                "arguments": {
+                    "query": query,
+                    "type": kind,
+                    "numResults": num,
+                    "livecrawl": crawl,
+                    "contextMaxCharacters": ctx,
+                }
+            }
         });
 
-        debug!(
-            "Request body: {}",
-            serde_json::to_string_pretty(&request_body).unwrap_or_default()
-        );
-
-        // Send request
-        let response = client
-            .post(&config.base_url)
-            .header("Authorization", format!("Bearer {}", config.api_key))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
+        let res = cli
+            .post(EXA_URL)
+            .header("accept", "application/json, text/event-stream")
+            .header("content-type", "application/json")
+            .json(&body)
             .send()
             .await
-            .map_err(|e| BitFunError::tool(format!("Failed to send request: {}", e)))?;
+            .map_err(|err| BitFunError::tool(format!("Failed to send request: {}", err)))?;
 
-        // Check status code
-        let status = response.status();
+        let status = res.status();
         if !status.is_success() {
-            let error_text = response
+            let err = res
                 .text()
                 .await
                 .unwrap_or_else(|_| String::from("Unknown error"));
-            error!("Search API error: status={}, error={}", status, error_text);
+            error!("WebSearch Exa error: status={}, error={}", status, err);
             return Err(BitFunError::tool(format!(
-                "Search API error {}: {}",
-                status, error_text
+                "Web search error {}: {}",
+                status, err
             )));
         }
 
-        // Parse response
-        let search_response: ZhipuSearchResponse = response
-            .json()
+        let text = res
+            .text()
             .await
-            .map_err(|e| BitFunError::tool(format!("Failed to parse response: {}", e)))?;
+            .map_err(|err| BitFunError::tool(format!("Failed to read response: {}", err)))?;
 
-        info!(
-            "Found {} results from {}",
-            search_response.search_result.len(),
-            config.model_name
-        );
-
-        // Convert to unified format
-        let results: Vec<Value> = search_response
-            .search_result
-            .into_iter()
-            .map(|r| {
-                json!({
-                    "title": r.title,
-                    "url": r.link,
-                    "snippet": r.content,
-                    "source": r.media
-                })
-            })
-            .collect();
-
-        Ok(results)
+        self.parse_sse(&text)
     }
 
-    /// Return mock search results (when search API is not configured)
-    fn mock_search(&self, query: &str) -> Vec<Value> {
-        vec![json!({
-            "title": format!("Search results for: {}", query),
-            "url": "https://example.com",
-            "snippet": "This is mock data. To get real search results, please configure as follows:\n\n1. Open Config Center → AI Model Configuration\n2. Create new configuration, select \"Search Enhancement Model\" category\n3. Fill in Search API URL and API Key (supports ZhipuAI, etc.)\n4. In Config Center → Super Agent, select the search model you just configured\n\nOr set environment variable ZHIPU_API_KEY (visit https://open.bigmodel.cn/ to get)",
-            "source": "Mock Data"
-        })]
+    fn parse_sse(&self, text: &str) -> BitFunResult<String> {
+        let out = text
+            .lines()
+            .filter_map(|line| line.strip_prefix("data: "))
+            .find_map(|line| {
+                serde_json::from_str::<ExaRes>(line)
+                    .ok()
+                    .and_then(|res| res.result)
+                    .map(|res| {
+                        res.content
+                            .into_iter()
+                            .filter(|item| item.kind == "text")
+                            .filter_map(|item| item.text)
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })
+                    .filter(|item| !item.trim().is_empty())
+            });
+
+        out.ok_or_else(|| BitFunError::tool("Web search returned no content".to_string()))
+    }
+
+    fn results(&self, text: &str) -> Vec<Value> {
+        let mut out = Vec::new();
+        let mut cur: Option<(String, String, Vec<String>)> = None;
+        let mut body = false;
+
+        for line in text.lines() {
+            if let Some(next) = line.strip_prefix("Title: ") {
+                if let Some((title, url, text)) = cur.take() {
+                    out.push(self.item(title, url, text));
+                }
+                cur = Some((next.trim().to_string(), String::new(), Vec::new()));
+                body = false;
+                continue;
+            }
+
+            let Some(cur) = cur.as_mut() else {
+                continue;
+            };
+
+            if let Some(next) = line.strip_prefix("URL: ") {
+                cur.1 = next.trim().to_string();
+                continue;
+            }
+
+            if let Some(next) = line.strip_prefix("Text: ") {
+                if !next.trim().is_empty() {
+                    cur.2.push(next.trim().to_string());
+                }
+                body = true;
+                continue;
+            }
+
+            if body {
+                cur.2.push(line.to_string());
+            }
+        }
+
+        if let Some((title, url, text)) = cur.take() {
+            out.push(self.item(title, url, text));
+        }
+
+        if out.is_empty() && !text.trim().is_empty() {
+            return vec![json!({
+                "title": "Web search result",
+                "url": "",
+                "snippet": self.snippet(text)
+            })];
+        }
+
+        out
+    }
+
+    fn item(&self, title: String, url: String, text: Vec<String>) -> Value {
+        json!({
+            "title": title,
+            "url": url,
+            "snippet": self.snippet(&text.join("\n"))
+        })
+    }
+
+    fn snippet(&self, text: &str) -> String {
+        let text = text
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .filter(|line| !line.starts_with('#'))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        if text.chars().count() <= 320 {
+            return text;
+        }
+
+        let mut out = String::new();
+        for ch in text.chars().take(317) {
+            out.push(ch);
+        }
+        out.push_str("...");
+        out
     }
 }
 
@@ -240,6 +209,7 @@ impl Tool for WebSearchTool {
         Ok(
             r#"- Allows BitFun to search the web and use the results to inform responses
 - Provides up-to-date information for current events and recent data
+- Uses Exa's hosted MCP web search service with no local API key setup
 - Returns search result information formatted as search result blocks
 - Use this tool for accessing information beyond BitFun's knowledge cutoff
 
@@ -250,11 +220,10 @@ Usage notes:
 - Results include title, URL, snippet and source information
 
 Advanced features:
-- Automatically uses advanced search engine (search_pro) for best results
-- Control content size: small (brief), medium (moderate), high (detailed)
-- Filter by recency: oneDay, oneWeek, oneMonth, oneYear, or noLimit
-- Return up to 50 results per query
-- Search intent recognition is automatically enabled"#
+- Choose search depth: auto, fast, or deep
+- Control result count and context size for LLM-friendly output
+- Optionally prefer live crawling for fresher pages
+- Return up to 10 results per query"#
                 .to_string(),
         )
     }
@@ -269,28 +238,29 @@ Advanced features:
                 },
                 "num_results": {
                     "type": "number",
-                    "description": "Number of search results to return (1-50, default: 5)",
-                    "default": 5,
+                    "description": "Number of search results to return (1-10, default: 5)",
+                    "default": EXA_RESULTS,
                     "minimum": 1,
-                    "maximum": 50
+                    "maximum": 10
                 },
-                "search_engine": {
+                "type": {
                     "type": "string",
-                    "enum": ["search_std", "search_pro", "search_pro_sogou", "search_pro_quark"],
-                    "description": "Search engine to use. MUST be one of: 'search_std' (standard engine), 'search_pro' (default, advanced engine), 'search_pro_sogou' (Sogou search), 'search_pro_quark' (Quark search). No other values are accepted.",
-                    "default": "search_pro"
+                    "enum": ["auto", "fast", "deep"],
+                    "description": "Search depth. Use 'auto' for balanced results, 'fast' for lower latency, or 'deep' for broader context.",
+                    "default": "auto"
                 },
-                "content_size": {
+                "livecrawl": {
                     "type": "string",
-                    "enum": ["small", "medium", "high"],
-                    "description": "Content snippet size. MUST be one of: 'small' (brief snippets), 'medium' (default, moderate length), 'high' (detailed content). No other values are accepted.",
-                    "default": "medium"
+                    "enum": ["fallback", "preferred"],
+                    "description": "Live crawl mode. Use 'preferred' to favor fresh crawling, or 'fallback' to use cached data when possible.",
+                    "default": "fallback"
                 },
-                "search_recency_filter": {
-                    "type": "string",
-                    "enum": ["noLimit", "oneDay", "oneWeek", "oneMonth", "oneYear"],
-                    "description": "Filter results by time range. MUST be one of: 'noLimit' (default, no time limit), 'oneDay' (past 24 hours), 'oneWeek' (past 7 days), 'oneMonth' (past 30 days), 'oneYear' (past 365 days). No other values are accepted.",
-                    "default": "noLimit"
+                "context_max_characters": {
+                    "type": "number",
+                    "description": "Maximum characters of search context to request from Exa (default: 8000)",
+                    "default": EXA_CONTEXT,
+                    "minimum": 1000,
+                    "maximum": 20000
                 }
             },
             "required": ["query"]
@@ -322,63 +292,30 @@ Advanced features:
         let num_results = input
             .get("num_results")
             .and_then(|v| v.as_u64())
-            .unwrap_or(5)
-            .min(50) // Limit to maximum 50 results
-            .max(1); // At least 1 result
+            .unwrap_or(EXA_RESULTS)
+            .clamp(1, 10);
 
-        // Get optional parameters
-        let search_engine = input
-            .get("search_engine")
-            .and_then(|v| v.as_str())
-            .unwrap_or("search_pro");
+        let kind = input.get("type").and_then(|v| v.as_str()).unwrap_or("auto");
 
-        let content_size = input
-            .get("content_size")
+        let crawl = input
+            .get("livecrawl")
             .and_then(|v| v.as_str())
-            .unwrap_or("medium");
+            .unwrap_or("fallback");
 
-        let recency_filter = input
-            .get("search_recency_filter")
-            .and_then(|v| v.as_str())
-            .unwrap_or("noLimit");
+        let ctx = input
+            .get("context_max_characters")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(EXA_CONTEXT)
+            .clamp(1_000, 20_000);
 
         info!(
-            "WebSearch tool called: query='{}', num_results={}",
-            query, num_results
+            "WebSearch Exa call: query='{}', num_results={}, type={}, livecrawl={}, context_max_characters={}",
+            query, num_results, kind, crawl, ctx
         );
 
-        // Load search API configuration
-        let search_config = self.load_search_config().await;
+        let raw = self.search(query, num_results, kind, crawl, ctx).await?;
+        let results = self.results(&raw);
 
-        // Try real search, return mock data on failure
-        let (results, api_used) = if let Some(config) = search_config {
-            info!("Using search API: {}", config.model_name);
-            match self
-                .search_api(
-                    &config,
-                    query,
-                    num_results,
-                    search_engine,
-                    content_size,
-                    recency_filter,
-                )
-                .await
-            {
-                Ok(results) => {
-                    info!("Search succeeded, returning {} results", results.len());
-                    (results, true)
-                }
-                Err(e) => {
-                    warn!("Search failed, returning mock data: {}", e);
-                    (self.mock_search(query), false)
-                }
-            }
-        } else {
-            info!("Search API not configured, returning mock data");
-            (self.mock_search(query), false)
-        };
-
-        // Format results
         let formatted_results = results
             .iter()
             .enumerate()
@@ -399,7 +336,7 @@ Advanced features:
                 "query": query,
                 "results": results,
                 "result_count": results.len(),
-                "api_used": api_used
+                "provider": "exa_mcp"
             }),
             result_for_assistant: Some(format!(
                 "Search query: '{}'\nFound {} results:\n\n{}",
@@ -601,7 +538,7 @@ Example usage:
 
 #[cfg(test)]
 mod tests {
-    use super::WebFetchTool;
+    use super::{WebFetchTool, WebSearchTool};
     use crate::agentic::tools::framework::{Tool, ToolResult, ToolUseContext};
     use serde_json::json;
     use std::collections::HashMap;
@@ -667,9 +604,12 @@ mod tests {
             "format": "text"
         });
 
-        let results = tool.call(&input, &empty_context()).await.unwrap_or_else(|e| {
-            panic!("tool call failed with detailed error: {:?}", e);
-        });
+        let results = tool
+            .call(&input, &empty_context())
+            .await
+            .unwrap_or_else(|e| {
+                panic!("tool call failed with detailed error: {:?}", e);
+            });
         assert_eq!(results.len(), 1);
 
         match &results[0] {
@@ -679,10 +619,7 @@ mod tests {
             } => {
                 assert_eq!(data["content"], "hello from webfetch");
                 assert_eq!(data["format"], "text");
-                assert_eq!(
-                    result_for_assistant.as_deref(),
-                    Some("hello from webfetch")
-                );
+                assert_eq!(result_for_assistant.as_deref(), Some("hello from webfetch"));
             }
             other => panic!("unexpected tool result variant: {:?}", other),
         }
@@ -699,9 +636,12 @@ mod tests {
             "format": "text"
         });
 
-        let results = tool.call(&input, &empty_context()).await.unwrap_or_else(|e| {
-            panic!("tool call failed with detailed error: {:?}", e);
-        });
+        let results = tool
+            .call(&input, &empty_context())
+            .await
+            .unwrap_or_else(|e| {
+                panic!("tool call failed with detailed error: {:?}", e);
+            });
         assert_eq!(results.len(), 1);
 
         match &results[0] {
@@ -722,4 +662,27 @@ mod tests {
         }
     }
 
+    #[test]
+    fn websearch_parses_exa_text_into_results() {
+        let tool = WebSearchTool::new();
+        let text = r#"Title: Result One
+URL: https://example.com/one
+Text: Result One
+
+First paragraph.
+
+Title: Result Two
+URL: https://example.com/two
+Text: Result Two
+
+Second paragraph.
+"#;
+
+        let out = tool.results(text);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0]["title"], "Result One");
+        assert_eq!(out[0]["url"], "https://example.com/one");
+        assert_eq!(out[0]["snippet"], "Result One First paragraph.");
+        assert_eq!(out[1]["title"], "Result Two");
+    }
 }

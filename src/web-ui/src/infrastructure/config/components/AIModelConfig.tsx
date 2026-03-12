@@ -248,7 +248,7 @@ const AIModelConfig: React.FC = () => {
     }
     
     
-    if (editingConfig.category !== 'search_enhanced' && !editingConfig.model_name) {
+    if (!editingConfig.model_name) {
       notification.warning(t('messages.fillModelName'));
       return;
     }
@@ -598,15 +598,6 @@ const AIModelConfig: React.FC = () => {
             updates.base_url = 'https://open.bigmodel.cn/api/paas/v4/images/generations';
             updates.request_url = resolveRequestUrl(updates.base_url!, prev?.provider || 'openai', prev?.model_name || '');
             break;
-          case 'search_enhanced':
-            defaultCapabilities = ['search'];
-            updates.base_url = 'https://open.bigmodel.cn/api/paas/v4/web_search';
-            updates.request_url = resolveRequestUrl(updates.base_url!, 'openai');
-            updates.model_name = 'search-api';
-            updates.provider = 'openai';
-            updates.context_window = 128000;
-            updates.max_tokens = 8192;
-            break;
           case 'speech_recognition':
             defaultCapabilities = ['speech_recognition'];
             updates.base_url = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
@@ -741,14 +732,13 @@ const AIModelConfig: React.FC = () => {
                     { label: t('category.general_chat'), value: 'general_chat' },
                     { label: t('category.multimodal'), value: 'multimodal' },
                     { label: t('category.image_generation'), value: 'image_generation' },
-                    { label: t('category.search_enhanced'), value: 'search_enhanced' },
                     { label: t('category.speech_recognition'), value: 'speech_recognition' },
                   ]} />
                 </ConfigPageRow>
                 <ConfigPageRow label={`${t('form.configName')} *`} align="center" wide>
                   <Input value={editingConfig.name || ''} onChange={(e) => setEditingConfig(prev => ({ ...prev, name: e.target.value }))} placeholder={t('form.configNamePlaceholder')} inputSize="small" />
                 </ConfigPageRow>
-                <ConfigPageRow label={`${t('form.baseUrl')} *`} description={editingConfig.category === 'search_enhanced' ? t('form.searchApiHint') : undefined} align="center" wide>
+                <ConfigPageRow label={`${t('form.baseUrl')} *`} align="center" wide>
                   <div className="bitfun-ai-model-config__control-stack">
                     <Input
                       type="url"
@@ -759,7 +749,7 @@ const AIModelConfig: React.FC = () => {
                         request_url: resolveRequestUrl(e.target.value, prev?.provider || 'openai', prev?.model_name || '')
                       }))}
                       onFocus={(e) => e.target.select()}
-                      placeholder={editingConfig.category === 'search_enhanced' ? 'https://open.bigmodel.cn/api/paas/v4/web_search' : 'https://open.bigmodel.cn/api/paas/v4/chat/completions'}
+                      placeholder={'https://open.bigmodel.cn/api/paas/v4/chat/completions'}
                       inputSize="small"
                     />
                     {editingConfig.base_url && (
@@ -779,7 +769,7 @@ const AIModelConfig: React.FC = () => {
               </>
             )}
 
-            {!isFromTemplate && editingConfig.category !== 'search_enhanced' && (
+            {!isFromTemplate && (
               <>
                 <ConfigPageRow label={`${t('form.modelName')} *`} description={editingConfig.category === 'speech_recognition' ? t('form.modelNameHint') : undefined} align="center" wide>
                   <Input value={editingConfig.model_name || ''} onChange={(e) => setEditingConfig(prev => ({ ...prev, model_name: e.target.value, request_url: resolveRequestUrl(prev?.base_url || '', prev?.provider || 'openai', e.target.value) }))} placeholder={editingConfig.category === 'speech_recognition' ? 'glm-asr' : 'glm-4.7'} inputSize="small" />

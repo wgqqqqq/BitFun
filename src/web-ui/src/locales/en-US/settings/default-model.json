@@ -35,10 +35,6 @@
         "label": "Image Generation",
         "description": "Generate images from text descriptions"
       },
-      "search": {
-        "label": "Search Enhanced",
-        "description": "Search the web in real-time for latest information"
-      },
       "speech_recognition": {
         "label": "Speech Recognition",
         "description": "Convert speech to text, support voice input"

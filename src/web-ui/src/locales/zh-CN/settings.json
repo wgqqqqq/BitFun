@@ -240,18 +240,15 @@
       "general_chat": "文本生成",
       "multimodal": "图像理解",
       "image_generation": "图像生成",
-      "search_enhanced": "信息检索",
       "speech_recognition": "语音识别"
     },
     "categoryHints": {
       "general_chat": "文本生成：生成文本回复、代码等，适用于大多数对话场景",
       "multimodal": "图像理解：理解图片内容并进行图文混合对话",
       "image_generation": "图像生成：根据文字描述生成图片",
-      "search_enhanced": "信息检索：搜索网络获取实时信息，只需配置名称、API地址和密钥",
       "speech_recognition": "语音识别：将语音转换为文字（如智谱 GLM-ASR）"
     },
     "modelNameHint": "智谱 GLM-ASR 使用 glm-asr，其他语音模型填写对应的模型名称",
-    "searchApiHint": "智谱AI搜索API地址，或其他兼容的搜索API地址",
     "thinking": {
       "enable": "启用思考",
       "enableHint": "需要模型支持思考模式",

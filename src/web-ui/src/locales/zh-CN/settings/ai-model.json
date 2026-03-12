@@ -76,21 +76,18 @@
     "general_chat": "文本生成",
     "multimodal": "多模态",
     "image_generation": "图像生成",
-    "search_enhanced": "信息检索",
     "speech_recognition": "语音识别"
   },
   "categoryIcons": {
     "general_chat": "文本",
     "multimodal": "多模态",
     "image_generation": "绘图",
-    "search_enhanced": "检索",
     "speech_recognition": "语音"
   },
   "categoryHints": {
     "general_chat": "文本生成：生成文本回复、代码等，适用于大多数对话场景",
     "multimodal": "多模态：理解图片内容并进行图文混合对话",
     "image_generation": "图像生成：根据文字描述生成图片",
-    "search_enhanced": "信息检索：搜索网络获取实时信息，只需配置名称、API地址和密钥",
     "speech_recognition": "语音识别：将语音转换为文字（如智谱 GLM-ASR）"
   },
   "form": {
@@ -101,7 +98,6 @@
     "baseUrl": "API地址",
     "resolvedUrlLabel": "实际请求地址：",
     "forceUrlHint": "以 # 结尾可强制使用输入地址",
-    "searchApiHint": "智谱AI搜索API地址，或其他兼容的搜索API地址",
     "apiKey": "API密钥",
     "apiKeyPlaceholder": "输入您的 API Key",
     "provider": "请求格式",
@@ -152,7 +148,6 @@
     "text_chat": "对话",
     "image_understanding": "多模态",
     "image_generation": "绘图",
-    "search": "搜索",
     "function_calling": "工具",
     "speech_recognition": "语音"
   },

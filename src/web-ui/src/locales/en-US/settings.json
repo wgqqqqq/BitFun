@@ -240,18 +240,15 @@
       "general_chat": "Text Generation",
       "multimodal": "Image Understanding",
       "image_generation": "Image Generation",
-      "search_enhanced": "Information Retrieval",
       "speech_recognition": "Speech Recognition"
     },
     "categoryHints": {
       "general_chat": "Text Generation: Generate text responses, code, etc. for most conversation scenarios",
       "multimodal": "Image Understanding: Understand image content and have mixed text-image conversations",
       "image_generation": "Image Generation: Generate images from text descriptions",
-      "search_enhanced": "Information Retrieval: Search the web for real-time information, only need name, API URL and key",
       "speech_recognition": "Speech Recognition: Convert speech to text (e.g., GLM-ASR)"
     },
     "modelNameHint": "GLM-ASR uses glm-asr, other speech models use their corresponding model names",
-    "searchApiHint": "Zhipu AI search API URL, or other compatible search API URL",
     "thinking": {
       "enable": "Enable Thinking",
       "enableHint": "Requires model to support thinking mode",

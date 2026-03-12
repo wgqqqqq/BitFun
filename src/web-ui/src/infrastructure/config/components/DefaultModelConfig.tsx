@@ -24,7 +24,6 @@ const log = createLogger('DefaultModelConfig');
 const OPTIONAL_CAPABILITY_TYPES: OptionalCapabilityType[] = [
   'image_understanding',
   'image_generation',
-  'search',
   'speech_recognition'
 ];
 
@@ -73,7 +72,6 @@ export const DefaultModelConfig: React.FC = () => {
       setOptionalCapabilities({
         image_understanding: defaultModelsConfig?.image_understanding,
         image_generation: defaultModelsConfig?.image_generation,
-        search: defaultModelsConfig?.search,
         speech_recognition: defaultModelsConfig?.speech_recognition,
       });
     } catch (error) {
@@ -156,8 +154,6 @@ export const DefaultModelConfig: React.FC = () => {
           return m.capabilities?.includes('image_understanding') || m.category === 'multimodal';
         case 'image_generation':
           return m.capabilities?.includes('image_generation') || m.category === 'image_generation';
-        case 'search':
-          return m.capabilities?.includes('search') || m.category === 'search_enhanced';
         case 'speech_recognition':
           return m.capabilities?.includes('speech_recognition') || m.category === 'speech_recognition';
         default:
