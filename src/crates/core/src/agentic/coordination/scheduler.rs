@@ -29,6 +29,7 @@ const DEBOUNCE_DELAY: Duration = Duration::from_secs(1);
 #[derive(Debug)]
 pub struct QueuedTurn {
     pub user_input: String,
+    pub original_user_input: Option<String>,
     pub turn_id: Option<String>,
     pub agent_type: String,
     pub workspace_path: Option<String>,
@@ -98,6 +99,7 @@ impl DialogScheduler {
         &self,
         session_id: String,
         user_input: String,
+        original_user_input: Option<String>,
         turn_id: Option<String>,
         agent_type: String,
         workspace_path: Option<String>,
@@ -114,6 +116,7 @@ impl DialogScheduler {
                 .start_dialog_turn(
                     session_id,
                     user_input,
+                    original_user_input,
                     turn_id,
                     agent_type,
                     workspace_path,
@@ -128,6 +131,7 @@ impl DialogScheduler {
                     .start_dialog_turn(
                         session_id,
                         user_input,
+                        original_user_input,
                         turn_id,
                         agent_type,
                         workspace_path,
@@ -149,6 +153,7 @@ impl DialogScheduler {
                     self.enqueue(
                         &session_id,
                         user_input,
+                        original_user_input,
                         turn_id,
                         agent_type,
                         workspace_path,
@@ -161,6 +166,7 @@ impl DialogScheduler {
                         .start_dialog_turn(
                             session_id,
                             user_input,
+                            original_user_input,
                             turn_id,
                             agent_type,
                             workspace_path,
@@ -175,6 +181,7 @@ impl DialogScheduler {
                 self.enqueue(
                     &session_id,
                     user_input,
+                    original_user_input,
                     turn_id,
                     agent_type,
                     workspace_path,
@@ -196,6 +203,7 @@ impl DialogScheduler {
         &self,
         session_id: &str,
         user_input: String,
+        original_user_input: Option<String>,
         turn_id: Option<String>,
         agent_type: String,
         workspace_path: Option<String>,
@@ -219,6 +227,7 @@ impl DialogScheduler {
             .or_default()
             .push_back(QueuedTurn {
                 user_input,
+                original_user_input,
                 turn_id,
                 agent_type,
                 workspace_path,
@@ -285,13 +294,20 @@ impl DialogScheduler {
                 session_id_clone
             );
 
-            let (merged_input, turn_id, agent_type, workspace_path, trigger_source) =
-                merge_messages(messages);
+            let (
+                merged_input,
+                original_user_input,
+                turn_id,
+                agent_type,
+                workspace_path,
+                trigger_source,
+            ) = merge_messages(messages);
 
             if let Err(e) = coordinator
                 .start_dialog_turn(
                     session_id_clone.clone(),
                     merged_input,
+                    original_user_input,
                     turn_id,
                     agent_type,
                     workspace_path,
@@ -360,11 +376,19 @@ impl DialogScheduler {
 /// ```
 fn merge_messages(
     messages: Vec<QueuedTurn>,
-) -> (String, Option<String>, String, Option<String>, DialogTriggerSource) {
+) -> (
+    String,
+    Option<String>,
+    Option<String>,
+    String,
+    Option<String>,
+    DialogTriggerSource,
+) {
     if messages.len() == 1 {
         let m = messages.into_iter().next().unwrap();
         return (
             m.user_input,
+            m.original_user_input,
             m.turn_id,
             m.agent_type,
             m.workspace_path,
@@ -381,6 +405,7 @@ fn merge_messages(
         .last()
         .map(|m| m.trigger_source)
         .unwrap_or(DialogTriggerSource::DesktopUi);
+    let original_user_input = messages.last().and_then(|m| m.original_user_input.clone());
 
     let entries: Vec<String> = messages
         .iter()
@@ -393,7 +418,14 @@ fn merge_messages(
         entries.join("\n\n")
     );
 
-    (merged, None, agent_type, workspace_path, trigger_source)
+    (
+        merged,
+        original_user_input,
+        None,
+        agent_type,
+        workspace_path,
+        trigger_source,
+    )
 }
 
 // ── Global instance ──────────────────────────────────────────────────────────

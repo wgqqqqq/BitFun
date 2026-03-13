@@ -827,6 +827,8 @@
     "modelExplanation": "模型说明",
     "modelSelection": "选择模型",
     "currentMode": "当前模式",
+    "autoModel": "Auto",
+    "autoModelDesc": "自动路由最优模型",
     "primaryModel": "Primary 模型",
     "fastModel": "Fast 模型",
     "modelNotConfigured": "未配置"

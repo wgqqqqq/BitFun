@@ -32,8 +32,8 @@ pub async fn start_embedded_relay(
 
     if let Some(dir) = static_dir {
         info!("Embedded relay: serving static files from {dir}");
-        let serve_dir = tower_http::services::ServeDir::new(dir)
-            .append_index_html_on_directories(true);
+        let serve_dir =
+            tower_http::services::ServeDir::new(dir).append_index_html_on_directories(true);
         let static_app = axum::Router::<()>::new()
             .fallback_service(serve_dir)
             .layer(axum::middleware::from_fn(static_cache_headers));

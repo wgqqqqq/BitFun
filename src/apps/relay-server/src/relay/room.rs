@@ -156,10 +156,7 @@ impl RoomManager {
             .and_then(|r| r.desktop.as_ref().map(|d| d.public_key.clone()))
     }
 
-    pub fn register_pending(
-        &self,
-        correlation_id: String,
-    ) -> oneshot::Receiver<ResponsePayload> {
+    pub fn register_pending(&self, correlation_id: String) -> oneshot::Receiver<ResponsePayload> {
         let (tx, rx) = oneshot::channel();
         self.pending_requests.insert(correlation_id, tx);
         rx

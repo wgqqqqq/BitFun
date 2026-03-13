@@ -13,7 +13,7 @@ export interface ModalProps {
   title?: string;
   titleExtra?: React.ReactNode;
   children: React.ReactNode;
-  size?: 'small' | 'medium' | 'large';
+  size?: 'small' | 'medium' | 'large' | 'xlarge';
   contentInset?: boolean;
   showCloseButton?: boolean;
   draggable?: boolean;

@@ -66,15 +66,21 @@ struct WorkspaceIdentityFrontmatter {
 }
 
 impl WorkspaceIdentity {
-    pub(crate) async fn load_from_workspace_root(workspace_root: &Path) -> Result<Option<Self>, String> {
+    pub(crate) async fn load_from_workspace_root(
+        workspace_root: &Path,
+    ) -> Result<Option<Self>, String> {
         let identity_path = workspace_root.join(IDENTITY_FILE_NAME);
         if !identity_path.exists() {
             return Ok(None);
         }
 
-        let content = fs::read_to_string(&identity_path)
-            .await
-            .map_err(|e| format!("Failed to read identity file '{}': {}", identity_path.display(), e))?;
+        let content = fs::read_to_string(&identity_path).await.map_err(|e| {
+            format!(
+                "Failed to read identity file '{}': {}",
+                identity_path.display(),
+                e
+            )
+        })?;
 
         let identity = Self::from_markdown(&content)?;
         if identity.is_empty() {
@@ -157,7 +163,11 @@ pub struct WorkspaceInfo {
     pub workspace_type: WorkspaceType,
     #[serde(rename = "workspaceKind", default)]
     pub workspace_kind: WorkspaceKind,
-    #[serde(rename = "assistantId", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "assistantId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub assistant_id: Option<String>,
     pub status: WorkspaceStatus,
     pub languages: Vec<String>,
@@ -313,7 +323,10 @@ impl WorkspaceInfo {
         };
 
         if self.workspace_kind == WorkspaceKind::Assistant {
-            if let Some(name) = identity.as_ref().and_then(|identity| identity.name.as_ref()) {
+            if let Some(name) = identity
+                .as_ref()
+                .and_then(|identity| identity.name.as_ref())
+            {
                 self.name = name.clone();
             }
         }
@@ -698,7 +711,10 @@ impl WorkspaceManager {
             .insert(workspace_id.clone(), workspace.clone());
         self.ensure_workspace_open(&workspace_id);
         if options.auto_set_current {
-            self.set_current_workspace_with_recent_policy(workspace_id.clone(), options.add_to_recent)?;
+            self.set_current_workspace_with_recent_policy(
+                workspace_id.clone(),
+                options.add_to_recent,
+            )?;
         } else {
             self.touch_workspace_access(&workspace_id, options.add_to_recent);
         }
@@ -750,7 +766,11 @@ impl WorkspaceManager {
 
     /// Sets the active workspace among already opened workspaces.
     pub fn set_active_workspace(&mut self, workspace_id: &str) -> BitFunResult<()> {
-        if !self.opened_workspace_ids.iter().any(|id| id == workspace_id) {
+        if !self
+            .opened_workspace_ids
+            .iter()
+            .any(|id| id == workspace_id)
+        {
             return Err(BitFunError::service(format!(
                 "Workspace is not opened: {}",
                 workspace_id
@@ -961,7 +981,8 @@ impl WorkspaceManager {
     /// Ensures a workspace stays in the opened list.
     fn ensure_workspace_open(&mut self, workspace_id: &str) {
         self.opened_workspace_ids.retain(|id| id != workspace_id);
-        self.opened_workspace_ids.insert(0, workspace_id.to_string());
+        self.opened_workspace_ids
+            .insert(0, workspace_id.to_string());
     }
 
     /// Returns manager statistics.

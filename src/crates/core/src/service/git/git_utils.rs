@@ -100,7 +100,10 @@ pub fn status_to_string(status: Status) -> String {
 const UNTRACKED_RECURSE_THRESHOLD: usize = 200;
 
 /// Collects file statuses from a `StatusOptions` scan.
-fn collect_statuses(repo: &Repository, recurse_untracked: bool) -> Result<Vec<GitFileStatus>, GitError> {
+fn collect_statuses(
+    repo: &Repository,
+    recurse_untracked: bool,
+) -> Result<Vec<GitFileStatus>, GitError> {
     let mut status_options = StatusOptions::new();
     status_options.include_untracked(true);
     status_options.include_ignored(false);

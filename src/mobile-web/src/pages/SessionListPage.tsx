@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
+import LanguageToggleButton from '../components/LanguageToggleButton';
+import { useI18n } from '../i18n';
 import { RemoteSessionManager } from '../services/RemoteSessionManager';
 import { useMobileStore } from '../services/store';
 import { useTheme } from '../theme';
@@ -12,32 +14,32 @@ interface SessionListPageProps {
   onOpenWorkspace: () => void;
 }
 
-function formatTime(unixStr: string): string {
+function formatTime(unixStr: string, language: string, t: (key: string, params?: Record<string, string | number>) => string): string {
   const ts = parseInt(unixStr, 10);
   if (!ts || isNaN(ts)) return '';
   const date = new Date(ts * 1000);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 1) return t('common.justNow');
+  if (diffMin < 60) return t('common.minutesAgo', { count: diffMin });
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffHr < 24) return t('common.hoursAgo', { count: diffHr });
   const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return date.toLocaleDateString();
+  if (diffDay < 7) return t('common.daysAgo', { count: diffDay });
+  return date.toLocaleDateString(language);
 }
 
-function agentLabel(agentType: string): string {
+function agentLabel(agentType: string, t: (key: string) => string): string {
   switch (agentType) {
     case 'code':
     case 'agentic':
-      return 'Code';
+      return t('sessions.agentCode');
     case 'cowork':
     case 'Cowork':
-      return 'Cowork';
+      return t('sessions.agentCowork');
     default:
-      return agentType || 'Default';
+      return agentType || t('sessions.agentDefault');
   }
 }
 
@@ -83,6 +85,7 @@ const ThemeToggleIcon: React.FC<{ isDark: boolean }> = ({ isDark }) => (
 );
 
 const SessionListPage: React.FC<SessionListPageProps> = ({ sessionMgr, onSelectSession, onOpenWorkspace }) => {
+  const { t, language } = useI18n();
   const {
     sessions,
     setSessions,
@@ -209,34 +212,37 @@ const SessionListPage: React.FC<SessionListPageProps> = ({ sessionMgr, onSelectS
     }
   }, [currentWorkspace?.path, loadNextPage]);
 
-  const handleCreate = async (agentType: string) => {
+  const handleCreate = useCallback(async (agentType: string) => {
     if (creating) return;
     setCreating(true);
     try {
       const id = await sessionMgr.createSession(agentType, undefined, currentWorkspace?.path);
       await loadFirstPage(currentWorkspace?.path);
-      const label = agentType === 'cowork' || agentType === 'Cowork' ? 'Remote Cowork Session' : 'Remote Code Session';
+      const label = agentType === 'cowork' || agentType === 'Cowork'
+        ? t('sessions.remoteCoworkSession')
+        : t('sessions.remoteCodeSession');
       onSelectSession(id, label, true);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setCreating(false);
     }
-  };
+  }, [creating, currentWorkspace?.path, loadFirstPage, onSelectSession, sessionMgr, setError, t]);
 
-  const workspaceDisplayName = currentWorkspace?.project_name || 'No workspace selected';
+  const workspaceDisplayName = currentWorkspace?.project_name || t('sessions.noWorkspaceSelected');
   return (
     <div className="session-list">
       <div className="session-list__header">
         <div className="session-list__header-brand">
           <img src={logoIcon} alt="BitFun" className="session-list__logo" />
           <div className="session-list__header-copy">
-            <span className="session-list__header-kicker">Remote cockpit</span>
-            <h1>BitFun Remote</h1>
+            <span className="session-list__header-kicker">{t('sessions.remoteCockpit')}</span>
+            <h1>{t('common.appName')}</h1>
           </div>
         </div>
         <div className="session-list__header-actions">
-          <button className="session-list__theme-btn" onClick={toggleTheme} aria-label="Toggle theme">
+          <LanguageToggleButton />
+          <button className="session-list__theme-btn" onClick={toggleTheme} aria-label={t('common.toggleTheme')}>
             <ThemeToggleIcon isDark={isDark} />
           </button>
         </div>
@@ -249,7 +255,7 @@ const SessionListPage: React.FC<SessionListPageProps> = ({ sessionMgr, onSelectS
           </svg>
         </span>
         <div className="session-list__workspace-copy">
-          <span className="session-list__workspace-label">Workspace</span>
+          <span className="session-list__workspace-label">{t('sessions.workspace')}</span>
           <span className="session-list__workspace-name" title={workspaceDisplayName}>{truncateMiddle(workspaceDisplayName, 24)}</span>
         </div>
         {currentWorkspace?.git_branch && (
@@ -258,14 +264,14 @@ const SessionListPage: React.FC<SessionListPageProps> = ({ sessionMgr, onSelectS
             {truncateMiddle(currentWorkspace.git_branch, 20)}
           </span>
         )}
-        <span className="session-list__workspace-switch" aria-label="Switch workspace">
+        <span className="session-list__workspace-switch" aria-label={t('sessions.switchWorkspace')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
         </span>
       </div>
 
       {authenticatedUserId && (
         <div className="session-list__identity-bar">
-          <span className="session-list__identity-label">User ID</span>
+          <span className="session-list__identity-label">{t('common.userId')}</span>
           <span className="session-list__identity-value">{authenticatedUserId}</span>
         </div>
       )}
@@ -295,8 +301,8 @@ const SessionListPage: React.FC<SessionListPageProps> = ({ sessionMgr, onSelectS
         <section className="session-list__panel">
           <div className="session-list__section-head">
             <div>
-              <div className="session-list__section-kicker">Launch</div>
-              <div className="session-list__section-title">Start a new remote flow</div>
+              <div className="session-list__section-kicker">{t('sessions.launch')}</div>
+              <div className="session-list__section-title">{t('sessions.startRemoteFlow')}</div>
             </div>
           </div>
           <div className="session-list__create-row">
@@ -309,8 +315,8 @@ const SessionListPage: React.FC<SessionListPageProps> = ({ sessionMgr, onSelectS
                 <SessionTypeIcon agentType="code" />
               </div>
               <div className="session-list__create-copy">
-                <span className="session-list__create-title">Code Session</span>
-                <span className="session-list__create-desc">For coding anywhere, anytime.</span>
+                <span className="session-list__create-title">{t('sessions.codeSession')}</span>
+                <span className="session-list__create-desc">{t('sessions.codeSessionDesc')}</span>
               </div>
               <span className="session-list__create-arrow">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
@@ -325,8 +331,8 @@ const SessionListPage: React.FC<SessionListPageProps> = ({ sessionMgr, onSelectS
                 <SessionTypeIcon agentType="cowork" />
               </div>
               <div className="session-list__create-copy">
-                <span className="session-list__create-title">Cowork Session</span>
-                <span className="session-list__create-desc">For assisting with everyday work.</span>
+                <span className="session-list__create-title">{t('sessions.coworkSession')}</span>
+                <span className="session-list__create-desc">{t('sessions.coworkSessionDesc')}</span>
               </div>
               <span className="session-list__create-arrow">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
@@ -338,17 +344,17 @@ const SessionListPage: React.FC<SessionListPageProps> = ({ sessionMgr, onSelectS
         <section className="session-list__panel session-list__panel--sessions">
           <div className="session-list__section-head">
             <div>
-              <div className="session-list__section-kicker">Recent</div>
-              <div className="session-list__section-title">Session history</div>
+              <div className="session-list__section-kicker">{t('sessions.recent')}</div>
+              <div className="session-list__section-title">{t('sessions.sessionHistory')}</div>
             </div>
-            <div className="session-list__section-meta">{sessions.length} items</div>
+            <div className="session-list__section-meta">{t('common.itemCount', { count: sessions.length })}</div>
           </div>
 
           {loading && sessions.length === 0 && (
-            <div className="session-list__empty">Loading sessions...</div>
+            <div className="session-list__empty">{t('sessions.loadingSessions')}</div>
           )}
           {!loading && sessions.length === 0 && (
-            <div className="session-list__empty">No sessions yet. Create one to get started.</div>
+            <div className="session-list__empty">{t('sessions.noSessions')}</div>
           )}
 
           <div className="session-list__cards">
@@ -363,19 +369,19 @@ const SessionListPage: React.FC<SessionListPageProps> = ({ sessionMgr, onSelectS
                 </div>
                 <div className="session-list__item-body">
                   <div className="session-list__item-top">
-                    <div className="session-list__item-name">{s.name || 'Untitled Session'}</div>
+                    <div className="session-list__item-name">{s.name || t('sessions.untitledSession')}</div>
                     <span className={`session-list__agent-badge session-list__agent-badge--${s.agent_type}`}>
-                      {agentLabel(s.agent_type)}
+                      {agentLabel(s.agent_type, t)}
                     </span>
                   </div>
-                  <div className="session-list__item-time">{formatTime(s.updated_at)}</div>
+                  <div className="session-list__item-time">{formatTime(s.updated_at, language, t)}</div>
                 </div>
               </div>
             ))}
           </div>
 
           {loadingMore && (
-            <div className="session-list__load-more">Loading more...</div>
+            <div className="session-list__load-more">{t('sessions.loadingMore')}</div>
           )}
         </section>
       </div>

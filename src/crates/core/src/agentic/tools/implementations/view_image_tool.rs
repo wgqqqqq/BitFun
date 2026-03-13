@@ -170,8 +170,7 @@ impl ViewImageTool {
                 let fallback_mime = data_url_mime
                     .as_deref()
                     .or_else(|| Some(ctx_mime_type.as_str()));
-                let processed =
-                    optimize_image_for_provider(data, primary_provider, fallback_mime)?;
+                let processed = optimize_image_for_provider(data, primary_provider, fallback_mime)?;
                 let optimized_data_url = format!(
                     "data:{};base64,{}",
                     processed.mime_type,

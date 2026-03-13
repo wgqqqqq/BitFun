@@ -285,7 +285,7 @@ const MainNav: React.FC<MainNavProps> = ({
     switchLeftPanelTab('sessions');
     try {
       await flowChatManager.createChatSession(
-        { modelName: 'claude-sonnet-4.5' },
+        {},
         isAssistantWorkspaceActive
           ? 'Claw'
           : defaultSessionMode === 'cowork'

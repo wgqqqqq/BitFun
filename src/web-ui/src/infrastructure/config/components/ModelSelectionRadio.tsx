@@ -2,6 +2,7 @@ import React, { useId, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Select } from '@/component-library';
 import type { AIModelConfig } from '../types';
+import { getModelDisplayName } from '../services/modelConfigs';
 import './ModelSelectionRadio.scss';
 
 export interface ModelSelectionRadioProps {
@@ -120,7 +121,7 @@ export const ModelSelectionRadio: React.FC<ModelSelectionRadioProps> = ({
               disabled={disabled}
               placeholder={t('selection.selectModel')}
               options={enabledModels.map(model => ({
-                label: model.name,
+                label: getModelDisplayName(model),
                 value: model.id!,
               }))}
               size="small"

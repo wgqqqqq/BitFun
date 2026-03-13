@@ -35,11 +35,13 @@ export interface SelectProps {
   searchPlaceholder?: string;
   emptyText?: string;
   renderOption?: (option: SelectOption) => React.ReactNode;
+  renderValue?: (option?: SelectOption | SelectOption[]) => React.ReactNode;
   className?: string;
   placement?: 'bottom' | 'top';
   autoClose?: boolean;
   allowCustomValue?: boolean;
   customValueHint?: string;
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -62,11 +64,13 @@ export const Select: React.FC<SelectProps> = ({
   searchPlaceholder,
   emptyText,
   renderOption,
+  renderValue,
   className = '',
   placement = 'bottom',
   autoClose = false,
   allowCustomValue = false,
   customValueHint,
+  onOpenChange,
 }) => {
   const { t } = useI18n('components');
   
@@ -81,6 +85,7 @@ export const Select: React.FC<SelectProps> = ({
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const hasMountedRef = useRef(false);
   
   const selectRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -290,6 +295,14 @@ export const Select: React.FC<SelectProps> = ({
   }, [allowCustomValue, multiple, searchQuery, options, onChange]);
 
   useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+    onOpenChange?.(isOpen);
+  }, [isOpen, onOpenChange]);
+
+  useEffect(() => {
     if (isOpen && searchable && searchInputRef.current) {
       searchInputRef.current.focus();
     }
@@ -318,7 +331,14 @@ export const Select: React.FC<SelectProps> = ({
     .filter(Boolean)
     .join(' ');
 
-  const renderValue = () => {
+  const renderSelectedValue = () => {
+    if (renderValue) {
+      const customRenderedValue = renderValue(selectedOptions);
+      if (customRenderedValue) {
+        return customRenderedValue;
+      }
+    }
+
     if (multiple) {
       const selected = selectedOptions as SelectOption[];
       if (selected.length === 0) {
@@ -422,7 +442,7 @@ export const Select: React.FC<SelectProps> = ({
         aria-haspopup="listbox"
         aria-disabled={disabled}
       >
-        {renderValue()}
+        {renderSelectedValue()}
         
         <div className="select__suffix">
           {loading && (

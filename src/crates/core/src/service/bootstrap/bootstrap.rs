@@ -35,15 +35,14 @@ async fn ensure_markdown_placeholder(path: &Path, content: &str) -> BitFunResult
     Ok(true)
 }
 
-pub(crate) async fn initialize_workspace_persona_files(
-    workspace_root: &Path,
-) -> BitFunResult<()> {
+pub(crate) async fn initialize_workspace_persona_files(workspace_root: &Path) -> BitFunResult<()> {
     let bootstrap_path = workspace_root.join(BOOTSTRAP_FILE_NAME);
     let soul_path = workspace_root.join(SOUL_FILE_NAME);
     let user_path = workspace_root.join(USER_FILE_NAME);
     let identity_path = workspace_root.join(IDENTITY_FILE_NAME);
 
-    let created_bootstrap = ensure_markdown_placeholder(&bootstrap_path, BOOTSTRAP_TEMPLATE).await?;
+    let created_bootstrap =
+        ensure_markdown_placeholder(&bootstrap_path, BOOTSTRAP_TEMPLATE).await?;
     let created_soul = ensure_markdown_placeholder(&soul_path, SOUL_TEMPLATE).await?;
     let created_user = ensure_markdown_placeholder(&user_path, USER_TEMPLATE).await?;
     let created_identity = ensure_markdown_placeholder(&identity_path, IDENTITY_TEMPLATE).await?;
@@ -116,9 +115,7 @@ pub(crate) async fn ensure_workspace_persona_files_for_prompt(
     Ok(())
 }
 
-pub async fn reset_workspace_persona_files_to_default(
-    workspace_root: &Path,
-) -> BitFunResult<()> {
+pub async fn reset_workspace_persona_files_to_default(workspace_root: &Path) -> BitFunResult<()> {
     let persona_templates = [
         (BOOTSTRAP_FILE_NAME, BOOTSTRAP_TEMPLATE),
         (SOUL_FILE_NAME, SOUL_TEMPLATE),
@@ -129,13 +126,15 @@ pub async fn reset_workspace_persona_files_to_default(
     for (file_name, template) in persona_templates {
         let file_path = workspace_root.join(file_name);
         let normalized_content = normalize_line_endings(template);
-        fs::write(&file_path, normalized_content).await.map_err(|e| {
-            BitFunError::service(format!(
-                "Failed to reset persona file '{}': {}",
-                file_path.display(),
-                e
-            ))
-        })?;
+        fs::write(&file_path, normalized_content)
+            .await
+            .map_err(|e| {
+                BitFunError::service(format!(
+                    "Failed to reset persona file '{}': {}",
+                    file_path.display(),
+                    e
+                ))
+            })?;
     }
 
     debug!(

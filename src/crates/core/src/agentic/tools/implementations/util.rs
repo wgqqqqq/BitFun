@@ -24,7 +24,10 @@ pub fn normalize_path(path: &str) -> String {
         .to_string()
 }
 
-pub fn resolve_path_with_workspace(path: &str, workspace_root: Option<&Path>) -> BitFunResult<String> {
+pub fn resolve_path_with_workspace(
+    path: &str,
+    workspace_root: Option<&Path>,
+) -> BitFunResult<String> {
     if Path::new(path).is_absolute() {
         Ok(normalize_path(path))
     } else {

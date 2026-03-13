@@ -7,7 +7,10 @@ use serde_json::{json, Map, Value};
 pub struct GeminiMessageConverter;
 
 impl GeminiMessageConverter {
-    pub fn convert_messages(messages: Vec<Message>, model_name: &str) -> (Option<Value>, Vec<Value>) {
+    pub fn convert_messages(
+        messages: Vec<Message>,
+        model_name: &str,
+    ) -> (Option<Value>, Vec<Value>) {
         let mut system_texts = Vec::new();
         let mut contents = Vec::new();
         let is_gemini_3 = model_name.contains("gemini-3");
@@ -36,7 +39,11 @@ impl GeminiMessageConverter {
                         .map(|tool_calls| !tool_calls.is_empty())
                         .unwrap_or(false);
 
-                    if let Some(content) = msg.content.as_deref().filter(|value| !value.trim().is_empty()) {
+                    if let Some(content) = msg
+                        .content
+                        .as_deref()
+                        .filter(|value| !value.trim().is_empty())
+                    {
                         if !has_tool_calls {
                             if let Some(signature) = pending_thought_signature.take() {
                                 parts.push(json!({
@@ -516,7 +523,9 @@ impl GeminiMessageConverter {
             Some(Value::String(value)) if value != "null" => (Some(value), false),
             Some(Value::String(_)) => (None, true),
             Some(Value::Array(values)) => {
-                let mut types = values.into_iter().filter_map(|value| value.as_str().map(str::to_string));
+                let mut types = values
+                    .into_iter()
+                    .filter_map(|value| value.as_str().map(str::to_string));
                 let mut nullable = false;
                 let mut selected = None;
 
@@ -565,7 +574,11 @@ impl GeminiMessageConverter {
         nullable
     }
 
-    fn merge_schema_variants(target: &mut Map<String, Value>, variants: Value, preserve_required: bool) {
+    fn merge_schema_variants(
+        target: &mut Map<String, Value>,
+        variants: Value,
+        preserve_required: bool,
+    ) {
         if let Value::Array(variants) = variants {
             for variant in variants {
                 if let Value::Object(map) = Self::strip_unsupported_schema_fields(variant) {

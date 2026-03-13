@@ -2,7 +2,7 @@
 
 use crate::miniapp::js_worker::JsWorker;
 use crate::miniapp::runtime_detect::{detect_runtime, DetectedRuntime};
-use crate::miniapp::types::{NpmDep, NodePermissions};
+use crate::miniapp::types::{NodePermissions, NpmDep};
 use crate::util::errors::{BitFunError, BitFunResult};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -38,9 +38,12 @@ impl JsWorkerPool {
         path_manager: Arc<crate::infrastructure::PathManager>,
         worker_host_path: PathBuf,
     ) -> BitFunResult<Self> {
-        let runtime = detect_runtime()
-            .ok_or_else(|| BitFunError::validation("No JS runtime found (install Bun or Node.js)".to_string()))?;
-        let workers = Arc::new(Mutex::new(std::collections::HashMap::<String, WorkerEntry>::new()));
+        let runtime = detect_runtime().ok_or_else(|| {
+            BitFunError::validation("No JS runtime found (install Bun or Node.js)".to_string())
+        })?;
+        let workers = Arc::new(Mutex::new(
+            std::collections::HashMap::<String, WorkerEntry>::new(),
+        ));
 
         // Background task: evict idle workers every 60s without waiting for a new spawn.
         let workers_bg = Arc::clone(&workers);
@@ -113,21 +116,17 @@ impl JsWorkerPool {
 
         let app_dir = self.path_manager.miniapp_dir(app_id);
         if !app_dir.exists() {
-            return Err(BitFunError::NotFound(format!("MiniApp dir not found: {}", app_id)));
+            return Err(BitFunError::NotFound(format!(
+                "MiniApp dir not found: {}",
+                app_id
+            )));
         }
 
-        let worker = JsWorker::spawn(
-            &self.runtime,
-            &self.worker_host_path,
-            &app_dir,
-            policy_json,
-        )
-        .await
-        .map_err(|e| BitFunError::validation(e))?;
+        let worker = JsWorker::spawn(&self.runtime, &self.worker_host_path, &app_dir, policy_json)
+            .await
+            .map_err(|e| BitFunError::validation(e))?;
 
-        let _timeout_ms = node_perms
-            .and_then(|n| n.timeout_ms)
-            .unwrap_or(30_000);
+        let _timeout_ms = node_perms.and_then(|n| n.timeout_ms).unwrap_or(30_000);
         let worker = Arc::new(Mutex::new(worker));
         guard.insert(
             app_id.to_string(),
@@ -139,10 +138,7 @@ impl JsWorkerPool {
         Ok(worker)
     }
 
-    async fn evict_idle(
-        &self,
-        guard: &mut std::collections::HashMap<String, WorkerEntry>,
-    ) {
+    async fn evict_idle(&self, guard: &mut std::collections::HashMap<String, WorkerEntry>) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -167,10 +163,7 @@ impl JsWorkerPool {
         }
     }
 
-    async fn evict_lru(
-        &self,
-        guard: &mut std::collections::HashMap<String, WorkerEntry>,
-    ) {
+    async fn evict_lru(&self, guard: &mut std::collections::HashMap<String, WorkerEntry>) {
         let (oldest_id, _) = guard
             .iter()
             .map(|(id, entry)| {
@@ -204,11 +197,12 @@ impl JsWorkerPool {
         let worker = self
             .get_or_spawn(app_id, worker_revision, policy_json, permissions)
             .await?;
-        let timeout_ms = permissions
-            .and_then(|n| n.timeout_ms)
-            .unwrap_or(30_000);
+        let timeout_ms = permissions.and_then(|n| n.timeout_ms).unwrap_or(30_000);
         let guard = worker.lock().await;
-        guard.call(method, params, timeout_ms).await.map_err(BitFunError::validation)
+        guard
+            .call(method, params, timeout_ms)
+            .await
+            .map_err(BitFunError::validation)
     }
 
     /// Stop and remove the Worker for the app.
@@ -241,11 +235,18 @@ impl JsWorkerPool {
     }
 
     pub fn has_installed_deps(&self, app_id: &str) -> bool {
-        self.path_manager.miniapp_dir(app_id).join("node_modules").exists()
+        self.path_manager
+            .miniapp_dir(app_id)
+            .join("node_modules")
+            .exists()
     }
 
     /// Install npm dependencies for the app (bun install or npm/pnpm install).
-    pub async fn install_deps(&self, app_id: &str, _deps: &[NpmDep]) -> BitFunResult<InstallResult> {
+    pub async fn install_deps(
+        &self,
+        app_id: &str,
+        _deps: &[NpmDep],
+    ) -> BitFunResult<InstallResult> {
         let app_dir = self.path_manager.miniapp_dir(app_id);
         let package_json = app_dir.join("package.json");
         if !package_json.exists() {

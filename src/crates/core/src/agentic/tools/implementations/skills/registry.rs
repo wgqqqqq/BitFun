@@ -218,7 +218,10 @@ impl SkillRegistry {
         let by_name = self.scan_skill_map_for_workspace(workspace_root).await;
         let mut cache = self.cache.write().await;
         *cache = by_name;
-        debug!("SkillRegistry refreshed for workspace, {} skills loaded", cache.len());
+        debug!(
+            "SkillRegistry refreshed for workspace, {} skills loaded",
+            cache.len()
+        );
     }
 
     /// Ensure cache is initialized
@@ -239,7 +242,10 @@ impl SkillRegistry {
         cache.values().cloned().collect()
     }
 
-    pub async fn get_all_skills_for_workspace(&self, workspace_root: Option<&Path>) -> Vec<SkillInfo> {
+    pub async fn get_all_skills_for_workspace(
+        &self,
+        workspace_root: Option<&Path>,
+    ) -> Vec<SkillInfo> {
         self.scan_skill_map_for_workspace(workspace_root)
             .await
             .into_values()
@@ -375,9 +381,9 @@ impl SkillRegistry {
         workspace_root: Option<&Path>,
     ) -> BitFunResult<SkillData> {
         let skill_map = self.scan_skill_map_for_workspace(workspace_root).await;
-        let info = skill_map.get(skill_name).ok_or_else(|| {
-            BitFunError::tool(format!("Skill '{}' not found", skill_name))
-        })?;
+        let info = skill_map
+            .get(skill_name)
+            .ok_or_else(|| BitFunError::tool(format!("Skill '{}' not found", skill_name)))?;
 
         if !info.enabled {
             return Err(BitFunError::tool(format!(

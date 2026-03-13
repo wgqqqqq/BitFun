@@ -241,7 +241,10 @@ impl GeminiSSEData {
         }
     }
 
-    fn safety_summary(prompt_feedback: Option<&Value>, safety_ratings: Option<&Value>) -> Option<String> {
+    fn safety_summary(
+        prompt_feedback: Option<&Value>,
+        safety_ratings: Option<&Value>,
+    ) -> Option<String> {
         let mut lines = Vec::new();
 
         if let Some(prompt_feedback) = prompt_feedback {

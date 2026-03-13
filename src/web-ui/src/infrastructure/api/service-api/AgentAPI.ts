@@ -45,6 +45,7 @@ export interface CreateSessionResponse {
 export interface StartDialogTurnRequest {
   sessionId: string;
   userInput: string;
+  originalUserInput?: string;
   turnId?: string; 
   agentType: string; 
   workspacePath?: string;

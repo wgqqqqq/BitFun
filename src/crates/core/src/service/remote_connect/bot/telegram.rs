@@ -12,9 +12,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use super::command_router::{
-    execute_forwarded_turn, handle_command, paired_success_message, parse_command, BotAction,
-    BotChatState, BotInteractionHandler, BotInteractiveRequest, BotMessageSender, HandleResult,
-    WELCOME_MESSAGE,
+    current_bot_language, execute_forwarded_turn, handle_command, paired_success_message,
+    parse_command, welcome_message, BotAction, BotChatState, BotInteractionHandler,
+    BotInteractiveRequest, BotLanguage, BotMessageSender, HandleResult,
 };
 use super::{load_bot_persistence, save_bot_persistence, BotConfig, SavedBotConnection};
 use crate::service::remote_connect::remote_server::ImageAttachment;
@@ -37,6 +37,54 @@ struct PendingPairing {
 }
 
 impl TelegramBot {
+    fn expired_download_message(language: BotLanguage) -> &'static str {
+        if language.is_chinese() {
+            "这个下载链接已过期，请重新让助手发送一次。"
+        } else {
+            "This download link has expired. Please ask the agent again."
+        }
+    }
+
+    fn sending_file_message(language: BotLanguage, file_name: &str) -> String {
+        if language.is_chinese() {
+            format!("正在发送“{file_name}”……")
+        } else {
+            format!("Sending \"{file_name}\"…")
+        }
+    }
+
+    fn send_file_failed_message(language: BotLanguage, file_name: &str, error: &str) -> String {
+        if language.is_chinese() {
+            format!("无法发送“{file_name}”：{error}")
+        } else {
+            format!("Could not send \"{file_name}\": {error}")
+        }
+    }
+
+    fn invalid_pairing_code_message(language: BotLanguage) -> &'static str {
+        if language.is_chinese() {
+            "配对码无效或已过期，请重试。"
+        } else {
+            "Invalid or expired pairing code. Please try again."
+        }
+    }
+
+    fn enter_pairing_code_message(language: BotLanguage) -> &'static str {
+        if language.is_chinese() {
+            "请输入 BitFun Desktop 中显示的 6 位配对码。"
+        } else {
+            "Please enter the 6-digit pairing code from BitFun Desktop."
+        }
+    }
+
+    fn cancel_button_hint(language: BotLanguage) -> &'static str {
+        if language.is_chinese() {
+            "如需停止本次请求，请点击下方的“取消任务”按钮。"
+        } else {
+            "If needed, tap the Cancel Task button below to stop this request."
+        }
+    }
+
     pub fn new(config: TelegramConfig) -> Self {
         Self {
             config,
@@ -185,20 +233,18 @@ impl TelegramBot {
     /// send it.  Sends a plain-text error if the token has expired or the
     /// transfer fails.
     async fn handle_download_request(&self, chat_id: i64, token: &str) {
-        let path = {
+        let (path, language) = {
             let mut states = self.chat_states.write().await;
-            states
-                .get_mut(&chat_id)
-                .and_then(|s| s.pending_files.remove(token))
+            let state = states.get_mut(&chat_id);
+            let language = current_bot_language().await;
+            let path = state.and_then(|s| s.pending_files.remove(token));
+            (path, language)
         };
 
         match path {
             None => {
                 let _ = self
-                    .send_message(
-                        chat_id,
-                        "This download link has expired. Please ask the agent again.",
-                    )
+                    .send_message(chat_id, Self::expired_download_message(language))
                     .await;
             }
             Some(path) => {
@@ -208,7 +254,7 @@ impl TelegramBot {
                     .unwrap_or("file")
                     .to_string();
                 let _ = self
-                    .send_message(chat_id, &format!("Sending \"{file_name}\"…"))
+                    .send_message(chat_id, &Self::sending_file_message(language, &file_name))
                     .await;
                 match self.send_file_as_document(chat_id, &path).await {
                     Ok(()) => info!("Sent file to Telegram chat {chat_id}: {path}"),
@@ -217,7 +263,11 @@ impl TelegramBot {
                         let _ = self
                             .send_message(
                                 chat_id,
-                                &format!("⚠️ Could not send \"{file_name}\": {e}"),
+                                &Self::send_file_failed_message(
+                                    language,
+                                    &file_name,
+                                    &e.to_string(),
+                                ),
                             )
                             .await;
                     }
@@ -242,7 +292,8 @@ impl TelegramBot {
     /// text is replaced with a friendlier prompt, and a Cancel Task button is
     /// added via the inline keyboard.
     async fn send_handle_result(&self, chat_id: i64, result: &HandleResult) {
-        let text = Self::clean_reply_text(&result.reply, !result.actions.is_empty());
+        let language = current_bot_language().await;
+        let text = Self::clean_reply_text(language, &result.reply, !result.actions.is_empty());
         if result.actions.is_empty() {
             self.send_message(chat_id, &text).await.ok();
         } else {
@@ -258,7 +309,7 @@ impl TelegramBot {
 
     /// Remove raw `/cancel_task <turn_id>` instruction lines and replace them
     /// with a short hint that the button below can be used instead.
-    fn clean_reply_text(text: &str, has_actions: bool) -> String {
+    fn clean_reply_text(language: BotLanguage, text: &str, has_actions: bool) -> String {
         let mut lines: Vec<String> = Vec::new();
         let mut replaced_cancel = false;
 
@@ -266,10 +317,7 @@ impl TelegramBot {
             let trimmed = line.trim();
             if trimmed.contains("/cancel_task ") {
                 if has_actions && !replaced_cancel {
-                    lines.push(
-                        "If needed, tap the Cancel Task button below to stop this request."
-                            .to_string(),
-                    );
+                    lines.push(Self::cancel_button_hint(language).to_string());
                     replaced_cancel = true;
                 }
                 continue;
@@ -417,7 +465,6 @@ impl TelegramBot {
                 let cq_id = cq["id"].as_str().unwrap_or("").to_string();
                 let chat_id = cq.pointer("/message/chat/id").and_then(|v| v.as_i64());
                 let data = cq["data"].as_str().map(|s| s.trim().to_string());
-
                 if let (Some(chat_id), Some(data)) = (chat_id, data) {
                     // Answer the callback query to dismiss the button spinner.
                     self.answer_callback_query(&cq_id).await;
@@ -492,16 +539,19 @@ impl TelegramBot {
                 Ok(messages) => {
                     for (chat_id, text, _images) in messages {
                         let trimmed = text.trim();
+                        let language = current_bot_language().await;
 
                         if trimmed == "/start" {
-                            self.send_message(chat_id, WELCOME_MESSAGE).await.ok();
+                            self.send_message(chat_id, welcome_message(language))
+                                .await
+                                .ok();
                             continue;
                         }
 
                         if trimmed.len() == 6 && trimmed.chars().all(|c| c.is_ascii_digit()) {
                             if self.verify_pairing_code(trimmed).await {
                                 info!("Telegram pairing successful, chat_id={chat_id}");
-                                let success_msg = paired_success_message();
+                                let success_msg = paired_success_message(language);
                                 self.send_message(chat_id, &success_msg).await.ok();
                                 self.set_bot_commands().await.ok();
 
@@ -517,18 +567,15 @@ impl TelegramBot {
                             } else {
                                 self.send_message(
                                     chat_id,
-                                    "Invalid or expired pairing code. Please try again.",
+                                    Self::invalid_pairing_code_message(language),
                                 )
                                 .await
                                 .ok();
                             }
                         } else {
-                            self.send_message(
-                                chat_id,
-                                "Please enter the 6-digit pairing code from BitFun Desktop.",
-                            )
-                            .await
-                            .ok();
+                            self.send_message(chat_id, Self::enter_pairing_code_message(language))
+                                .await
+                                .ok();
                         }
                     }
                 }
@@ -589,37 +636,34 @@ impl TelegramBot {
             s.paired = true;
             s
         });
+        let language = current_bot_language().await;
 
         if !state.paired {
             let trimmed = text.trim();
             if trimmed == "/start" {
-                self.send_message(chat_id, WELCOME_MESSAGE).await.ok();
+                self.send_message(chat_id, welcome_message(language))
+                    .await
+                    .ok();
                 return;
             }
             if trimmed.len() == 6 && trimmed.chars().all(|c| c.is_ascii_digit()) {
                 if self.verify_pairing_code(trimmed).await {
                     state.paired = true;
-                    let msg = paired_success_message();
+                    let msg = paired_success_message(language);
                     self.send_message(chat_id, &msg).await.ok();
                     self.set_bot_commands().await.ok();
                     self.persist_chat_state(chat_id, state).await;
                     return;
                 } else {
-                    self.send_message(
-                        chat_id,
-                        "Invalid or expired pairing code. Please try again.",
-                    )
-                    .await
-                    .ok();
+                    self.send_message(chat_id, Self::invalid_pairing_code_message(language))
+                        .await
+                        .ok();
                     return;
                 }
             }
-            self.send_message(
-                chat_id,
-                "Please enter the 6-digit pairing code from BitFun Desktop.",
-            )
-            .await
-            .ok();
+            self.send_message(chat_id, Self::enter_pairing_code_message(language))
+                .await
+                .ok();
             return;
         }
 

@@ -4,13 +4,14 @@
  *
  * Config linkage:
  * - Unified logic: all modes use ai.agent_models[mode_id]
- * - Supports 'primary' | 'fast' | specific model IDs
+ * - Supports 'auto' | 'primary' | 'fast' | specific model IDs
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Cpu, ChevronDown, Check, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { configManager } from '@/infrastructure/config/services/ConfigManager';
+import { getProviderDisplayName } from '@/infrastructure/config/services/modelConfigs';
 import { globalEventBus } from '@/infrastructure/event-bus';
 import type { AIModelConfig } from '@/infrastructure/config/types';
 import { Tooltip } from '@/component-library';
@@ -30,8 +31,8 @@ interface ModelSelectorProps {
 
 interface ModelInfo {
   id: string;
-  name: string;
   modelName: string;
+  providerName: string;
   provider: string;
   contextWindow?: number;
   enableThinking?: boolean;
@@ -39,8 +40,28 @@ interface ModelInfo {
 }
 
 // Helper: identify special model IDs.
-const isSpecialModel = (value: string): value is 'primary' | 'fast' => {
-  return value === 'primary' || value === 'fast';
+const isSpecialModel = (value: string): value is 'auto' | 'primary' | 'fast' => {
+  return value === 'auto' || value === 'primary' || value === 'fast';
+};
+
+const formatContextWindow = (contextWindow?: number): string | null => {
+  if (!contextWindow) return null;
+  return `${Math.round(contextWindow / 1000)}k`;
+};
+
+const buildModelMetaText = (model: Pick<ModelInfo, 'providerName' | 'contextWindow' | 'reasoningEffort'>): string => {
+  const parts = [model.providerName];
+  const contextWindow = formatContextWindow(model.contextWindow);
+
+  if (contextWindow) {
+    parts.push(contextWindow);
+  }
+
+  if (model.reasoningEffort) {
+    parts.push(model.reasoningEffort);
+  }
+
+  return parts.join(' · ');
 };
 
 export const ModelSelector: React.FC<ModelSelectorProps> = ({
@@ -117,11 +138,20 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   }, [dropdownOpen]);
   
   const getCurrentModelId = useCallback((): string => {
-    return agentModels[currentMode] || 'primary';
+    return agentModels[currentMode] || 'auto';
   }, [currentMode, agentModels]);
 
   const currentModel = useMemo((): ModelInfo | null => {
     const modelId = getCurrentModelId();
+
+    if (modelId === 'auto') {
+      return {
+        id: 'auto',
+        modelName: t('modelSelector.autoModel'),
+        providerName: t('modelSelector.autoModelDesc'),
+        provider: 'auto',
+      };
+    }
 
     if (isSpecialModel(modelId)) {
       const actualModelId = defaultModels[modelId];
@@ -132,8 +162,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
       return {
         id: modelId, // Keep 'primary' or 'fast'
-        name: model.name,
         modelName: model.model_name,
+        providerName: getProviderDisplayName(model),
         provider: model.provider,
         contextWindow: model.context_window,
         enableThinking: model.enable_thinking_process,
@@ -146,14 +176,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
     return {
       id: model.id || '',
-      name: model.name,
       modelName: model.model_name,
+      providerName: getProviderDisplayName(model),
       provider: model.provider,
       contextWindow: model.context_window,
       enableThinking: model.enable_thinking_process,
       reasoningEffort: model.reasoning_effort,
     };
-  }, [getCurrentModelId, allModels, defaultModels]);
+  }, [getCurrentModelId, allModels, defaultModels, t]);
   
   const availableModels = useMemo((): ModelInfo[] => {
     return allModels
@@ -165,8 +195,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       })
       .map(m => ({
         id: m.id || '',
-        name: m.name,
         modelName: m.model_name,
+        providerName: getProviderDisplayName(m),
         provider: m.provider,
         contextWindow: m.context_window,
         enableThinking: m.enable_thinking_process,
@@ -219,7 +249,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         >
           <Cpu size={10} className="bitfun-model-selector__icon" />
           <span className="bitfun-model-selector__name">
-            {currentModel ? currentModel.name : t('modelSelector.modelNotConfigured')}
+            {currentModel ? currentModel.modelName : t('modelSelector.modelNotConfigured')}
           </span>
           {currentModel?.enableThinking && (
             <Sparkles size={9} className="bitfun-model-selector__thinking-icon" />
@@ -243,15 +273,50 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           </div>
 
           <div
+            className={`bitfun-model-selector__option bitfun-model-selector__option--special ${currentModelId === 'auto' ? 'bitfun-model-selector__option--selected' : ''}`}
+            onClick={() => handleSelectModel('auto')}
+          >
+            <div className="bitfun-model-selector__option-main">
+              <div className="bitfun-model-selector__option-content">
+                <span className="bitfun-model-selector__option-name">{t('modelSelector.autoModelDesc')}</span>
+                <span className="bitfun-model-selector__option-desc">{t('modelSelector.autoModel')}</span>
+              </div>
+            </div>
+            {currentModelId === 'auto' && (
+              <Check size={14} className="bitfun-model-selector__option-check" />
+            )}
+          </div>
+
+          <div
             className={`bitfun-model-selector__option bitfun-model-selector__option--special ${currentModelId === 'primary' ? 'bitfun-model-selector__option--selected' : ''}`}
             onClick={() => handleSelectModel('primary')}
           >
             <div className="bitfun-model-selector__option-main">
               <div className="bitfun-model-selector__option-content">
                 <span className="bitfun-model-selector__option-name">{t('modelSelector.primaryModel')}</span>
-                <span className="bitfun-model-selector__option-desc">
-                  {allModels.find(m => m.id === defaultModels.primary)?.name || t('modelSelector.modelNotConfigured')}
-                </span>
+                {(() => {
+                  const model = allModels.find(m => m.id === defaultModels.primary);
+                  if (!model) {
+                    return (
+                      <span className="bitfun-model-selector__option-desc">
+                        {t('modelSelector.modelNotConfigured')}
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <div className="bitfun-model-selector__option-meta">
+                      <span className="bitfun-model-selector__option-desc">{model.model_name}</span>
+                      <span className="bitfun-model-selector__option-subdesc">
+                        {buildModelMetaText({
+                          providerName: getProviderDisplayName(model),
+                          contextWindow: model.context_window,
+                          reasoningEffort: model.reasoning_effort,
+                        })}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
             {currentModelId === 'primary' && (
@@ -266,9 +331,29 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             <div className="bitfun-model-selector__option-main">
               <div className="bitfun-model-selector__option-content">
                 <span className="bitfun-model-selector__option-name">{t('modelSelector.fastModel')}</span>
-                <span className="bitfun-model-selector__option-desc">
-                  {allModels.find(m => m.id === defaultModels.fast)?.name || t('modelSelector.modelNotConfigured')}
-                </span>
+                {(() => {
+                  const model = allModels.find(m => m.id === defaultModels.fast);
+                  if (!model) {
+                    return (
+                      <span className="bitfun-model-selector__option-desc">
+                        {t('modelSelector.modelNotConfigured')}
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <div className="bitfun-model-selector__option-meta">
+                      <span className="bitfun-model-selector__option-desc">{model.model_name}</span>
+                      <span className="bitfun-model-selector__option-subdesc">
+                        {buildModelMetaText({
+                          providerName: getProviderDisplayName(model),
+                          contextWindow: model.context_window,
+                          reasoningEffort: model.reasoning_effort,
+                        })}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
             {currentModelId === 'fast' && (
@@ -290,15 +375,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 >
                   <div className="bitfun-model-selector__option-main">
                     <span className="bitfun-model-selector__option-name">
-                      {model.name}
+                      {model.modelName}
                       {model.enableThinking && (
                         <Sparkles size={10} className="bitfun-model-selector__option-thinking" />
                       )}
                     </span>
                     <span className="bitfun-model-selector__option-desc">
-                      {model.modelName}
-                      {model.contextWindow && ` · ${Math.round(model.contextWindow / 1000)}k`}
-                      {model.reasoningEffort && ` · ${model.reasoningEffort}`}
+                      {buildModelMetaText(model)}
                     </span>
                   </div>
                   {isSelected && (

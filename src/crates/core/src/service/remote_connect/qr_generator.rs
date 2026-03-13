@@ -12,13 +12,13 @@ impl QrGenerator {
     /// Build the URL that the QR code points to.
     /// `web_app_url` = where the mobile web app is hosted.
     /// `payload.url` = the relay server that the mobile WebSocket should connect to.
-    pub fn build_url(payload: &QrPayload, web_app_url: &str) -> String {
+    pub fn build_url(payload: &QrPayload, web_app_url: &str, language: &str) -> String {
         let relay_ws = payload
             .url
             .replace("https://", "wss://")
             .replace("http://", "ws://");
         format!(
-            "{web_app}/#/pair?room={room}&did={did}&pk={pk}&dn={dn}&relay={relay}&v={v}",
+            "{web_app}/#/pair?room={room}&did={did}&pk={pk}&dn={dn}&relay={relay}&v={v}&lang={lang}",
             web_app = web_app_url.trim_end_matches('/'),
             room = urlencoding::encode(&payload.room_id),
             did = urlencoding::encode(&payload.device_id),
@@ -26,6 +26,7 @@ impl QrGenerator {
             dn = urlencoding::encode(&payload.device_name),
             relay = urlencoding::encode(&relay_ws),
             v = payload.version,
+            lang = urlencoding::encode(language),
         )
     }
 
@@ -56,5 +57,26 @@ impl QrGenerator {
             .quiet_zone(true)
             .build();
         Ok(svg)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::service::remote_connect::pairing::QrPayload;
+
+    #[test]
+    fn build_url_includes_language_parameter() {
+        let payload = QrPayload {
+            room_id: "room_123".to_string(),
+            url: "https://relay.example.com".to_string(),
+            device_id: "device_123".to_string(),
+            device_name: "BitFun Desktop".to_string(),
+            public_key: "public_key_value".to_string(),
+            version: 1,
+        };
+
+        let url = QrGenerator::build_url(&payload, "https://mobile.example.com", "en-US");
+        assert!(url.contains("lang=en-US"));
     }
 }

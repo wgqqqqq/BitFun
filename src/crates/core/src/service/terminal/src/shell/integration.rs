@@ -225,10 +225,7 @@ impl ShellIntegration {
                             seq,
                             OscSequence::CommandFinished { .. } | OscSequence::PromptStart
                         );
-                        if should_flush
-                            && !plain_output.is_empty()
-                            && self.should_collect()
-                        {
+                        if should_flush && !plain_output.is_empty() && self.should_collect() {
                             self.output_buffer.push_str(&plain_output);
                             if let Some(cmd_id) = &self.current_command_id {
                                 events.push(ShellIntegrationEvent::OutputData {

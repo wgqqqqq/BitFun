@@ -14,9 +14,10 @@ use tokio::sync::RwLock;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 use super::command_router::{
-    execute_forwarded_turn, handle_command, main_menu_actions, paired_success_message,
-    parse_command, BotAction, BotActionStyle, BotChatState, BotInteractionHandler,
-    BotInteractiveRequest, BotMessageSender, HandleResult, WELCOME_MESSAGE,
+    current_bot_language, execute_forwarded_turn, handle_command, main_menu_actions,
+    paired_success_message, parse_command, welcome_message, BotAction, BotActionStyle,
+    BotChatState, BotInteractionHandler, BotInteractiveRequest, BotLanguage, BotMessageSender,
+    HandleResult,
 };
 use super::{load_bot_persistence, save_bot_persistence, BotConfig, SavedBotConnection};
 
@@ -268,6 +269,54 @@ struct ParsedMessage {
 }
 
 impl FeishuBot {
+    fn invalid_pairing_code_message(language: BotLanguage) -> &'static str {
+        if language.is_chinese() {
+            "配对码无效或已过期，请重试。"
+        } else {
+            "Invalid or expired pairing code. Please try again."
+        }
+    }
+
+    fn enter_pairing_code_message(language: BotLanguage) -> &'static str {
+        if language.is_chinese() {
+            "请输入 BitFun Desktop 中显示的 6 位配对码。"
+        } else {
+            "Please enter the 6-digit pairing code from BitFun Desktop."
+        }
+    }
+
+    fn unsupported_message_type_message(language: BotLanguage) -> &'static str {
+        if language.is_chinese() {
+            "暂不支持这种消息类型，请发送文本或图片。"
+        } else {
+            "This message type is not supported. Please send text or images."
+        }
+    }
+
+    fn expired_download_message(language: BotLanguage) -> &'static str {
+        if language.is_chinese() {
+            "这个下载链接已过期，请重新让助手发送一次。"
+        } else {
+            "This download link has expired. Please ask the agent again."
+        }
+    }
+
+    fn sending_file_message(language: BotLanguage, file_name: &str) -> String {
+        if language.is_chinese() {
+            format!("正在发送“{file_name}”……")
+        } else {
+            format!("Sending \"{file_name}\"…")
+        }
+    }
+
+    fn send_file_failed_message(language: BotLanguage, file_name: &str, error: &str) -> String {
+        if language.is_chinese() {
+            format!("无法发送“{file_name}”：{error}")
+        } else {
+            format!("Could not send \"{file_name}\": {error}")
+        }
+    }
+
     pub fn new(config: FeishuConfig) -> Self {
         Self {
             config,
@@ -481,12 +530,13 @@ impl FeishuBot {
     pub async fn send_action_card(
         &self,
         chat_id: &str,
+        language: BotLanguage,
         content: &str,
         actions: &[BotAction],
     ) -> Result<()> {
         let token = self.get_access_token().await?;
         let client = reqwest::Client::new();
-        let card = Self::build_action_card(chat_id, content, actions);
+        let card = Self::build_action_card(chat_id, language, content, actions);
         let resp = client
             .post("https://open.feishu.cn/open-apis/im/v1/messages")
             .query(&[("receive_id_type", "chat_id")])
@@ -508,10 +558,11 @@ impl FeishuBot {
     }
 
     async fn send_handle_result(&self, chat_id: &str, result: &HandleResult) -> Result<()> {
+        let language = current_bot_language().await;
         if result.actions.is_empty() {
             self.send_message(chat_id, &result.reply).await
         } else {
-            self.send_action_card(chat_id, &result.reply, &result.actions)
+            self.send_action_card(chat_id, language, &result.reply, &result.actions)
                 .await
         }
     }
@@ -624,20 +675,18 @@ impl FeishuBot {
     /// upload it to Feishu.  Sends a plain-text error if the token has expired
     /// or the transfer fails.
     async fn handle_download_request(&self, chat_id: &str, token: &str) {
-        let path = {
+        let (path, language) = {
             let mut states = self.chat_states.write().await;
-            states
-                .get_mut(chat_id)
-                .and_then(|s| s.pending_files.remove(token))
+            let state = states.get_mut(chat_id);
+            let language = current_bot_language().await;
+            let path = state.and_then(|s| s.pending_files.remove(token));
+            (path, language)
         };
 
         match path {
             None => {
                 let _ = self
-                    .send_message(
-                        chat_id,
-                        "This download link has expired. Please ask the agent again.",
-                    )
+                    .send_message(chat_id, Self::expired_download_message(language))
                     .await;
             }
             Some(path) => {
@@ -647,7 +696,7 @@ impl FeishuBot {
                     .unwrap_or("file")
                     .to_string();
                 let _ = self
-                    .send_message(chat_id, &format!("Sending \"{file_name}\"…"))
+                    .send_message(chat_id, &Self::sending_file_message(language, &file_name))
                     .await;
                 match self.send_file_to_feishu_chat(chat_id, &path).await {
                     Ok(()) => info!("Sent file to Feishu chat {chat_id}: {path}"),
@@ -656,7 +705,11 @@ impl FeishuBot {
                         let _ = self
                             .send_message(
                                 chat_id,
-                                &format!("⚠️ Could not send \"{file_name}\": {e}"),
+                                &Self::send_file_failed_message(
+                                    language,
+                                    &file_name,
+                                    &e.to_string(),
+                                ),
                             )
                             .await;
                     }
@@ -665,8 +718,13 @@ impl FeishuBot {
         }
     }
 
-    fn build_action_card(chat_id: &str, content: &str, actions: &[BotAction]) -> serde_json::Value {
-        let body = Self::card_body_text(content);
+    fn build_action_card(
+        chat_id: &str,
+        language: BotLanguage,
+        content: &str,
+        actions: &[BotAction],
+    ) -> serde_json::Value {
+        let body = Self::card_body_text(language, content);
         let mut elements = vec![serde_json::json!({
             "tag": "markdown",
             "content": body,
@@ -714,7 +772,7 @@ impl FeishuBot {
         })
     }
 
-    fn card_body_text(content: &str) -> String {
+    fn card_body_text(language: BotLanguage, content: &str) -> String {
         let mut removed_command_lines = false;
         let mut lines = Vec::new();
 
@@ -725,12 +783,14 @@ impl FeishuBot {
                 continue;
             }
             if trimmed.contains("/cancel_task ") {
-                lines.push(
-                    "If needed, use the Cancel Task button below to stop this request.".to_string(),
-                );
+                lines.push(if language.is_chinese() {
+                    "如需停止本次请求，请使用下方的“取消任务”按钮。".to_string()
+                } else {
+                    "If needed, use the Cancel Task button below to stop this request.".to_string()
+                });
                 continue;
             }
-            lines.push(Self::replace_command_tokens(line));
+            lines.push(Self::replace_command_tokens(language, line));
         }
 
         let mut body = lines.join("\n").trim().to_string();
@@ -738,24 +798,74 @@ impl FeishuBot {
             if !body.is_empty() {
                 body.push_str("\n\n");
             }
-            body.push_str("Choose an action below.");
+            body.push_str(if language.is_chinese() {
+                "请选择下方操作。"
+            } else {
+                "Choose an action below."
+            });
         }
 
         if body.is_empty() {
-            "Choose an action below.".to_string()
+            if language.is_chinese() {
+                "请选择下方操作。".to_string()
+            } else {
+                "Choose an action below.".to_string()
+            }
         } else {
             body
         }
     }
 
-    fn replace_command_tokens(line: &str) -> String {
+    fn replace_command_tokens(language: BotLanguage, line: &str) -> String {
         let replacements = [
-            ("/switch_workspace", "Switch Workspace"),
-            ("/resume_session", "Resume Session"),
-            ("/new_code_session", "New Code Session"),
-            ("/new_cowork_session", "New Cowork Session"),
-            ("/cancel_task", "Cancel Task"),
-            ("/help", "Help"),
+            (
+                "/switch_workspace",
+                if language.is_chinese() {
+                    "切换工作区"
+                } else {
+                    "Switch Workspace"
+                },
+            ),
+            (
+                "/resume_session",
+                if language.is_chinese() {
+                    "恢复会话"
+                } else {
+                    "Resume Session"
+                },
+            ),
+            (
+                "/new_code_session",
+                if language.is_chinese() {
+                    "新建编码会话"
+                } else {
+                    "New Code Session"
+                },
+            ),
+            (
+                "/new_cowork_session",
+                if language.is_chinese() {
+                    "新建协作会话"
+                } else {
+                    "New Cowork Session"
+                },
+            ),
+            (
+                "/cancel_task",
+                if language.is_chinese() {
+                    "取消任务"
+                } else {
+                    "Cancel Task"
+                },
+            ),
+            (
+                "/help",
+                if language.is_chinese() {
+                    "帮助"
+                } else {
+                    "Help"
+                },
+            ),
         ];
 
         replacements
@@ -888,6 +998,7 @@ impl FeishuBot {
     }
 
     /// Backward-compatible wrapper: returns (chat_id, text) only for text/post with text content.
+    #[cfg(test)]
     fn parse_message_event(event: &serde_json::Value) -> Option<(String, String)> {
         let parsed = Self::parse_message_event_full(event)?;
         if parsed.text.is_empty() {
@@ -1026,17 +1137,22 @@ impl FeishuBot {
             .send(WsMessage::Binary(pb::encode_frame(&resp_frame)))
             .await;
 
-        if let Some((chat_id, msg_text)) = Self::parse_message_event(&event) {
+        if let Some(parsed) = Self::parse_message_event_full(&event) {
+            let language = current_bot_language().await;
+            let chat_id = parsed.chat_id;
+            let msg_text = parsed.text;
             let trimmed = msg_text.trim();
 
             if trimmed == "/start" {
-                self.send_message(&chat_id, WELCOME_MESSAGE).await.ok();
+                self.send_message(&chat_id, welcome_message(language))
+                    .await
+                    .ok();
             } else if trimmed.len() == 6 && trimmed.chars().all(|c| c.is_ascii_digit()) {
                 if self.verify_pairing_code(trimmed).await {
                     info!("Feishu pairing successful, chat_id={chat_id}");
                     let result = HandleResult {
-                        reply: paired_success_message(),
-                        actions: main_menu_actions(),
+                        reply: paired_success_message(language),
+                        actions: main_menu_actions(language),
                         forward_to_session: None,
                     };
                     self.send_handle_result(&chat_id, &result).await.ok();
@@ -1051,28 +1167,20 @@ impl FeishuBot {
 
                     return Some(chat_id);
                 } else {
-                    self.send_message(
-                        &chat_id,
-                        "Invalid or expired pairing code. Please try again.",
-                    )
-                    .await
-                    .ok();
+                    self.send_message(&chat_id, Self::invalid_pairing_code_message(language))
+                        .await
+                        .ok();
                 }
             } else {
-                self.send_message(
-                    &chat_id,
-                    "Please enter the 6-digit pairing code from BitFun Desktop.",
-                )
-                .await
-                .ok();
+                self.send_message(&chat_id, Self::enter_pairing_code_message(language))
+                    .await
+                    .ok();
             }
         } else if let Some(chat_id) = Self::extract_message_chat_id(&event) {
-            self.send_message(
-                &chat_id,
-                "Only text messages are supported. Please send the 6-digit pairing code as text.",
-            )
-            .await
-            .ok();
+            let language = current_bot_language().await;
+            self.send_message(&chat_id, Self::enter_pairing_code_message(language))
+                .await
+                .ok();
         }
         None
     }
@@ -1242,6 +1350,7 @@ impl FeishuBot {
                                                     let bot = self.clone();
                                                     tokio::spawn(async move {
                                                         const MAX_IMAGES: usize = 5;
+                                                        let language = current_bot_language().await;
                                                         let truncated = parsed.image_keys.len() > MAX_IMAGES;
                                                         let keys_to_use = if truncated {
                                                             &parsed.image_keys[..MAX_IMAGES]
@@ -1255,30 +1364,60 @@ impl FeishuBot {
                                                         };
                                                         if truncated {
                                                             let msg = format!(
-                                                                "⚠️ Only the first {} images will be processed; the remaining {} were discarded.",
+                                                                "{} {} {}",
+                                                                if language.is_chinese() {
+                                                                    "仅会处理前"
+                                                                } else {
+                                                                    "Only the first"
+                                                                },
                                                                 MAX_IMAGES,
-                                                                parsed.image_keys.len() - MAX_IMAGES,
+                                                                if language.is_chinese() {
+                                                                    format!(
+                                                                        "张图片，其余 {} 张已丢弃。",
+                                                                        parsed.image_keys.len() - MAX_IMAGES
+                                                                    )
+                                                                } else {
+                                                                    format!(
+                                                                        "images will be processed; the remaining {} were discarded.",
+                                                                        parsed.image_keys.len() - MAX_IMAGES
+                                                                    )
+                                                                },
                                                             );
                                                             bot.send_message(&parsed.chat_id, &msg).await.ok();
                                                         }
                                                         let text = if parsed.text.is_empty() && !images.is_empty() {
-                                                            "[User sent an image]".to_string()
+                                                            if language.is_chinese() {
+                                                                "[用户发送了一张图片]".to_string()
+                                                            } else {
+                                                                "[User sent an image]".to_string()
+                                                            }
                                                         } else {
                                                             parsed.text
                                                         };
-                                                        bot.handle_incoming_message(&parsed.chat_id, &text, images).await;
+                                                        bot.handle_incoming_message(
+                                                            &parsed.chat_id,
+                                                            &text,
+                                                            images,
+                                                        )
+                                                        .await;
                                                     });
                                                 } else if let Some((chat_id, cmd)) = Self::parse_card_action_event(&event) {
                                                     let bot = self.clone();
                                                     tokio::spawn(async move {
-                                                        bot.handle_incoming_message(&chat_id, &cmd, vec![]).await;
+                                                        bot.handle_incoming_message(
+                                                            &chat_id,
+                                                            &cmd,
+                                                            vec![],
+                                                        )
+                                                        .await;
                                                     });
                                                 } else if let Some(chat_id) = Self::extract_message_chat_id(&event) {
                                                     let bot = self.clone();
                                                     tokio::spawn(async move {
+                                                        let language = current_bot_language().await;
                                                         bot.send_message(
                                                             &chat_id,
-                                                            "This message type is not supported. Please send text or images.",
+                                                            Self::unsupported_message_type_message(language),
                                                         ).await.ok();
                                                     });
                                                 }
@@ -1332,40 +1471,37 @@ impl FeishuBot {
             s.paired = true;
             s
         });
+        let language = current_bot_language().await;
 
         if !state.paired {
             let trimmed = text.trim();
             if trimmed == "/start" {
-                self.send_message(chat_id, WELCOME_MESSAGE).await.ok();
+                self.send_message(chat_id, welcome_message(language))
+                    .await
+                    .ok();
                 return;
             }
             if trimmed.len() == 6 && trimmed.chars().all(|c| c.is_ascii_digit()) {
                 if self.verify_pairing_code(trimmed).await {
                     state.paired = true;
                     let result = HandleResult {
-                        reply: paired_success_message(),
-                        actions: main_menu_actions(),
+                        reply: paired_success_message(language),
+                        actions: main_menu_actions(language),
                         forward_to_session: None,
                     };
                     self.send_handle_result(chat_id, &result).await.ok();
                     self.persist_chat_state(chat_id, state).await;
                     return;
                 } else {
-                    self.send_message(
-                        chat_id,
-                        "Invalid or expired pairing code. Please try again.",
-                    )
-                    .await
-                    .ok();
+                    self.send_message(chat_id, Self::invalid_pairing_code_message(language))
+                        .await
+                        .ok();
                     return;
                 }
             }
-            self.send_message(
-                chat_id,
-                "Please enter the 6-digit pairing code from BitFun Desktop.",
-            )
-            .await
-            .ok();
+            self.send_message(chat_id, Self::enter_pairing_code_message(language))
+                .await
+                .ok();
             return;
         }
 
@@ -1459,6 +1595,7 @@ impl FeishuBot {
 #[cfg(test)]
 mod tests {
     use super::FeishuBot;
+    use crate::service::remote_connect::bot::command_router::BotLanguage;
 
     #[test]
     fn parse_text_message_event() {
@@ -1507,6 +1644,7 @@ mod tests {
     #[test]
     fn card_body_removes_slash_command_list() {
         let body = FeishuBot::card_body_text(
+            BotLanguage::EnUS,
             "Available commands:\n/switch_workspace - List and switch workspaces\n/help - Show this help message",
         );
 

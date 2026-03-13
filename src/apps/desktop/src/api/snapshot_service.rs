@@ -215,7 +215,9 @@ fn resolve_workspace_dir(workspace_path: &str) -> Result<PathBuf, String> {
     Ok(workspace_dir)
 }
 
-async fn ensure_snapshot_manager_ready(workspace_path: &str) -> Result<Arc<SnapshotManager>, String> {
+async fn ensure_snapshot_manager_ready(
+    workspace_path: &str,
+) -> Result<Arc<SnapshotManager>, String> {
     let workspace_dir = resolve_workspace_dir(workspace_path)?;
 
     if let Some(manager) = get_snapshot_manager_for_workspace(&workspace_dir) {
@@ -360,33 +362,24 @@ pub async fn rollback_to_turn(
         use bitfun_core::agentic::persistence::PersistenceManager;
 
         match try_get_path_manager_arc() {
-            Ok(path_manager) => {
-                match PersistenceManager::new(path_manager) {
-                    Ok(persistence_manager) => {
-                        match persistence_manager
-                            .delete_turns_from(
-                                &workspace_path,
-                                &request.session_id,
-                                request.turn_index,
-                            )
-                            .await
-                        {
-                            Ok(count) => {
-                                deleted_turns_count = count;
-                            }
-                            Err(e) => {
-                                warn!("Failed to delete conversation turns: session_id={}, turn_index={}, error={}", request.session_id, request.turn_index, e);
-                            }
+            Ok(path_manager) => match PersistenceManager::new(path_manager) {
+                Ok(persistence_manager) => {
+                    match persistence_manager
+                        .delete_turns_from(&workspace_path, &request.session_id, request.turn_index)
+                        .await
+                    {
+                        Ok(count) => {
+                            deleted_turns_count = count;
+                        }
+                        Err(e) => {
+                            warn!("Failed to delete conversation turns: session_id={}, turn_index={}, error={}", request.session_id, request.turn_index, e);
                         }
                     }
-                    Err(e) => {
-                        warn!(
-                            "Failed to create PersistenceManager: error={}",
-                            e
-                        );
-                    }
                 }
-            }
+                Err(e) => {
+                    warn!("Failed to create PersistenceManager: error={}", e);
+                }
+            },
             Err(e) => {
                 warn!("Failed to create PathManager: error={}", e);
             }
@@ -540,7 +533,10 @@ pub async fn get_session_turns(
                 }
             }
             Err(e) => {
-                warn!("Failed to create PersistenceManager: error={}, falling back to snapshot", e);
+                warn!(
+                    "Failed to create PersistenceManager: error={}, falling back to snapshot",
+                    e
+                );
             }
         }
     }

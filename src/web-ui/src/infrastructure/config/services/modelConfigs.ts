@@ -2,11 +2,70 @@ import { ModelConfig, ProviderTemplate, ApiFormat } from '../../../shared/types'
 import { configManager } from './ConfigManager';
 import { i18nService } from '@/infrastructure/i18n';
 import { createLogger } from '@/shared/utils/logger';
+import { extractProviderSegmentFromBaseUrl, matchProviderCatalogItemByBaseUrl } from './providerCatalog';
 
 const log = createLogger('ModelConfigManager');
 const t = (key: string, options?: Record<string, unknown>) => i18nService.t(key, options);
 
+type ProviderConfigLike = {
+  name?: string;
+  model_name?: string;
+  base_url?: string;
+};
+
+function inferProviderTemplate(config: ProviderConfigLike): ProviderTemplate | undefined {
+  const matchedCatalogItem = matchProviderCatalogItemByBaseUrl(config.base_url);
+  return matchedCatalogItem ? PROVIDER_TEMPLATES[matchedCatalogItem.id] : undefined;
+}
+
+export function getProviderTemplateId(config: ProviderConfigLike): string | undefined {
+  return inferProviderTemplate(config)?.id;
+}
+
+export function getProviderDisplayName(config: ProviderConfigLike): string {
+  const inferredTemplate = inferProviderTemplate(config);
+  if (inferredTemplate) {
+    return t(`settings/ai-model:providers.${inferredTemplate.id}.name`);
+  }
+
+  const rawName = config.name?.trim() || '';
+  const rawModelName = config.model_name?.trim() || '';
+  if (rawName && rawModelName) {
+    const dashedSuffix = ` - ${rawModelName}`;
+    const slashSuffix = `/${rawModelName}`;
+
+    if (rawName.endsWith(dashedSuffix)) {
+      return rawName.slice(0, -dashedSuffix.length).trim();
+    }
+    if (rawName.endsWith(slashSuffix)) {
+      return rawName.slice(0, -slashSuffix.length).trim();
+    }
+  }
+
+  return rawName || extractProviderSegmentFromBaseUrl(config.base_url) || t('settings/ai-model:providerSelection.customTitle');
+}
+
+export function getModelDisplayName(config: ProviderConfigLike): string {
+  const providerName = getProviderDisplayName(config);
+  const modelName = config.model_name?.trim() || '';
+
+  if (!providerName) return modelName;
+  if (!modelName) return providerName;
+
+  return `${providerName}/${modelName}`;
+}
+
 export const PROVIDER_TEMPLATES: Record<string, ProviderTemplate> = {
+  openbitfun: {
+    id: 'openbitfun',
+    name: t('settings/ai-model:providers.openbitfun.name'),
+    baseUrl: 'https://api.openbitfun.com',
+    format: 'anthropic',
+    models: [],
+    requiresApiKey: true,
+    description: t('settings/ai-model:providers.openbitfun.description')
+  },
+
   gemini: {
     id: 'gemini',
     name: t('settings/ai-model:providers.gemini.name'),
@@ -292,7 +351,7 @@ class ModelConfigManager {
     if (!template) return null;
 
     return this.addConfig({
-      name: t('settings/ai-model:messages.templateName', { provider: template.name, modelName }),
+      name: template.name,
       baseUrl: template.baseUrl,
       modelName,
       format: template.format,

@@ -47,12 +47,7 @@ pub fn compile(
 
     let head_content = format!(
         "\n{}\n{}\n{}\n{}\n{}\n{}\n",
-        theme_default_style,
-        csp_tag,
-        scroll,
-        import_map,
-        bridge_script_tag,
-        style_tag,
+        theme_default_style, csp_tag, scroll, import_map, bridge_script_tag, style_tag,
     );
 
     let html = if source.html.trim().is_empty() {
@@ -165,7 +160,8 @@ mod tests {
 
     #[test]
     fn test_inject_into_head() {
-        let html = r#"<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>x</body></html>"#;
+        let html =
+            r#"<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>x</body></html>"#;
         let content = "<!-- injected -->";
         let out = inject_into_head(html, content).unwrap();
         assert!(out.contains("<!-- injected -->"));

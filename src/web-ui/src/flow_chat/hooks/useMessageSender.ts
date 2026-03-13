@@ -76,13 +76,15 @@ export function useMessageSender(props: UseMessageSenderProps): UseMessageSender
       const flowChatManager = FlowChatManager.getInstance();
 
       if (!sessionId) {
-        const { getDefaultPrimaryModel } = await import('@/infrastructure/config/utils/modelConfigHelpers');
-        const modelId = await getDefaultPrimaryModel();
+        const { configManager } = await import('@/infrastructure/config/services/ConfigManager');
+        const agentModels = await configManager.getConfig<Record<string, string>>('ai.agent_models') || {};
+        const agentType = currentAgentType || 'agentic';
+        const modelId = agentModels[agentType] || 'auto';
 
         sessionId = await flowChatManager.createChatSession({
           modelName: modelId || undefined
-        }, currentAgentType || 'agentic');
-        log.debug('Session created', { sessionId, modelId });
+        }, agentType);
+        log.debug('Session created', { sessionId, modelId, agentType });
       } else {
         log.debug('Reusing existing session', { sessionId });
       }

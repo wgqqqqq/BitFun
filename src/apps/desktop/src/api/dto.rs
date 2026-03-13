@@ -77,7 +77,10 @@ impl WorkspaceInfoDto {
                 .statistics
                 .as_ref()
                 .map(ProjectStatisticsDto::from_workspace_statistics),
-            identity: info.identity.as_ref().map(WorkspaceIdentityDto::from_workspace_identity),
+            identity: info
+                .identity
+                .as_ref()
+                .map(WorkspaceIdentityDto::from_workspace_identity),
         }
     }
 }

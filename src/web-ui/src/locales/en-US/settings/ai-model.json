@@ -13,15 +13,32 @@
     "customTitle": "Custom Configuration",
     "customDescription": "Manually configure all parameters, suitable for private deployments or other unlisted providers",
     "getApiKey": "Get API Key",
+    "fetchModels": "Fetch Models",
+    "fetchHint": "Fetch the model list from the current provider; if it fails, fall back to common preset models",
+    "fetchingModels": "Fetching model list...",
+    "fetchSuccessCount": "Fetched {{count}} models from the provider",
+    "fetchFailedFallback": "Failed to fetch model list, fell back to common preset models",
+    "fetchEmptyFallback": "Provider returned no models, fell back to common preset models",
+    "fillApiKeyBeforeFetch": "Enter the API key before fetching models",
+    "usingPresetModels": "Currently showing common preset models",
+    "noPresetModels": "No models available. Fetch the model list or enter a model name manually",
     "backToSelection": "Back to provider selection",
     "selectModel": "Select model",
+    "multiSelectHint": "Supports multi-select. After selection, configure context window, max output tokens, and thinking per model.",
     "searchOrInputModel": "Search or enter model name...",
     "inputModelName": "Enter model name...",
     "useCustomModel": "Press Enter to use",
+    "addCustomModel": "Add Custom Model",
+    "noModelsSelected": "Select a model first",
+    "removeModel": "Remove model",
     "urlHint": "Official API URL pre-filled, modify if using proxy or private deployment",
     "formatHint": "Automatically selected based on provider, usually no need to change"
   },
   "providers": {
+    "openbitfun": {
+      "name": "OpenBitFun",
+      "description": "OpenBitFun Model Service"
+    },
     "gemini": {
       "name": "Google Gemini",
       "description": "Google Gemini 2.5 series multimodal models"
@@ -91,9 +108,10 @@
     "speech_recognition": "Speech Recognition: Convert speech to text (e.g., GLM-ASR)"
   },
   "form": {
-    "configName": "Configuration Name",
-    "configNamePlaceholder": "Give this configuration a name",
+    "configName": "Provider Name",
+    "configNamePlaceholder": "Enter provider name",
     "modelName": "Model Name",
+    "modelSelection": "Select Models",
     "modelNameHint": "GLM-ASR uses glm-asr, other speech models use their corresponding model names",
     "baseUrl": "API URL",
     "resolvedUrlLabel": "Request URL: ",
@@ -112,6 +130,8 @@
   "thinking": {
     "enable": "Enable Thinking",
     "enableHint": "Requires model to support thinking mode",
+    "optionEnabled": "Enabled",
+    "optionDisabled": "Disabled",
     "preserve": "Preserve Historical Thinking",
     "preserveHint": "When enabled, preserves thinking content from past conversations"
   },
@@ -164,6 +184,8 @@
     "delete": "Delete",
     "test": "Test Connection",
     "newConfig": "New Configuration",
+    "addModel": "Add Model",
+    "addProvider": "Add Provider",
     "createFirst": "Create First Configuration",
     "viewStats": "View Statistics"
   },

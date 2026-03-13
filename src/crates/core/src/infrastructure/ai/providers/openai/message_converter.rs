@@ -1,20 +1,23 @@
 //! OpenAI message format converter
 
-use log::{warn, error};
 use crate::util::types::{Message, ToolDefinition};
+use log::{error, warn};
 use serde_json::{json, Value};
 
 pub struct OpenAIMessageConverter;
 
 impl OpenAIMessageConverter {
-    pub fn convert_messages_to_responses_input(messages: Vec<Message>) -> (Option<String>, Vec<Value>) {
+    pub fn convert_messages_to_responses_input(
+        messages: Vec<Message>,
+    ) -> (Option<String>, Vec<Value>) {
         let mut instructions = Vec::new();
         let mut input = Vec::new();
 
         for msg in messages {
             match msg.role.as_str() {
                 "system" => {
-                    if let Some(content) = msg.content.filter(|content| !content.trim().is_empty()) {
+                    if let Some(content) = msg.content.filter(|content| !content.trim().is_empty())
+                    {
                         instructions.push(content);
                     }
                 }
@@ -24,7 +27,10 @@ impl OpenAIMessageConverter {
                     }
                 }
                 "assistant" => {
-                    if let Some(content_items) = Self::convert_message_content_to_responses_items(&msg.role, msg.content.as_deref()) {
+                    if let Some(content_items) = Self::convert_message_content_to_responses_items(
+                        &msg.role,
+                        msg.content.as_deref(),
+                    ) {
                         input.push(json!({
                             "type": "message",
                             "role": "assistant",
@@ -45,7 +51,10 @@ impl OpenAIMessageConverter {
                     }
                 }
                 role => {
-                    if let Some(content_items) = Self::convert_message_content_to_responses_items(role, msg.content.as_deref()) {
+                    if let Some(content_items) = Self::convert_message_content_to_responses_items(
+                        role,
+                        msg.content.as_deref(),
+                    ) {
                         input.push(json!({
                             "type": "message",
                             "role": role,
@@ -66,14 +75,17 @@ impl OpenAIMessageConverter {
     }
 
     pub fn convert_messages(messages: Vec<Message>) -> Vec<Value> {
-        messages.into_iter()
+        messages
+            .into_iter()
             .map(Self::convert_single_message)
             .collect()
     }
 
     fn convert_tool_message_to_responses_item(msg: Message) -> Option<Value> {
         let call_id = msg.tool_call_id?;
-        let output = msg.content.unwrap_or_else(|| "Tool execution completed".to_string());
+        let output = msg
+            .content
+            .unwrap_or_else(|| "Tool execution completed".to_string());
 
         Some(json!({
             "type": "function_call_output",
@@ -82,7 +94,10 @@ impl OpenAIMessageConverter {
         }))
     }
 
-    fn convert_message_content_to_responses_items(role: &str, content: Option<&str>) -> Option<Vec<Value>> {
+    fn convert_message_content_to_responses_items(
+        role: &str,
+        content: Option<&str>,
+    ) -> Option<Vec<Value>> {
         let content = content?;
         let text_item_type = Self::responses_text_item_type(role);
 
@@ -118,14 +133,12 @@ impl OpenAIMessageConverter {
                         }
                     }
                     Some("image_url") if role != "assistant" => {
-                        let image_url = item
-                            .get("image_url")
-                            .and_then(|value| {
-                                value
-                                    .get("url")
-                                    .and_then(Value::as_str)
-                                    .or_else(|| value.as_str())
-                            });
+                        let image_url = item.get("image_url").and_then(|value| {
+                            value
+                                .get("url")
+                                .and_then(Value::as_str)
+                                .or_else(|| value.as_str())
+                        });
 
                         if let Some(image_url) = image_url {
                             content_items.push(json!({
@@ -172,15 +185,12 @@ impl OpenAIMessageConverter {
                 } else if msg.role == "tool" {
                     openai_msg["content"] = Value::String("Tool execution completed".to_string());
                     warn!(
-                        "[OpenAI] Tool response content is empty: name={:?}", 
+                        "[OpenAI] Tool response content is empty: name={:?}",
                         msg.name
                     );
                 } else {
                     openai_msg["content"] = Value::String(" ".to_string());
-                    warn!(
-                        "[OpenAI] Message content is empty: role={}", 
-                        msg.role
-                    );
+                    warn!("[OpenAI] Message content is empty: role={}", msg.role);
                 }
             } else {
                 if let Ok(parsed) = serde_json::from_str::<Value>(&content) {
@@ -199,9 +209,9 @@ impl OpenAIMessageConverter {
                 openai_msg["content"] = Value::String(" ".to_string());
             } else if msg.role == "tool" {
                 openai_msg["content"] = Value::String("Tool execution completed".to_string());
-                
+
                 warn!(
-                    "[OpenAI] Tool response message content is empty, set to default: name={:?}", 
+                    "[OpenAI] Tool response message content is empty, set to default: name={:?}",
                     msg.name
                 );
             } else {
@@ -210,7 +220,7 @@ impl OpenAIMessageConverter {
                     msg.role, 
                     has_tool_calls
                 );
-                
+
                 openai_msg["content"] = Value::String(" ".to_string());
             }
         }
@@ -300,7 +310,8 @@ mod tests {
             },
         ];
 
-        let (instructions, input) = OpenAIMessageConverter::convert_messages_to_responses_input(messages);
+        let (instructions, input) =
+            OpenAIMessageConverter::convert_messages_to_responses_input(messages);
 
         assert_eq!(instructions.as_deref(), Some("You are helpful"));
         assert_eq!(input.len(), 3);
@@ -313,18 +324,21 @@ mod tests {
     fn converts_openai_style_image_content_to_responses_input() {
         let messages = vec![Message {
             role: "user".to_string(),
-            content: Some(json!([
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": "data:image/png;base64,abc"
+            content: Some(
+                json!([
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "data:image/png;base64,abc"
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": "Describe this image"
                     }
-                },
-                {
-                    "type": "text",
-                    "text": "Describe this image"
-                }
-            ]).to_string()),
+                ])
+                .to_string(),
+            ),
             reasoning_content: None,
             thinking_signature: None,
             tool_calls: None,

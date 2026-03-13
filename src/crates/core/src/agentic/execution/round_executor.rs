@@ -362,7 +362,8 @@ impl RoundExecutor {
                         (None, None, false) // Default: no timeout, requires confirmation
                     };
 
-                let skip_from_context = context.context_vars
+                let skip_from_context = context
+                    .context_vars
                     .get("skip_tool_confirmation")
                     .map(|v| v == "true")
                     .unwrap_or(false);

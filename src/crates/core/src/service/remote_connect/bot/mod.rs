@@ -280,8 +280,6 @@ const CODE_FILE_EXTENSIONS: &[&str] = &[
     "swift",
     "vue",
     "svelte",
-    "html",
-    "htm",
     "css",
     "scss",
     "less",
@@ -319,11 +317,22 @@ const CODE_FILE_EXTENSIONS: &[&str] = &[
     "log",
 ];
 
+/// Extensions that should be treated as downloadable when referenced via
+/// relative markdown links (matches mobile-web `DOWNLOADABLE_EXTENSIONS`).
+const DOWNLOADABLE_EXTENSIONS: &[&str] = &[
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf", "pages",
+    "numbers", "key", "png", "jpg", "jpeg", "gif", "bmp", "svg", "webp", "ico", "tiff", "tif",
+    "zip", "tar", "gz", "bz2", "7z", "rar", "dmg", "iso", "xz", "mp3", "wav", "ogg", "flac", "aac",
+    "m4a", "wma", "mp4", "avi", "mkv", "mov", "webm", "wmv", "flv", "csv", "tsv", "sqlite", "db",
+    "parquet", "epub", "mobi", "apk", "ipa", "exe", "msi", "deb", "rpm", "ttf", "otf", "woff",
+    "woff2",
+];
+
 /// Check whether a bare file path (no protocol prefix) should be treated as
 /// a downloadable file based on its extension.
 ///
-/// Only absolute local file paths are accepted in multi-workspace mode.
-/// Code/config source files are filtered out even when absolute.
+/// Absolute local file paths exclude source/config files. Relative links
+/// are allowed when they point to known downloadable file types.
 fn is_downloadable_by_extension(file_path: &str) -> bool {
     let ext = std::path::Path::new(file_path)
         .extension()
@@ -338,7 +347,7 @@ fn is_downloadable_by_extension(file_path: &str) -> bool {
     if is_absolute {
         !CODE_FILE_EXTENSIONS.contains(&ext.as_str())
     } else {
-        false
+        DOWNLOADABLE_EXTENSIONS.contains(&ext.as_str())
     }
 }
 
@@ -524,7 +533,10 @@ const REMOTE_CONNECT_PERSISTENCE_FILENAME: &str = "remote_connect_persistence.js
 const LEGACY_BOT_PERSISTENCE_FILENAME: &str = "bot_connections.json";
 
 pub fn bot_persistence_path() -> Option<std::path::PathBuf> {
-    dirs::home_dir().map(|home| home.join(".bitfun").join(REMOTE_CONNECT_PERSISTENCE_FILENAME))
+    dirs::home_dir().map(|home| {
+        home.join(".bitfun")
+            .join(REMOTE_CONNECT_PERSISTENCE_FILENAME)
+    })
 }
 
 fn legacy_bot_persistence_path() -> Option<std::path::PathBuf> {

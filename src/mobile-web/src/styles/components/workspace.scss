@@ -13,6 +13,8 @@
 .workspace-page__header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--size-gap-3);
   padding: 0 var(--size-gap-5);
   height: 56px;
   min-height: 56px;

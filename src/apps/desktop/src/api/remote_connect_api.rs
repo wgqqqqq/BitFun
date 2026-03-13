@@ -1,8 +1,9 @@
 //! Tauri commands for Remote Connect.
 
 use bitfun_core::service::remote_connect::{
-    bot::{self, BotConfig}, lan, ConnectionMethod, ConnectionResult, PairingState,
-    RemoteConnectConfig, RemoteConnectService,
+    bot::{self, BotConfig},
+    lan, ConnectionMethod, ConnectionResult, PairingState, RemoteConnectConfig,
+    RemoteConnectService,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -76,7 +77,9 @@ async fn restore_saved_bots() {
 
     let holder = get_service_holder();
     let guard = holder.read().await;
-    let Some(service) = guard.as_ref() else { return };
+    let Some(service) = guard.as_ref() else {
+        return;
+    };
 
     for conn in &data.connections {
         if !conn.chat_state.paired {
@@ -268,10 +271,9 @@ fn detect_default_gateway_ip() -> Option<String> {
             return None;
         }
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let re = Regex::new(
-            r"(?m)^\s*0\.0\.0\.0\s+0\.0\.0\.0\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\s+",
-        )
-        .ok()?;
+        let re =
+            Regex::new(r"(?m)^\s*0\.0\.0\.0\s+0\.0\.0\.0\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\s+")
+                .ok()?;
         return re
             .captures(&stdout)
             .and_then(|c| c.get(1).map(|m| m.as_str().to_string()));
@@ -467,8 +469,7 @@ pub async fn remote_connect_configure_custom_server(url: String) -> Result<(), S
     if guard.is_none() {
         let mut config = RemoteConnectConfig::default();
         config.custom_server_url = Some(url);
-        let service =
-            RemoteConnectService::new(config).map_err(|e| format!("init: {e}"))?;
+        let service = RemoteConnectService::new(config).map_err(|e| format!("init: {e}"))?;
         *guard = Some(service);
     }
     Ok(())
@@ -483,9 +484,7 @@ pub struct ConfigureBotRequest {
 }
 
 #[tauri::command]
-pub async fn remote_connect_configure_bot(
-    request: ConfigureBotRequest,
-) -> Result<(), String> {
+pub async fn remote_connect_configure_bot(request: ConfigureBotRequest) -> Result<(), String> {
     let holder = get_service_holder();
     let mut guard = holder.write().await;
 
@@ -507,8 +506,7 @@ pub async fn remote_connect_configure_bot(
             BotConfig::Feishu { .. } => config.bot_feishu = Some(bot_config),
             BotConfig::Telegram { .. } => config.bot_telegram = Some(bot_config),
         }
-        let service =
-            RemoteConnectService::new(config).map_err(|e| format!("init: {e}"))?;
+        let service = RemoteConnectService::new(config).map_err(|e| format!("init: {e}"))?;
         *guard = Some(service);
     } else if let Some(service) = guard.as_mut() {
         service.update_bot_config(bot_config);
@@ -516,4 +514,3 @@ pub async fn remote_connect_configure_bot(
 
     Ok(())
 }
-

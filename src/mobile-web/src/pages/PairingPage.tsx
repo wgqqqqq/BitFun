@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import LanguageToggleButton from '../components/LanguageToggleButton';
+import { useI18n } from '../i18n';
 import { RelayHttpClient } from '../services/RelayHttpClient';
 import { RemoteSessionManager } from '../services/RemoteSessionManager';
 import { useMobileStore } from '../services/store';
@@ -78,6 +80,7 @@ function resolveRelayBaseUrl(): { room: string | null; pk: string | null; httpBa
 }
 
 const PairingPage: React.FC<PairingPageProps> = ({ onPaired }) => {
+  const { t } = useI18n();
   const {
     connectionStatus,
     setConnectionStatus,
@@ -114,20 +117,17 @@ const PairingPage: React.FC<PairingPageProps> = ({ onPaired }) => {
       ? Math.max(1, Math.ceil((activeLockUntil - Date.now()) / 1000))
       : 0;
     if (!pairingTarget.room || !pairingTarget.pk) {
-      setError('Invalid QR code: missing room or public key');
+      setError(t('pairing.invalidQrCode'));
       setConnectionStatus('error');
       return;
     }
     if (!userIdValue) {
-      setError('User ID is required');
+      setError(t('pairing.userIdRequired'));
       setConnectionStatus('error');
       return;
     }
     if (!autoReconnect && lockActive) {
-      // #region agent log
-      fetch('http://127.0.0.1:7682/ingest/8685ca77-c5bb-4ac6-aaa8-13e4fb36cf13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'54c236'},body:JSON.stringify({sessionId:'54c236',runId:'post-fix',hypothesisId:'H14',location:'src/mobile-web/src/pages/PairingPage.tsx:108',message:'Manual pairing blocked by local lockout',data:{remainingLockSeconds:currentRemainingLockSeconds,failureCount:failureCountRef.current},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      setError(`Too many failed attempts. Try again in ${currentRemainingLockSeconds}s.`);
+      setError(t('pairing.tooManyAttempts', { seconds: currentRemainingLockSeconds }));
       setConnectionStatus('error');
       return;
     }
@@ -167,10 +167,7 @@ const PairingPage: React.FC<PairingPageProps> = ({ onPaired }) => {
       }
       onPaired(client, sessionMgr);
     } catch (e: any) {
-      const errorMessage = e?.message || 'Pairing failed';
-      // #region agent log
-      fetch('http://127.0.0.1:7682/ingest/8685ca77-c5bb-4ac6-aaa8-13e4fb36cf13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'54c236'},body:JSON.stringify({sessionId:'54c236',runId:'pre-fix',hypothesisId:'H13',location:'src/mobile-web/src/pages/PairingPage.tsx:135',message:'Pairing attempt failed',data:{autoReconnect,errorMessage,connectionStatusBefore:'pairing'},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
+      const errorMessage = e?.message || t('pairing.pairingFailed');
       if (!autoReconnect && isProtectedUserIdError(errorMessage)) {
         const nextFailureCount = failureCountRef.current + 1;
         const shouldLock = nextFailureCount >= MAX_FAILED_USER_ID_ATTEMPTS;
@@ -183,12 +180,9 @@ const PairingPage: React.FC<PairingPageProps> = ({ onPaired }) => {
         }
         setFailureCount(nextFailureCount);
         setLockUntil(nextLockUntil);
-        // #region agent log
-        fetch('http://127.0.0.1:7682/ingest/8685ca77-c5bb-4ac6-aaa8-13e4fb36cf13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'54c236'},body:JSON.stringify({sessionId:'54c236',runId:'post-fix',hypothesisId:'H14',location:'src/mobile-web/src/pages/PairingPage.tsx:154',message:'Counted protected user ID failure',data:{nextFailureCount,shouldLock,lockUntil:nextLockUntil},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         setError(
           shouldLock
-            ? `Too many failed attempts. Try again in ${Math.ceil(USER_ID_LOCKOUT_MS / 1000)}s.`
+            ? t('pairing.tooManyAttempts', { seconds: Math.ceil(USER_ID_LOCKOUT_MS / 1000) })
             : errorMessage,
         );
       } else {
@@ -198,7 +192,7 @@ const PairingPage: React.FC<PairingPageProps> = ({ onPaired }) => {
     } finally {
       setSubmitting(false);
     }
-  }, [mobileInstallId, pairingTarget.httpBaseUrl, pairingTarget.pk, pairingTarget.room, setAuthenticatedUserId, setConnectionStatus, setError]);
+  }, [mobileInstallId, pairingTarget.httpBaseUrl, pairingTarget.pk, pairingTarget.room, setAuthenticatedUserId, setConnectionStatus, setError, t]);
 
   useEffect(() => {
     const savedUserId = localStorage.getItem(MOBILE_USER_ID_KEY)?.trim() ?? '';
@@ -211,9 +205,6 @@ const PairingPage: React.FC<PairingPageProps> = ({ onPaired }) => {
       localStorage.removeItem(MOBILE_FAILURE_COUNT_KEY);
     }
     const shouldAutoReconnect = !!savedUserId && !!currentInstallId && !!pairingTarget.room && !!pairingTarget.pk;
-    // #region agent log
-    fetch('http://127.0.0.1:7682/ingest/8685ca77-c5bb-4ac6-aaa8-13e4fb36cf13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'54c236'},body:JSON.stringify({sessionId:'54c236',runId:'pre-fix',hypothesisId:'H11',location:'src/mobile-web/src/pages/PairingPage.tsx:145',message:'Loaded pairing page local identity and lock state',data:{hasSavedUserId:!!savedUserId,hasInstallId:!!currentInstallId,shouldAutoReconnect,hasLockUntil:!!normalizedLockUntil,isLocked:!!normalizedLockUntil&&normalizedLockUntil>Date.now(),failureCount:persistedFailureCount},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     setUserId(savedUserId);
     setMobileInstallId(currentInstallId);
     setFailureCount(normalizedLockUntil ? persistedFailureCount : 0);
@@ -255,25 +246,25 @@ const PairingPage: React.FC<PairingPageProps> = ({ onPaired }) => {
 
   const handleConnect = async () => {
     autoReconnectAttemptedRef.current = true;
-    // #region agent log
-    fetch('http://127.0.0.1:7682/ingest/8685ca77-c5bb-4ac6-aaa8-13e4fb36cf13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'54c236'},body:JSON.stringify({sessionId:'54c236',runId:'pre-fix',hypothesisId:'H12',location:'src/mobile-web/src/pages/PairingPage.tsx:160',message:'Manual pairing submit triggered',data:{userIdLength:userId.trim().length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     await attemptPair(userId, { autoReconnect: false });
   };
 
   const stateLabels: Record<string, string> = {
-    idle: 'Enter your user ID to continue',
-    pairing: 'Connecting and pairing...',
-    paired: 'Paired! Loading sessions...',
-    error: 'Connection error',
+    idle: t('pairing.enterUserIdToContinue'),
+    pairing: t('pairing.connectingAndPairing'),
+    paired: t('pairing.pairedLoadingSessions'),
+    error: t('pairing.connectionError'),
   };
   const showSpinner = connectionStatus === 'pairing';
   const showForm = connectionStatus === 'idle' || connectionStatus === 'error';
 
   return (
     <div className="pairing-page">
+      <div className="pairing-page__actions">
+        <LanguageToggleButton />
+      </div>
       <CubeLogo />
-      <div className="pairing-page__brand">BitFun Remote</div>
+      <div className="pairing-page__brand">{t('common.appName')}</div>
 
       <div className="pairing-page__spinner-wrap">
         {showSpinner && <div className="spinner" />}
@@ -286,13 +277,13 @@ const PairingPage: React.FC<PairingPageProps> = ({ onPaired }) => {
       {showForm && (
         <div className="pairing-page__form">
           <label className="pairing-page__field">
-            <span className="pairing-page__field-label">User ID</span>
+            <span className="pairing-page__field-label">{t('pairing.fieldLabel')}</span>
             <input
               className="pairing-page__input"
               type="text"
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
-              placeholder="Enter a user ID"
+              placeholder={t('pairing.placeholder')}
               autoCapitalize="off"
               autoCorrect="off"
               autoComplete="username"
@@ -300,14 +291,18 @@ const PairingPage: React.FC<PairingPageProps> = ({ onPaired }) => {
             />
           </label>
           <p className="pairing-page__note">
-            The first successful connection binds this URL to your user ID for the current remote session.
+            {t('pairing.note')}
           </p>
           <button
             className="pairing-page__retry"
             onClick={handleConnect}
             disabled={submitting || isLocked}
           >
-            {submitting ? 'Connecting...' : isLocked ? `Retry in ${remainingLockSeconds}s` : 'Continue'}
+            {submitting
+              ? t('pairing.connecting')
+              : isLocked
+                ? t('pairing.retryIn', { seconds: remainingLockSeconds })
+                : t('pairing.continue')}
           </button>
         </div>
       )}

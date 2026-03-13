@@ -1,5 +1,5 @@
-use log::warn;
 use crate::service::config::types::AIModelConfig;
+use log::warn;
 use serde::{Deserialize, Serialize};
 
 fn append_endpoint(base_url: &str, endpoint: &str) -> String {
@@ -151,7 +151,10 @@ impl TryFrom<AIModelConfig> for AIConfig {
             match serde_json::from_str::<serde_json::Value>(body_str) {
                 Ok(value) => Some(value),
                 Err(e) => {
-                    warn!("Failed to parse custom_request_body: {}, config: {}", e, other.name);
+                    warn!(
+                        "Failed to parse custom_request_body: {}, config: {}",
+                        e, other.name
+                    );
                     None
                 }
             }
@@ -163,7 +166,9 @@ impl TryFrom<AIModelConfig> for AIConfig {
         let request_url = other
             .request_url
             .filter(|u| !u.is_empty())
-            .unwrap_or_else(|| resolve_request_url(&other.base_url, &other.provider, &other.model_name));
+            .unwrap_or_else(|| {
+                resolve_request_url(&other.base_url, &other.provider, &other.model_name)
+            });
 
         Ok(AIConfig {
             name: other.name.clone(),

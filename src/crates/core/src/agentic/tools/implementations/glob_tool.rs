@@ -202,14 +202,11 @@ impl Tool for GlobTool {
                 })?;
                 workspace_root.join(user_path)
             }
-            None => context
-                .workspace_root()
-                .map(PathBuf::from)
-                .ok_or_else(|| {
-                    BitFunError::tool(
-                        "workspace_path is required when Glob path is omitted".to_string(),
-                    )
-                })?,
+            None => context.workspace_root().map(PathBuf::from).ok_or_else(|| {
+                BitFunError::tool(
+                    "workspace_path is required when Glob path is omitted".to_string(),
+                )
+            })?,
         };
 
         let limit = input

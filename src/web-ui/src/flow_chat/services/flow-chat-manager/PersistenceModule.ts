@@ -421,7 +421,7 @@ export async function updateSessionMetadata(
       sessionId: session.sessionId,
       sessionName: session.title || existingMetadata?.sessionName || i18nService.t('flow-chat:session.new'),
       agentType: session.mode || existingMetadata?.agentType || 'agentic',
-      modelName: session.config.modelName || existingMetadata?.modelName || 'default',
+      modelName: session.config.modelName || existingMetadata?.modelName || 'auto',
       createdAt: existingMetadata?.createdAt || session.createdAt,
       lastActiveAt: Date.now(),
       turnCount: Math.max(inMemoryTurnCount, existingMetadata?.turnCount ?? 0),

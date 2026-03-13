@@ -183,8 +183,10 @@ pub async fn get_all_tools() -> Vec<Arc<dyn Tool>> {
     let registry_lock = registry.read().await;
     let all_tools = registry_lock.get_all_tools();
     let wrapped_tools = crate::service::snapshot::get_snapshot_wrapped_tools();
-    let file_tool_names: std::collections::HashSet<String> =
-        wrapped_tools.iter().map(|tool| tool.name().to_string()).collect();
+    let file_tool_names: std::collections::HashSet<String> = wrapped_tools
+        .iter()
+        .map(|tool| tool.name().to_string())
+        .collect();
 
     let mut result = wrapped_tools;
     for tool in all_tools {
@@ -256,4 +258,3 @@ pub async fn get_all_registered_tool_names() -> Vec<String> {
         .map(|tool| tool.name().to_string())
         .collect()
 }
-

@@ -131,6 +131,32 @@ impl ExecutionEngine {
         Self::is_recoverable_historical_image_error(err)
     }
 
+    fn resolve_configured_model_id(
+        ai_config: &crate::service::config::types::AIConfig,
+        model_id: &str,
+    ) -> String {
+        ai_config
+            .resolve_model_selection(model_id)
+            .unwrap_or_else(|| model_id.to_string())
+    }
+
+    fn resolve_locked_auto_model_id(
+        ai_config: &crate::service::config::types::AIConfig,
+        model_id: Option<&String>,
+    ) -> Option<String> {
+        let model_id = model_id?;
+        let trimmed = model_id.trim();
+        if trimmed.is_empty() || trimmed == "auto" || trimmed == "default" {
+            return None;
+        }
+
+        ai_config.resolve_model_selection(trimmed)
+    }
+
+    fn should_use_fast_auto_model(turn_index: usize, original_user_input: &str) -> bool {
+        turn_index == 0 && original_user_input.chars().count() <= 10
+    }
+
     async fn build_ai_messages_for_send(
         messages: &[Message],
         provider: &str,
@@ -382,10 +408,18 @@ impl ExecutionEngine {
         // 1. Get current agent
         let agent_registry = get_agent_registry();
         if let Some(workspace) = context.workspace.as_ref() {
-            agent_registry.load_custom_subagents(workspace.root_path()).await;
+            agent_registry
+                .load_custom_subagents(workspace.root_path())
+                .await;
         }
         let current_agent = agent_registry
-            .get_agent(&agent_type, context.workspace.as_ref().map(|workspace| workspace.root_path()))
+            .get_agent(
+                &agent_type,
+                context
+                    .workspace
+                    .as_ref()
+                    .map(|workspace| workspace.root_path()),
+            )
             .ok_or_else(|| BitFunError::NotFound(format!("Agent not found: {}", agent_type)))?;
         info!(
             "Current Agent: {} ({})",
@@ -393,18 +427,94 @@ impl ExecutionEngine {
             current_agent.id()
         );
 
+        let session = self
+            .session_manager
+            .get_session(&context.session_id)
+            .ok_or_else(|| {
+                BitFunError::Session(format!("Session not found: {}", context.session_id))
+            })?;
+
         // 2. Get AI client
         // Get model ID from AgentRegistry
-        let model_id = agent_registry
+        let configured_model_id = agent_registry
             .get_model_id_for_agent(
                 &agent_type,
-                context.workspace.as_ref().map(|workspace| workspace.root_path()),
+                context
+                    .workspace
+                    .as_ref()
+                    .map(|workspace| workspace.root_path()),
             )
             .await
             .map_err(|e| BitFunError::AIClient(format!("Failed to get model ID: {}", e)))?;
+        let model_id = if configured_model_id == "auto" {
+            let config_service = get_global_config_service().await.map_err(|e| {
+                BitFunError::AIClient(format!(
+                    "Failed to get config service for auto model resolution: {}",
+                    e
+                ))
+            })?;
+            let ai_config: crate::service::config::types::AIConfig = config_service
+                .get_config(Some("ai"))
+                .await
+                .unwrap_or_default();
+
+            let locked_model_id =
+                Self::resolve_locked_auto_model_id(&ai_config, session.config.model_id.as_ref());
+            let raw_locked_model_id = session.config.model_id.clone();
+
+            if let Some(locked_model_id) = locked_model_id {
+                locked_model_id
+            } else {
+                if let Some(raw_locked_model_id) = raw_locked_model_id.as_ref() {
+                    let trimmed = raw_locked_model_id.trim();
+                    if !trimmed.is_empty() && trimmed != "auto" && trimmed != "default" {
+                        warn!(
+                            "Ignoring invalid locked auto model for session: session_id={}, model_id={}",
+                            context.session_id, trimmed
+                        );
+                    }
+                }
+
+                let original_user_input = context
+                    .context
+                    .get("original_user_input")
+                    .cloned()
+                    .unwrap_or_default();
+                let use_fast_model =
+                    Self::should_use_fast_auto_model(context.turn_index, &original_user_input);
+                let fallback_model = if use_fast_model { "fast" } else { "primary" };
+                let resolved_model_id = ai_config.resolve_model_selection(fallback_model);
+
+                if let Some(resolved_model_id) = resolved_model_id {
+                    self.session_manager
+                        .update_session_model_id(&context.session_id, &resolved_model_id)
+                        .await?;
+
+                    info!(
+                        "Auto model resolved: session_id={}, turn_index={}, user_input_chars={}, strategy={}, resolved_model_id={}",
+                        context.session_id,
+                        context.turn_index,
+                        original_user_input.chars().count(),
+                        fallback_model,
+                        resolved_model_id
+                    );
+
+                    resolved_model_id
+                } else {
+                    warn!(
+                        "Auto model strategy unresolved, keeping symbolic selector: session_id={}, strategy={}",
+                        context.session_id, fallback_model
+                    );
+                    fallback_model.to_string()
+                }
+            }
+        } else {
+            configured_model_id.clone()
+        };
         info!(
-            "Agent using model: agent={}, model_id={}",
+            "Agent using model: agent={}, configured_model_id={}, resolved_model_id={}",
             current_agent.name(),
+            configured_model_id,
             model_id
         );
 
@@ -482,7 +592,10 @@ impl ExecutionEngine {
         let allowed_tools = agent_registry
             .get_agent_tools(
                 &agent_type,
-                context.workspace.as_ref().map(|workspace| workspace.root_path()),
+                context
+                    .workspace
+                    .as_ref()
+                    .map(|workspace| workspace.root_path()),
             )
             .await;
         let enable_tools = context
@@ -502,13 +615,6 @@ impl ExecutionEngine {
             (vec![], None)
         };
 
-        // Get session configuration
-        let session = self
-            .session_manager
-            .get_session(&context.session_id)
-            .ok_or_else(|| {
-                BitFunError::Session(format!("Session not found: {}", context.session_id))
-            })?;
         let enable_context_compression = session.config.enable_context_compression;
         let compression_threshold = session.config.compression_threshold;
         // Detect whether the primary model supports multimodal image inputs.
@@ -521,20 +627,7 @@ impl ExecutionEngine {
                 let ai_config: crate::service::config::types::AIConfig =
                     service.get_config(Some("ai")).await.unwrap_or_default();
 
-                let resolved_id = match model_id.as_str() {
-                    "primary" => ai_config
-                        .default_models
-                        .primary
-                        .clone()
-                        .unwrap_or_else(|| model_id.clone()),
-                    "fast" => ai_config
-                        .default_models
-                        .fast
-                        .clone()
-                        .or_else(|| ai_config.default_models.primary.clone())
-                        .unwrap_or_else(|| model_id.clone()),
-                    _ => model_id.clone(),
-                };
+                let resolved_id = Self::resolve_configured_model_id(&ai_config, &model_id);
 
                 let model_cfg = ai_config
                     .models
@@ -702,7 +795,10 @@ impl ExecutionEngine {
             let ai_messages = Self::build_ai_messages_for_send(
                 &messages,
                 &ai_client.config.format,
-                context.workspace.as_ref().map(|workspace| workspace.root_path()),
+                context
+                    .workspace
+                    .as_ref()
+                    .map(|workspace| workspace.root_path()),
                 &context.dialog_turn_id,
             )
             .await?;
@@ -993,5 +1089,70 @@ impl ExecutionEngine {
     /// Emit event
     async fn emit_event(&self, event: AgenticEvent, priority: EventPriority) {
         let _ = self.event_queue.enqueue(event, Some(priority)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ExecutionEngine;
+    use crate::service::config::types::AIConfig;
+    use crate::service::config::types::AIModelConfig;
+
+    fn build_model(id: &str, name: &str, model_name: &str) -> AIModelConfig {
+        AIModelConfig {
+            id: id.to_string(),
+            name: name.to_string(),
+            model_name: model_name.to_string(),
+            provider: "anthropic".to_string(),
+            enabled: true,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn auto_model_uses_fast_for_short_first_message() {
+        assert!(ExecutionEngine::should_use_fast_auto_model(0, "你好"));
+        assert!(ExecutionEngine::should_use_fast_auto_model(0, "1234567890"));
+    }
+
+    #[test]
+    fn auto_model_uses_primary_for_long_first_message() {
+        assert!(!ExecutionEngine::should_use_fast_auto_model(
+            0,
+            "12345678901"
+        ));
+    }
+
+    #[test]
+    fn auto_model_uses_primary_after_first_turn() {
+        assert!(!ExecutionEngine::should_use_fast_auto_model(1, "短消息"));
+    }
+
+    #[test]
+    fn resolve_configured_fast_model_falls_back_to_primary_when_fast_is_stale() {
+        let mut ai_config = AIConfig::default();
+        ai_config.models = vec![build_model("model-primary", "Primary", "claude-sonnet-4.5")];
+        ai_config.default_models.primary = Some("model-primary".to_string());
+        ai_config.default_models.fast = Some("deleted-fast-model".to_string());
+
+        assert_eq!(
+            ExecutionEngine::resolve_configured_model_id(&ai_config, "fast"),
+            "model-primary"
+        );
+    }
+
+    #[test]
+    fn invalid_locked_auto_model_is_ignored() {
+        let mut ai_config = AIConfig::default();
+        ai_config.models = vec![build_model("model-primary", "Primary", "claude-sonnet-4.5")];
+        ai_config.default_models.primary = Some("model-primary".to_string());
+
+        assert_eq!(
+            ExecutionEngine::resolve_locked_auto_model_id(
+                &ai_config,
+                Some(&"deleted-fast-model".to_string())
+            ),
+            None
+        );
     }
 }

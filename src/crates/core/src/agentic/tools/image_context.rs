@@ -32,7 +32,7 @@ const DEFAULT_IMAGE_MAX_AGE_SECS: u64 = 300;
 pub trait ImageContextProvider: Send + Sync + std::fmt::Debug {
     /// Get image context data by image_id
     fn get_image(&self, image_id: &str) -> Option<ImageContextData>;
-    
+
     /// Optional: delete image context (clean up after use)
     fn remove_image(&self, image_id: &str) {
         // Default implementation: do nothing
@@ -57,7 +57,9 @@ pub fn store_image_contexts(images: Vec<ImageContextData>) {
 }
 
 pub fn get_image_context(image_id: &str) -> Option<ImageContextData> {
-    IMAGE_STORAGE.get(image_id).map(|entry| entry.value().0.clone())
+    IMAGE_STORAGE
+        .get(image_id)
+        .map(|entry| entry.value().0.clone())
 }
 
 pub fn remove_image_context(image_id: &str) {
@@ -120,4 +122,3 @@ fn current_unix_timestamp() -> u64 {
         .unwrap_or_default()
         .as_secs()
 }
-

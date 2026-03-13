@@ -7,10 +7,12 @@ use std::sync::Arc;
 use tauri::{AppHandle, State};
 
 use crate::api::app_state::AppState;
-use bitfun_core::agentic::tools::image_context::get_image_context;
-use bitfun_core::agentic::coordination::{ConversationCoordinator, DialogScheduler, DialogTriggerSource};
+use bitfun_core::agentic::coordination::{
+    ConversationCoordinator, DialogScheduler, DialogTriggerSource,
+};
 use bitfun_core::agentic::core::*;
 use bitfun_core::agentic::image_analysis::ImageContextData;
+use bitfun_core::agentic::tools::image_context::get_image_context;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +50,7 @@ pub struct CreateSessionResponse {
 pub struct StartDialogTurnRequest {
     pub session_id: String,
     pub user_input: String,
+    pub original_user_input: Option<String>,
     pub agent_type: String,
     pub workspace_path: Option<String>,
     pub turn_id: Option<String>,
@@ -204,6 +207,7 @@ pub async fn start_dialog_turn(
     let StartDialogTurnRequest {
         session_id,
         user_input,
+        original_user_input,
         agent_type,
         workspace_path,
         turn_id,
@@ -220,6 +224,7 @@ pub async fn start_dialog_turn(
             .start_dialog_turn_with_image_contexts(
                 session_id,
                 user_input,
+                original_user_input,
                 resolved_image_contexts,
                 turn_id,
                 agent_type,
@@ -233,6 +238,7 @@ pub async fn start_dialog_turn(
             .submit(
                 session_id,
                 user_input,
+                original_user_input,
                 turn_id,
                 agent_type,
                 workspace_path,
@@ -288,7 +294,10 @@ fn resolve_missing_image_payloads(
             image.mime_type = stored.mime_type.clone();
         }
 
-        let mut metadata = image.metadata.take().unwrap_or_else(|| serde_json::json!({}));
+        let mut metadata = image
+            .metadata
+            .take()
+            .unwrap_or_else(|| serde_json::json!({}));
         if !metadata.is_object() {
             metadata = serde_json::json!({ "raw_metadata": metadata });
         }

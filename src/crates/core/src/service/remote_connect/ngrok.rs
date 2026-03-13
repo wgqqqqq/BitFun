@@ -133,7 +133,10 @@ pub async fn start_ngrok_tunnel(local_port: u16) -> Result<NgrokTunnel> {
             "An ngrok process is already running (PID: {}).\n\
              Please stop the existing ngrok process before starting a new tunnel,\n\
              or use the existing tunnel directly.",
-            pids.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", ")
+            pids.iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
 

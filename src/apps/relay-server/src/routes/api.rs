@@ -210,7 +210,9 @@ pub async fn upload_web(
         if rel_path.contains("..") {
             continue;
         }
-        let decoded = B64.decode(b64_content).map_err(|_| StatusCode::BAD_REQUEST)?;
+        let decoded = B64
+            .decode(b64_content)
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
         let hash = hex_sha256(&decoded);
 
         if !state.asset_store.has_content(&hash) {
@@ -327,7 +329,9 @@ pub async fn upload_web_files(
         if rel_path.contains("..") {
             continue;
         }
-        let decoded = B64.decode(&entry.content).map_err(|_| StatusCode::BAD_REQUEST)?;
+        let decoded = B64
+            .decode(&entry.content)
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
         let actual_hash = hex_sha256(&decoded);
         if actual_hash != entry.hash {
             tracing::warn!(
@@ -352,7 +356,9 @@ pub async fn upload_web_files(
     }
 
     tracing::info!("Room {room_id}: upload-web-files stored {stored} new files");
-    Ok(Json(serde_json::json!({ "status": "ok", "files_stored": stored })))
+    Ok(Json(
+        serde_json::json!({ "status": "ok", "files_stored": stored }),
+    ))
 }
 
 /// `GET /r/{*rest}` — serve per-room mobile-web static files.

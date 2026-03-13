@@ -2,8 +2,10 @@
 
 use crate::api::app_state::AppState;
 use crate::api::dto::WorkspaceInfoDto;
-use bitfun_core::service::workspace::{ScanOptions, WorkspaceInfo, WorkspaceKind, WorkspaceOpenOptions};
 use bitfun_core::infrastructure::{file_watcher, FileOperationOptions, SearchMatchType};
+use bitfun_core::service::workspace::{
+    ScanOptions, WorkspaceInfo, WorkspaceKind, WorkspaceOpenOptions,
+};
 use log::{debug, error, info, warn};
 use serde::Deserialize;
 use std::path::Path;
@@ -49,6 +51,11 @@ pub struct ResetAssistantWorkspaceRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct TestAIConfigConnectionRequest {
+    pub config: bitfun_core::service::config::types::AIModelConfig,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListAIModelsByConfigRequest {
     pub config: bitfun_core::service::config::types::AIModelConfig,
 }
 
@@ -428,6 +435,26 @@ pub async fn test_ai_config_connection(
 }
 
 #[tauri::command]
+pub async fn list_ai_models_by_config(
+    request: ListAIModelsByConfigRequest,
+) -> Result<Vec<bitfun_core::util::types::RemoteModelInfo>, String> {
+    let config_name = request.config.name.clone();
+    let ai_config = request
+        .config
+        .try_into()
+        .map_err(|e| format!("Failed to convert configuration: {}", e))?;
+    let ai_client = bitfun_core::infrastructure::ai::client::AIClient::new(ai_config);
+
+    ai_client.list_models().await.map_err(|e| {
+        error!(
+            "Failed to list models for config: name={}, error={}",
+            config_name, e
+        );
+        format!("Failed to list models: {}", e)
+    })
+}
+
+#[tauri::command]
 pub async fn fix_mermaid_code(
     state: State<'_, AppState>,
     request: FixMermaidCodeRequest,
@@ -599,7 +626,10 @@ pub async fn open_workspace(
                 .sync_watched_workspaces()
                 .await
             {
-                warn!("Failed to sync workspace identity watchers after open: {}", e);
+                warn!(
+                    "Failed to sync workspace identity watchers after open: {}",
+                    e
+                );
             }
 
             info!(
@@ -621,7 +651,11 @@ pub async fn create_assistant_workspace(
     state: State<'_, AppState>,
     _request: CreateAssistantWorkspaceRequest,
 ) -> Result<WorkspaceInfoDto, String> {
-    match state.workspace_service.create_assistant_workspace(None).await {
+    match state
+        .workspace_service
+        .create_assistant_workspace(None)
+        .await
+    {
         Ok(workspace_info) => {
             if let Err(e) = state
                 .workspace_identity_watch_service
@@ -667,9 +701,10 @@ pub async fn delete_assistant_workspace(
         ));
     }
 
-    let assistant_id = workspace_info.assistant_id.clone().ok_or_else(|| {
-        "Default assistant workspace cannot be deleted".to_string()
-    })?;
+    let assistant_id = workspace_info
+        .assistant_id
+        .clone()
+        .ok_or_else(|| "Default assistant workspace cannot be deleted".to_string())?;
 
     if !state
         .workspace_service
@@ -738,19 +773,29 @@ pub async fn delete_assistant_workspace(
 }
 
 async fn clear_directory_contents(directory: &Path) -> Result<(), String> {
-    tokio::fs::create_dir_all(directory)
-        .await
-        .map_err(|e| format!("Failed to create workspace directory '{}': {}", directory.display(), e))?;
+    tokio::fs::create_dir_all(directory).await.map_err(|e| {
+        format!(
+            "Failed to create workspace directory '{}': {}",
+            directory.display(),
+            e
+        )
+    })?;
 
-    let mut entries = tokio::fs::read_dir(directory)
-        .await
-        .map_err(|e| format!("Failed to read workspace directory '{}': {}", directory.display(), e))?;
+    let mut entries = tokio::fs::read_dir(directory).await.map_err(|e| {
+        format!(
+            "Failed to read workspace directory '{}': {}",
+            directory.display(),
+            e
+        )
+    })?;
 
-    while let Some(entry) = entries
-        .next_entry()
-        .await
-        .map_err(|e| format!("Failed to iterate workspace directory '{}': {}", directory.display(), e))?
-    {
+    while let Some(entry) = entries.next_entry().await.map_err(|e| {
+        format!(
+            "Failed to iterate workspace directory '{}': {}",
+            directory.display(),
+            e
+        )
+    })? {
         let entry_path = entry.path();
         let file_type = entry.file_type().await.map_err(|e| {
             format!(

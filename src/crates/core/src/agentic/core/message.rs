@@ -110,11 +110,7 @@ impl From<Message> for AIMessage {
                             .filter(|s| !s.is_empty())
                             .map(str::to_string)
                             .or_else(|| {
-                                image
-                                    .image_path
-                                    .as_ref()
-                                    .filter(|s| !s.is_empty())
-                                    .cloned()
+                                image.image_path.as_ref().filter(|s| !s.is_empty()).cloned()
                             })
                             .unwrap_or_else(|| image.id.clone());
 

@@ -3,6 +3,7 @@ import PairingPage from './pages/PairingPage';
 import WorkspacePage from './pages/WorkspacePage';
 import SessionListPage from './pages/SessionListPage';
 import ChatPage from './pages/ChatPage';
+import { I18nProvider } from './i18n';
 import { RelayHttpClient } from './services/RelayHttpClient';
 import { RemoteSessionManager } from './services/RemoteSessionManager';
 import { ThemeProvider } from './theme';
@@ -126,7 +127,9 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => (
   <ThemeProvider>
-    <AppContent />
+    <I18nProvider>
+      <AppContent />
+    </I18nProvider>
   </ThemeProvider>
 );
 

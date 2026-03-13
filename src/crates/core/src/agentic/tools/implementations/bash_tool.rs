@@ -405,7 +405,9 @@ Usage notes:
         let binding = terminal_api.session_manager().binding();
         let workspace_path = context
             .workspace_root()
-            .ok_or_else(|| BitFunError::tool("workspace_path is required for Bash tool".to_string()))?
+            .ok_or_else(|| {
+                BitFunError::tool("workspace_path is required for Bash tool".to_string())
+            })?
             .to_string_lossy()
             .to_string();
 

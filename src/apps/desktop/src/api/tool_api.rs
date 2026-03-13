@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use crate::api::context_upload_api::create_image_context_provider;
 use bitfun_core::agentic::{
-    WorkspaceBinding,
     tools::framework::ToolUseContext,
     tools::{get_all_tools, get_readonly_tools},
+    WorkspaceBinding,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,12 +117,8 @@ fn is_relative_path(value: Option<&serde_json::Value>) -> bool {
 fn tool_requires_workspace_path(tool_name: &str, input: &serde_json::Value) -> bool {
     match tool_name {
         "Bash" => true,
-        "Glob" | "Grep" => {
-            input.get("path").is_none() || is_relative_path(input.get("path"))
-        }
-        "Read" | "Write" | "Edit" | "GetFileDiff" => {
-            is_relative_path(input.get("file_path"))
-        }
+        "Glob" | "Grep" => input.get("path").is_none() || is_relative_path(input.get("path")),
+        "Read" | "Write" | "Edit" | "GetFileDiff" => is_relative_path(input.get("file_path")),
         _ => false,
     }
 }
@@ -132,7 +128,9 @@ fn ensure_workspace_requirement(
     input: &serde_json::Value,
     workspace_path: Option<&str>,
 ) -> Result<(), String> {
-    if tool_requires_workspace_path(tool_name, input) && !has_explicit_workspace_path(workspace_path) {
+    if tool_requires_workspace_path(tool_name, input)
+        && !has_explicit_workspace_path(workspace_path)
+    {
         return Err(format!(
             "workspacePath is required to execute tool '{}' with workspace-relative input",
             tool_name

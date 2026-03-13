@@ -296,7 +296,11 @@ impl SnapshotService {
         Ok(())
     }
 
-    pub async fn reject_file(&self, session_id: &str, file_path: &Path) -> SnapshotResult<Vec<PathBuf>> {
+    pub async fn reject_file(
+        &self,
+        session_id: &str,
+        file_path: &Path,
+    ) -> SnapshotResult<Vec<PathBuf>> {
         self.ensure_initialized().await?;
         self.validate_file_path(file_path).await?;
 

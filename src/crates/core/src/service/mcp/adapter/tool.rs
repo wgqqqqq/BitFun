@@ -134,9 +134,16 @@ impl Tool for MCPToolWrapper {
                             ..
                         } => format!("[Audio: {}]", mime_type),
                         crate::service::mcp::protocol::MCPToolResultContent::ResourceLink {
-                            uri, name, ..
-                        } => name.as_ref().map_or_else(|| uri.clone(), |n| format!("[Resource: {} ({})]", n, uri)),
-                        crate::service::mcp::protocol::MCPToolResultContent::Resource { resource } => {
+                            uri,
+                            name,
+                            ..
+                        } => name.as_ref().map_or_else(
+                            || uri.clone(),
+                            |n| format!("[Resource: {} ({})]", n, uri),
+                        ),
+                        crate::service::mcp::protocol::MCPToolResultContent::Resource {
+                            resource,
+                        } => {
                             format!("[Resource: {}]", resource.uri)
                         }
                     })

@@ -241,10 +241,7 @@ mod tests {
         let mut protocol = PairingProtocol::new(device);
 
         // Step 1: Desktop initiates
-        let qr = protocol
-            .initiate("wss://relay.example.com")
-            .await
-            .unwrap();
+        let qr = protocol.initiate("wss://relay.example.com").await.unwrap();
         assert_eq!(protocol.state().await, PairingState::WaitingForScan);
         assert!(!qr.room_id.is_empty());
 

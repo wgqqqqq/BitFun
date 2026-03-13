@@ -194,7 +194,12 @@ pub struct MCPResourceContentMeta {
 pub struct MCPResourceContent {
     pub uri: String,
     /// Text or HTML content. Serialized as `text` per MCP spec; accepts `text` or `content` when deserializing.
-    #[serde(default, alias = "text", rename = "text", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        alias = "text",
+        rename = "text",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub content: Option<String>,
     /// Base64-encoded binary content (MCP spec). Used for video, images, etc.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -274,11 +279,19 @@ impl MCPPromptMessageContent {
     pub fn text_or_placeholder(&self) -> String {
         match self {
             MCPPromptMessageContent::Plain(s) => s.clone(),
-            MCPPromptMessageContent::Block(MCPPromptMessageContentBlock::Text { text }) => text.clone(),
-            MCPPromptMessageContent::Block(MCPPromptMessageContentBlock::Image { mime_type, .. }) => {
+            MCPPromptMessageContent::Block(MCPPromptMessageContentBlock::Text { text }) => {
+                text.clone()
+            }
+            MCPPromptMessageContent::Block(MCPPromptMessageContentBlock::Image {
+                mime_type,
+                ..
+            }) => {
                 format!("[Image: {}]", mime_type)
             }
-            MCPPromptMessageContent::Block(MCPPromptMessageContentBlock::Audio { mime_type, .. }) => {
+            MCPPromptMessageContent::Block(MCPPromptMessageContentBlock::Audio {
+                mime_type,
+                ..
+            }) => {
                 format!("[Audio: {}]", mime_type)
             }
             MCPPromptMessageContent::Block(MCPPromptMessageContentBlock::Resource { resource }) => {

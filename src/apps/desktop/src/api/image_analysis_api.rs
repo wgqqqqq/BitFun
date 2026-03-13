@@ -93,6 +93,7 @@ pub async fn send_enhanced_message(
         .submit(
             request.session_id.clone(),
             enhanced_message,
+            Some(request.original_message.clone()),
             Some(request.dialog_turn_id.clone()),
             request.agent_type.clone(),
             None,

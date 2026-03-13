@@ -136,7 +136,7 @@ export async function createChatSession(
       agentType,
       workspacePath,
       config: {
-        modelName: config.modelName || 'default',
+        modelName: config.modelName || 'auto',
         enableTools: true,
         safeMode: true,
         autoCompact: true,
@@ -203,7 +203,7 @@ export async function switchChatSession(
               agentType: currentSession.mode || 'agentic',
               workspacePath,
               config: {
-                modelName: currentSession.config.modelName || 'default',
+                modelName: currentSession.config.modelName || 'auto',
                 enableTools: true,
                 safeMode: true
               }
@@ -301,7 +301,7 @@ export async function ensureBackendSession(
         agentType: session.mode || 'agentic',
         workspacePath,
         config: {
-          modelName: session.config.modelName || 'default',
+          modelName: session.config.modelName || 'auto',
           enableTools: true,
           safeMode: true
         }
@@ -330,7 +330,7 @@ export async function retryCreateBackendSession(
     agentType: session.mode || 'agentic',
     workspacePath,
     config: {
-      modelName: session.config.modelName || 'default',
+      modelName: session.config.modelName || 'auto',
       enableTools: true,
       safeMode: true
     }

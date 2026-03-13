@@ -174,8 +174,8 @@ mod tests {
         }))
         .expect("event");
 
-        let completed: ResponsesCompleted = serde_json::from_value(event.response.expect("response"))
-            .expect("completed");
+        let completed: ResponsesCompleted =
+            serde_json::from_value(event.response.expect("response")).expect("completed");
         assert_eq!(completed.id, "resp_1");
         assert_eq!(completed.usage.expect("usage").total_tokens, 14);
     }

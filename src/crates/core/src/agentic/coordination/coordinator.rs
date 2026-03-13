@@ -120,7 +120,9 @@ impl ConversationCoordinator {
             || workspace_service
                 .get_workspace_by_path(&workspace_path_buf)
                 .await
-                .map(|workspace| workspace.workspace_kind == crate::service::workspace::WorkspaceKind::Assistant)
+                .map(|workspace| {
+                    workspace.workspace_kind == crate::service::workspace::WorkspaceKind::Assistant
+                })
                 .unwrap_or(false)
         {
             if normalized_agent_type != "Claw" {
@@ -167,7 +169,9 @@ impl ConversationCoordinator {
         config: SessionConfig,
     ) -> BitFunResult<Session> {
         let workspace_path = config.workspace_path.clone().ok_or_else(|| {
-            BitFunError::Validation("workspace_path is required when creating a session".to_string())
+            BitFunError::Validation(
+                "workspace_path is required when creating a session".to_string(),
+            )
         })?;
         self.create_session_with_workspace_and_creator(
             None,
@@ -189,7 +193,9 @@ impl ConversationCoordinator {
         config: SessionConfig,
     ) -> BitFunResult<Session> {
         let workspace_path = config.workspace_path.clone().ok_or_else(|| {
-            BitFunError::Validation("workspace_path is required when creating a session".to_string())
+            BitFunError::Validation(
+                "workspace_path is required when creating a session".to_string(),
+            )
         })?;
         self.create_session_with_workspace_and_creator(
             session_id,
@@ -263,11 +269,7 @@ impl ConversationCoordinator {
         Ok(session)
     }
 
-    async fn sync_session_metadata_to_workspace(
-        &self,
-        session: &Session,
-        workspace_path: String,
-    ) {
+    async fn sync_session_metadata_to_workspace(&self, session: &Session, workspace_path: String) {
         use crate::agentic::persistence::PersistenceManager;
         use crate::infrastructure::PathManager;
         use crate::service::session::{SessionMetadata, SessionStatus};
@@ -461,7 +463,9 @@ impl ConversationCoordinator {
     ) -> BitFunResult<String> {
         let agent_registry = get_agent_registry();
         if let Some(workspace) = workspace {
-            agent_registry.load_custom_subagents(workspace.root_path()).await;
+            agent_registry
+                .load_custom_subagents(workspace.root_path())
+                .await;
         }
         let current_agent = agent_registry
             .get_agent(agent_type, workspace.map(|binding| binding.root_path()))
@@ -491,6 +495,7 @@ impl ConversationCoordinator {
         &self,
         session_id: String,
         user_input: String,
+        original_user_input: Option<String>,
         turn_id: Option<String>,
         agent_type: String,
         workspace_path: Option<String>,
@@ -499,6 +504,7 @@ impl ConversationCoordinator {
         self.start_dialog_turn_internal(
             session_id,
             user_input,
+            original_user_input,
             None,
             turn_id,
             agent_type,
@@ -512,6 +518,7 @@ impl ConversationCoordinator {
         &self,
         session_id: String,
         user_input: String,
+        original_user_input: Option<String>,
         image_contexts: Vec<ImageContextData>,
         turn_id: Option<String>,
         agent_type: String,
@@ -521,6 +528,7 @@ impl ConversationCoordinator {
         self.start_dialog_turn_internal(
             session_id,
             user_input,
+            original_user_input,
             Some(image_contexts),
             turn_id,
             agent_type,
@@ -663,6 +671,7 @@ impl ConversationCoordinator {
         &self,
         session_id: String,
         user_input: String,
+        original_user_input: Option<String>,
         image_contexts: Option<Vec<ImageContextData>>,
         turn_id: Option<String>,
         agent_type: String,
@@ -852,7 +861,7 @@ impl ConversationCoordinator {
             }
         }
 
-        let original_user_input = user_input.clone();
+        let original_user_input = original_user_input.unwrap_or_else(|| user_input.clone());
 
         // Build image metadata for workspace turn persistence (before image_contexts is consumed)
         // Also stores original_text so the UI can display the user's actual input
@@ -906,7 +915,11 @@ impl ConversationCoordinator {
             .await?;
 
         let wrapped_user_input = self
-            .wrap_user_input(&effective_agent_type, user_input, session_workspace.as_ref())
+            .wrap_user_input(
+                &effective_agent_type,
+                user_input,
+                session_workspace.as_ref(),
+            )
             .await?;
 
         // Start new dialog turn (sets state to Processing internally)
@@ -956,6 +969,10 @@ impl ConversationCoordinator {
         context_vars.insert(
             "enable_tools".to_string(),
             session.config.enable_tools.to_string(),
+        );
+        context_vars.insert(
+            "original_user_input".to_string(),
+            original_user_input.clone(),
         );
 
         // Pass model_id for token usage tracking
@@ -1271,8 +1288,14 @@ impl ConversationCoordinator {
     }
 
     /// Delete session
-    pub async fn delete_session(&self, workspace_path: &Path, session_id: &str) -> BitFunResult<()> {
-        self.session_manager.delete_session(workspace_path, session_id).await?;
+    pub async fn delete_session(
+        &self,
+        workspace_path: &Path,
+        session_id: &str,
+    ) -> BitFunResult<()> {
+        self.session_manager
+            .delete_session(workspace_path, session_id)
+            .await?;
         self.emit_event(AgenticEvent::SessionDeleted {
             session_id: session_id.to_string(),
         })
@@ -1281,8 +1304,14 @@ impl ConversationCoordinator {
     }
 
     /// Restore session
-    pub async fn restore_session(&self, workspace_path: &Path, session_id: &str) -> BitFunResult<Session> {
-        self.session_manager.restore_session(workspace_path, session_id).await
+    pub async fn restore_session(
+        &self,
+        workspace_path: &Path,
+        session_id: &str,
+    ) -> BitFunResult<Session> {
+        self.session_manager
+            .restore_session(workspace_path, session_id)
+            .await
     }
 
     /// List all sessions
@@ -1500,7 +1529,9 @@ impl ConversationCoordinator {
             );
         }
 
-        Ok(SubagentResult { text: response_text })
+        Ok(SubagentResult {
+            text: response_text,
+        })
     }
 
     /// Clean up subagent session resources

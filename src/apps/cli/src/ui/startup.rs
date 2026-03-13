@@ -1,5 +1,4 @@
 /// Startup page module
-
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
@@ -138,10 +137,10 @@ struct SessionItem {
 impl StartupPage {
     pub fn new() -> Self {
         let config = CliConfig::load().unwrap_or_default();
-        
+
         let mut list_state = ListState::default();
         list_state.select(Some(0));
-        
+
         let menu_items = vec![
             MenuItem {
                 name: "New Session".to_string(),
@@ -169,7 +168,7 @@ impl StartupPage {
                 action: MenuAction::Exit,
             },
         ];
-        
+
         Self {
             menu_items,
             selected: 0,
@@ -181,11 +180,11 @@ impl StartupPage {
 
     pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<Option<String>> {
         terminal.clear()?;
-        
+
         loop {
             terminal.draw(|f| self.render(f))?;
 
-                    // Check if finished
+            // Check if finished
             if let PageState::Finished(result) = &self.page_state {
                 return match result {
                     StartupResult::NewSession(ws) => Ok(Some(ws.clone())),
@@ -205,8 +204,8 @@ impl StartupPage {
             if event::poll(Duration::from_millis(100))? {
                 match event::read()? {
                     Event::Key(key) => {
-                    self.handle_key(key)?;
-                }
+                        self.handle_key(key)?;
+                    }
                     Event::Resize(_, _) => {
                         terminal.clear()?;
                     }
@@ -235,8 +234,8 @@ impl StartupPage {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(12), // Logo area
-                Constraint::Min(10),     // Menu area
-                Constraint::Length(3),   // Hints area
+                Constraint::Min(10),    // Menu area
+                Constraint::Length(3),  // Hints area
             ])
             .split(area);
 
@@ -251,7 +250,7 @@ impl StartupPage {
             .map(|(i, item)| {
                 let is_selected = i == self.selected;
                 let icon = if is_selected { "▶" } else { " " };
-                
+
                 let style = if is_selected {
                     Style::default()
                         .fg(Color::Cyan)
@@ -277,14 +276,13 @@ impl StartupPage {
             })
             .collect();
 
-        let list = List::new(items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" BitFun CLI - Main Menu ")
-                    .title_alignment(Alignment::Center)
-                    .border_style(Style::default().fg(Color::Cyan)),
-            );
+        let list = List::new(items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" BitFun CLI - Main Menu ")
+                .title_alignment(Alignment::Center)
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
 
         frame.render_stateful_widget(list, chunks[1], &mut self.list_state);
 
@@ -309,7 +307,7 @@ impl StartupPage {
         let use_fancy_logo = area.width >= 80;
         let mut lines = vec![];
         lines.push(Line::from(""));
-        
+
         if use_fancy_logo {
             let logo = vec![
                 "  ██████╗ ██╗████████╗███████╗██╗   ██╗███╗   ██╗",
@@ -371,7 +369,7 @@ impl StartupPage {
                 .fg(Color::Gray)
                 .add_modifier(Modifier::ITALIC),
         )));
-        
+
         let version = format!("v{}", env!("CARGO_PKG_VERSION"));
         lines.push(Line::from(Span::styled(
             version,
@@ -382,20 +380,29 @@ impl StartupPage {
         frame.render_widget(paragraph, area);
     }
 
-    fn render_workspace_select(&mut self, frame: &mut Frame, area: Rect, page: &WorkspaceSelectPage) {
+    fn render_workspace_select(
+        &mut self,
+        frame: &mut Frame,
+        area: Rect,
+        page: &WorkspaceSelectPage,
+    ) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),   // Title
-                Constraint::Length(3),   // Input box
-                Constraint::Min(5),      // Help
-                Constraint::Length(5),   // Hints
+                Constraint::Length(3), // Title
+                Constraint::Length(3), // Input box
+                Constraint::Min(5),    // Help
+                Constraint::Length(5), // Hints
             ])
             .split(area);
 
         // Title
         let title = Paragraph::new("Enter workspace path")
-            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL));
         frame.render_widget(title, chunks[0]);
@@ -406,27 +413,35 @@ impl StartupPage {
         } else {
             &page.custom_input
         };
-        
+
         let input_style = if page.custom_input.is_empty() {
             Style::default().fg(Color::DarkGray)
         } else {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::UNDERLINED)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::UNDERLINED)
         };
-        
-        let input = Paragraph::new(input_display)
-            .style(input_style)
-            .block(Block::default().borders(Borders::ALL).title(" Workspace Path ").border_style(Style::default().fg(Color::Yellow)));
+
+        let input = Paragraph::new(input_display).style(input_style).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Workspace Path ")
+                .border_style(Style::default().fg(Color::Yellow)),
+        );
         frame.render_widget(input, chunks[1]);
 
         // Help
         let help_lines = vec![
             Line::from(""),
-            Line::from(vec![
-                Span::styled("Tips:", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            ]),
-            Line::from(vec![
-                Span::raw("  • You can enter relative or absolute path"),
-            ]),
+            Line::from(vec![Span::styled(
+                "Tips:",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![Span::raw(
+                "  • You can enter relative or absolute path",
+            )]),
             Line::from(vec![
                 Span::raw("  • Use "),
                 Span::styled(".", Style::default().fg(Color::Green)),
@@ -442,9 +457,9 @@ impl StartupPage {
                 Span::styled("~", Style::default().fg(Color::Green)),
                 Span::raw(" for home directory (e.g.: ~/projects)"),
             ]),
-            Line::from(vec![
-                Span::raw("  • Leave empty and press Enter for current directory"),
-            ]),
+            Line::from(vec![Span::raw(
+                "  • Leave empty and press Enter for current directory",
+            )]),
         ];
         let help = Paragraph::new(help_lines)
             .style(Style::default().fg(Color::Gray))
@@ -461,11 +476,12 @@ impl StartupPage {
                 Span::styled(" Backspace ", Style::default().fg(Color::Yellow)),
                 Span::raw("Delete"),
             ]),
-            Line::from(vec![
-                Span::styled(" Type characters... ", Style::default().fg(Color::DarkGray)),
-            ]),
+            Line::from(vec![Span::styled(
+                " Type characters... ",
+                Style::default().fg(Color::DarkGray),
+            )]),
         ];
-        
+
         let paragraph = Paragraph::new(hints_text)
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Gray));
@@ -477,15 +493,19 @@ impl StartupPage {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),   // Title
-                Constraint::Min(10),     // Settings list
-                Constraint::Length(5),   // Hints
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Settings list
+                Constraint::Length(5), // Hints
             ])
             .split(area);
 
         // Title
         let title = Paragraph::new("Settings")
-            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL));
         frame.render_widget(title, chunks[0]);
@@ -498,17 +518,21 @@ impl StartupPage {
             .map(|(i, setting)| {
                 let is_selected = i == page.selected;
                 let is_editing = page.editing == Some(i);
-                
+
                 let icon = if is_selected { "▶" } else { " " };
-                
+
                 let style = if is_selected {
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(Color::White)
                 };
 
                 let value_style = if is_editing {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::UNDERLINED)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::UNDERLINED)
                 } else if setting.editable {
                     Style::default().fg(Color::Green)
                 } else {
@@ -543,8 +567,11 @@ impl StartupPage {
         let mut list_state = ListState::default();
         list_state.select(Some(page.selected));
 
-        let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+        let list = List::new(items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
 
         frame.render_stateful_widget(list, chunks[1], &mut list_state);
 
@@ -557,9 +584,10 @@ impl StartupPage {
                     Span::styled(" Esc ", Style::default().fg(Color::Red)),
                     Span::raw("Cancel"),
                 ]),
-                Line::from(vec![
-                    Span::styled(" Enter new value... ", Style::default().fg(Color::Yellow)),
-                ]),
+                Line::from(vec![Span::styled(
+                    " Enter new value... ",
+                    Style::default().fg(Color::Yellow),
+                )]),
             ]
         } else {
             vec![
@@ -571,9 +599,10 @@ impl StartupPage {
                     Span::styled(" Esc ", Style::default().fg(Color::Red)),
                     Span::raw("Back"),
                 ]),
-                Line::from(vec![
-                    Span::styled(" Changes will be auto-saved to config file ", Style::default().fg(Color::DarkGray)),
-                ]),
+                Line::from(vec![Span::styled(
+                    " Changes will be auto-saved to config file ",
+                    Style::default().fg(Color::DarkGray),
+                )]),
             ]
         };
 
@@ -588,16 +617,20 @@ impl StartupPage {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),   // Title
-                Constraint::Min(10),     // Session list
-                Constraint::Length(3),   // Hints
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Session list
+                Constraint::Length(3), // Hints
             ])
             .split(area);
 
         // Title
         let title_text = format!("History Sessions (total {})", page.sessions.len());
         let title = Paragraph::new(title_text)
-            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL));
         frame.render_widget(title, chunks[0]);
@@ -608,7 +641,9 @@ impl StartupPage {
                 Line::from(""),
                 Line::from(Span::styled(
                     "No history sessions yet",
-                    Style::default().fg(Color::Gray).add_modifier(Modifier::ITALIC),
+                    Style::default()
+                        .fg(Color::Gray)
+                        .add_modifier(Modifier::ITALIC),
                 )),
                 Line::from(""),
                 Line::from(Span::styled(
@@ -618,7 +653,11 @@ impl StartupPage {
             ];
             let paragraph = Paragraph::new(empty_text)
                 .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(Color::Cyan)),
+                );
             frame.render_widget(paragraph, chunks[1]);
         } else {
             // Session list
@@ -629,9 +668,11 @@ impl StartupPage {
                 .map(|(i, session)| {
                     let is_selected = i == page.selected;
                     let icon = if is_selected { "▶" } else { " " };
-                    
+
                     let style = if is_selected {
-                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default().fg(Color::White)
                     };
@@ -664,8 +705,11 @@ impl StartupPage {
             let mut list_state = ListState::default();
             list_state.select(Some(page.selected));
 
-            let list = List::new(items)
-                .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+            let list = List::new(items).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            );
 
             frame.render_stateful_widget(list, chunks[1], &mut list_state);
         }
@@ -691,16 +735,20 @@ impl StartupPage {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),   // Title
-                Constraint::Min(10),     // Model list
-                Constraint::Length(5),   // Hints
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Model list
+                Constraint::Length(5), // Hints
             ])
             .split(area);
 
         // Title
         let title_text = format!("AI Model Configuration (total {})", page.models.len());
         let title = Paragraph::new(title_text)
-            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL));
         frame.render_widget(title, chunks[0]);
@@ -711,7 +759,9 @@ impl StartupPage {
                 Line::from(""),
                 Line::from(Span::styled(
                     "No models configured yet",
-                    Style::default().fg(Color::Gray).add_modifier(Modifier::ITALIC),
+                    Style::default()
+                        .fg(Color::Gray)
+                        .add_modifier(Modifier::ITALIC),
                 )),
                 Line::from(""),
                 Line::from(Span::styled(
@@ -721,7 +771,11 @@ impl StartupPage {
             ];
             let paragraph = Paragraph::new(empty_text)
                 .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(Color::Cyan)),
+                );
             frame.render_widget(paragraph, chunks[1]);
         } else {
             // Model list
@@ -732,9 +786,11 @@ impl StartupPage {
                 .map(|(i, model)| {
                     let is_selected = i == page.selected;
                     let icon = if is_selected { "▶" } else { " " };
-                    
+
                     let style = if is_selected {
-                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default().fg(Color::White)
                     };
@@ -752,7 +808,14 @@ impl StartupPage {
                         Line::from(vec![
                             Span::styled(icon, Style::default().fg(Color::Green)),
                             Span::raw("  "),
-                            Span::styled(status_icon, Style::default().fg(if model.is_default { Color::Yellow } else { Color::Green })),
+                            Span::styled(
+                                status_icon,
+                                Style::default().fg(if model.is_default {
+                                    Color::Yellow
+                                } else {
+                                    Color::Green
+                                }),
+                            ),
                             Span::raw(" "),
                             Span::styled(&model.name, style),
                         ]),
@@ -774,8 +837,11 @@ impl StartupPage {
             let mut list_state = ListState::default();
             list_state.select(Some(page.selected));
 
-            let list = List::new(items)
-                .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+            let list = List::new(items).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            );
 
             frame.render_stateful_widget(list, chunks[1], &mut list_state);
         }
@@ -816,15 +882,21 @@ impl StartupPage {
             return Ok(());
         }
 
-        let page_state = std::mem::replace(&mut self.page_state, PageState::Finished(StartupResult::Exit));
-        
+        let page_state = std::mem::replace(
+            &mut self.page_state,
+            PageState::Finished(StartupResult::Exit),
+        );
+
         let result = match page_state {
             PageState::MainMenu => {
                 self.page_state = PageState::MainMenu;
                 self.handle_main_menu_key(key)
             }
             PageState::WorkspaceSelect(mut page) => {
-                let old_state = std::mem::replace(&mut self.page_state, PageState::Finished(StartupResult::Exit));
+                let old_state = std::mem::replace(
+                    &mut self.page_state,
+                    PageState::Finished(StartupResult::Exit),
+                );
                 let result = self.handle_workspace_key(key, &mut page);
                 if matches!(self.page_state, PageState::Finished(StartupResult::Exit)) {
                     if !matches!(old_state, PageState::Finished(_)) {
@@ -836,7 +908,10 @@ impl StartupPage {
                 result
             }
             PageState::Settings(mut page) => {
-                let old_state = std::mem::replace(&mut self.page_state, PageState::Finished(StartupResult::Exit));
+                let old_state = std::mem::replace(
+                    &mut self.page_state,
+                    PageState::Finished(StartupResult::Exit),
+                );
                 let result = self.handle_settings_key(key, &mut page);
                 if matches!(self.page_state, PageState::Finished(StartupResult::Exit)) {
                     if !matches!(old_state, PageState::Finished(_)) {
@@ -848,7 +923,10 @@ impl StartupPage {
                 result
             }
             PageState::AIModels(mut page) => {
-                let old_state = std::mem::replace(&mut self.page_state, PageState::Finished(StartupResult::Exit));
+                let old_state = std::mem::replace(
+                    &mut self.page_state,
+                    PageState::Finished(StartupResult::Exit),
+                );
                 let result = self.handle_ai_models_key(key, &mut page);
                 if matches!(self.page_state, PageState::Finished(StartupResult::Exit)) {
                     if !matches!(old_state, PageState::Finished(_)) {
@@ -860,7 +938,10 @@ impl StartupPage {
                 result
             }
             PageState::History(mut page) => {
-                let old_state = std::mem::replace(&mut self.page_state, PageState::Finished(StartupResult::Exit));
+                let old_state = std::mem::replace(
+                    &mut self.page_state,
+                    PageState::Finished(StartupResult::Exit),
+                );
                 let result = self.handle_history_key(key, &mut page);
                 if matches!(self.page_state, PageState::Finished(StartupResult::Exit)) {
                     if !matches!(old_state, PageState::Finished(_)) {
@@ -876,7 +957,7 @@ impl StartupPage {
                 Ok(())
             }
         };
-        
+
         result
     }
 
@@ -907,7 +988,8 @@ impl StartupPage {
                     MenuAction::ContinueLastSession => {
                         // Load last session
                         if let Ok(Some(session)) = Session::get_last() {
-                            self.page_state = PageState::Finished(StartupResult::ContinueSession(session.id));
+                            self.page_state =
+                                PageState::Finished(StartupResult::ContinueSession(session.id));
                         } else {
                             // No history session, enter new session
                             self.page_state = PageState::WorkspaceSelect(WorkspaceSelectPage {
@@ -947,7 +1029,11 @@ impl StartupPage {
         Ok(())
     }
 
-    fn handle_workspace_key(&mut self, key: KeyEvent, page: &mut WorkspaceSelectPage) -> Result<()> {
+    fn handle_workspace_key(
+        &mut self,
+        key: KeyEvent,
+        page: &mut WorkspaceSelectPage,
+    ) -> Result<()> {
         match key.code {
             KeyCode::Enter => {
                 // If input is empty, use current directory
@@ -1000,18 +1086,21 @@ impl StartupPage {
         }
         Ok(())
     }
-    
+
     fn expand_path(&self, path: &str) -> String {
         let path = path.trim();
-        
+
         // Handle paths starting with ~
         if path.starts_with('~') {
             if let Some(home) = dirs::home_dir() {
                 let rest = &path[1..];
-                return home.join(rest.trim_start_matches('/')).to_string_lossy().to_string();
+                return home
+                    .join(rest.trim_start_matches('/'))
+                    .to_string_lossy()
+                    .to_string();
             }
         }
-        
+
         // Handle relative and absolute paths
         if let Ok(absolute) = std::fs::canonicalize(path) {
             absolute.to_string_lossy().to_string()
@@ -1058,11 +1147,12 @@ impl StartupPage {
                 KeyCode::Enter => {
                     if page.settings[page.selected].key == "ai_models" {
                         let models = Self::load_ai_models_sync();
-                        let default_model_id = models.iter()
+                        let default_model_id = models
+                            .iter()
                             .find(|m| m.is_default)
                             .map(|m| m.id.clone())
                             .unwrap_or_default();
-                        
+
                         self.page_state = PageState::AIModels(AIModelsPage {
                             models,
                             selected: 0,
@@ -1130,20 +1220,27 @@ impl StartupPage {
                     let selected_model_id = page.models[page.selected].id.clone();
                     let result = tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(async {
-                            use bitfun_core::service::config::GlobalConfigManager;
                             use bitfun_core::service::config::types::GlobalConfig;
-                            
+                            use bitfun_core::service::config::GlobalConfigManager;
+
                             match GlobalConfigManager::get_service().await {
                                 Ok(config_service) => {
-                                    let mut global_config = config_service.get_config::<GlobalConfig>(None).await?;
-                                    global_config.ai.default_models.primary = Some(selected_model_id.clone());
-                                    config_service.set_config("ai.default_models.primary", &global_config.ai.default_models.primary).await
+                                    let mut global_config =
+                                        config_service.get_config::<GlobalConfig>(None).await?;
+                                    global_config.ai.default_models.primary =
+                                        Some(selected_model_id.clone());
+                                    config_service
+                                        .set_config(
+                                            "ai.default_models.primary",
+                                            &global_config.ai.default_models.primary,
+                                        )
+                                        .await
                                 }
                                 Err(e) => Err(e),
                             }
                         })
                     });
-                    
+
                     if result.is_ok() {
                         page.models = Self::load_ai_models_sync();
                         page.default_model_id = selected_model_id;
@@ -1172,7 +1269,8 @@ impl StartupPage {
                 key: "ai_models".to_string(),
                 name: "AI Model Configuration".to_string(),
                 value: "Manage AI models".to_string(),
-                description: "View and manage all AI model configurations (press Enter to enter)".to_string(),
+                description: "View and manage all AI model configurations (press Enter to enter)"
+                    .to_string(),
                 editable: false, // Not directly editable, enters sub-page
             },
             SettingItem {
@@ -1207,41 +1305,41 @@ impl StartupPage {
     }
 
     async fn load_ai_models() -> Vec<AIModelItem> {
-        use bitfun_core::service::config::GlobalConfigManager;
         use bitfun_core::service::config::types::GlobalConfig;
-        
+        use bitfun_core::service::config::GlobalConfigManager;
+
         match GlobalConfigManager::get_service().await {
-            Ok(config_service) => {
-                match config_service.get_config::<GlobalConfig>(None).await {
-                    Ok(global_config) => {
-                        let default_model_id = global_config.ai.default_models.primary
-                            .unwrap_or_default();
-                        
-                        global_config.ai.models
-                            .iter()
-                            .map(|m| AIModelItem {
-                                id: m.id.clone(),
-                                name: m.name.clone(),
-                                provider: m.provider.clone(),
-                                model_name: m.model_name.clone(),
-                                enabled: m.enabled,
-                                is_default: m.id == default_model_id,
-                            })
-                            .collect()
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to get GlobalConfig: {}", e);
-                        vec![]
-                    }
+            Ok(config_service) => match config_service.get_config::<GlobalConfig>(None).await {
+                Ok(global_config) => {
+                    let default_model_id =
+                        global_config.ai.default_models.primary.unwrap_or_default();
+
+                    global_config
+                        .ai
+                        .models
+                        .iter()
+                        .map(|m| AIModelItem {
+                            id: m.id.clone(),
+                            name: m.name.clone(),
+                            provider: m.provider.clone(),
+                            model_name: m.model_name.clone(),
+                            enabled: m.enabled,
+                            is_default: m.id == default_model_id,
+                        })
+                        .collect()
                 }
-            }
+                Err(e) => {
+                    tracing::warn!("Failed to get GlobalConfig: {}", e);
+                    vec![]
+                }
+            },
             Err(e) => {
                 tracing::warn!("Failed to get config service: {}", e);
                 vec![]
             }
         }
     }
-    
+
     fn load_ai_models_sync() -> Vec<AIModelItem> {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(Self::load_ai_models())
@@ -1280,7 +1378,7 @@ impl StartupPage {
             "ai_models" => {}
             _ => {}
         }
-        
+
         self.config.save()?;
         Ok(())
     }

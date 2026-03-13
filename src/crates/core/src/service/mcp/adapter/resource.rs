@@ -30,10 +30,12 @@ impl ResourceAdapter {
 
     /// Converts MCP resource content to plain text. Binary (blob) content is summarized.
     pub fn to_text(content: &MCPResourceContent) -> String {
-        let text = content
-            .content
-            .as_deref()
-            .unwrap_or_else(|| content.blob.as_ref().map_or("(empty)", |_| "(binary content)"));
+        let text = content.content.as_deref().unwrap_or_else(|| {
+            content
+                .blob
+                .as_ref()
+                .map_or("(empty)", |_| "(binary content)")
+        });
         format!("Resource: {}\n\n{}\n", content.uri, text)
     }
 

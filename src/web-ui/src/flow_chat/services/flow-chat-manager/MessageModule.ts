@@ -111,6 +111,7 @@ export async function sendMessage(
       await agentAPI.startDialogTurn({
         sessionId: sessionId,
         userInput: message,
+        originalUserInput: displayMessage || message,
         turnId: dialogTurnId,
         agentType: currentAgentType,
         workspacePath,
@@ -128,6 +129,7 @@ export async function sendMessage(
         await agentAPI.startDialogTurn({
           sessionId: sessionId,
           userInput: message,
+          originalUserInput: displayMessage || message,
           turnId: dialogTurnId,
           agentType: currentAgentType,
           workspacePath,

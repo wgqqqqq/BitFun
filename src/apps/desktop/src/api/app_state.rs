@@ -49,7 +49,9 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn new_async(token_usage_service: Arc<token_usage::TokenUsageService>) -> BitFunResult<Self> {
+    pub async fn new_async(
+        token_usage_service: Arc<token_usage::TokenUsageService>,
+    ) -> BitFunResult<Self> {
         let start_time = std::time::Instant::now();
 
         let config_service = config::get_global_config_service().await.map_err(|e| {
@@ -69,8 +71,9 @@ impl AppState {
         };
 
         let workspace_service = Arc::new(workspace::WorkspaceService::new().await?);
-        let workspace_identity_watch_service =
-            Arc::new(workspace::WorkspaceIdentityWatchService::new(workspace_service.clone()));
+        let workspace_identity_watch_service = Arc::new(
+            workspace::WorkspaceIdentityWatchService::new(workspace_service.clone()),
+        );
         workspace::set_global_workspace_service(workspace_service.clone());
         let filesystem_service = Arc::new(filesystem::FileSystemServiceFactory::create_default());
 
@@ -122,11 +125,12 @@ impl AppState {
             .map(|workspace| workspace.root_path);
 
         if let Some(workspace_path) = initial_workspace_path.clone() {
-            if let Err(e) = bitfun_core::service::snapshot::initialize_snapshot_manager_for_workspace(
-                workspace_path.clone(),
-                None,
-            )
-            .await
+            if let Err(e) =
+                bitfun_core::service::snapshot::initialize_snapshot_manager_for_workspace(
+                    workspace_path.clone(),
+                    None,
+                )
+                .await
             {
                 log::warn!(
                     "Failed to restore snapshot system on startup: path={}, error={}",

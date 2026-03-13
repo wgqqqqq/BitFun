@@ -21,6 +21,20 @@ pub struct AIClientFactory {
 }
 
 impl AIClientFactory {
+    fn resolve_model_reference_in_config(
+        global_config: &crate::service::config::GlobalConfig,
+        model_ref: &str,
+    ) -> Option<String> {
+        global_config.ai.resolve_model_reference(model_ref)
+    }
+
+    fn resolve_model_selection_in_config(
+        global_config: &crate::service::config::GlobalConfig,
+        model_ref: &str,
+    ) -> Option<String> {
+        global_config.ai.resolve_model_selection(model_ref)
+    }
+
     fn new(config_service: Arc<ConfigService>) -> Self {
         Self {
             config_service,
@@ -63,28 +77,17 @@ impl AIClientFactory {
 
     /// Get a client (supports resolving primary/fast)
     pub async fn get_client_resolved(&self, model_id: &str) -> Result<Arc<AIClient>> {
-        let resolved_model_id = match model_id {
-            "primary" => {
-                let global_config: crate::service::config::GlobalConfig =
-                    self.config_service.get_config(None).await?;
-                global_config
-                    .ai
-                    .default_models
-                    .primary
-                    .ok_or_else(|| anyhow!("Primary model not configured"))?
-            }
-            "fast" => {
-                let global_config: crate::service::config::GlobalConfig =
-                    self.config_service.get_config(None).await?;
+        let global_config: crate::service::config::GlobalConfig =
+            self.config_service.get_config(None).await?;
 
-                match global_config.ai.default_models.fast {
-                    Some(fast_id) => fast_id,
-                    None => global_config.ai.default_models.primary.ok_or_else(|| {
-                        anyhow!("Fast model not configured and primary model not configured")
-                    })?,
-                }
-            }
-            _ => model_id.to_string(),
+        let resolved_model_id = match model_id {
+            "primary" => Self::resolve_model_selection_in_config(&global_config, "primary")
+                .ok_or_else(|| anyhow!("Primary model not configured or invalid"))?,
+            "fast" => Self::resolve_model_selection_in_config(&global_config, "fast").ok_or_else(
+                || anyhow!("Fast model not configured or invalid, and primary model not configured or invalid"),
+            )?,
+            _ => Self::resolve_model_reference_in_config(&global_config, model_id)
+                .unwrap_or_else(|| model_id.to_string()),
         };
 
         self.get_or_create_client(&resolved_model_id).await
@@ -128,6 +131,15 @@ impl AIClientFactory {
     }
 
     async fn get_or_create_client(&self, model_id: &str) -> Result<Arc<AIClient>> {
+        let global_config: crate::service::config::GlobalConfig =
+            self.config_service.get_config(None).await?;
+        let normalized_model_id = match model_id {
+            "primary" | "fast" => Self::resolve_model_selection_in_config(&global_config, model_id)
+                .unwrap_or_else(|| model_id.to_string()),
+            _ => Self::resolve_model_reference_in_config(&global_config, model_id)
+                .unwrap_or_else(|| model_id.to_string()),
+        };
+
         {
             let cache = match self.client_cache.read() {
                 Ok(cache) => cache,
@@ -138,21 +150,22 @@ impl AIClientFactory {
                     poisoned.into_inner()
                 }
             };
-            if let Some(client) = cache.get(model_id) {
+            if let Some(client) = cache.get(&normalized_model_id) {
                 return Ok(client.clone());
             }
         }
 
-        debug!("Creating new AI client: model_id={}", model_id);
-
-        let global_config: crate::service::config::GlobalConfig =
-            self.config_service.get_config(None).await?;
+        debug!("Creating new AI client: model_id={}", normalized_model_id);
         let model_config = global_config
             .ai
             .models
             .iter()
-            .find(|m| m.id == model_id)
-            .ok_or_else(|| anyhow!("Model configuration not found: {}", model_id))?;
+            .find(|m| {
+                m.id == normalized_model_id
+                    || m.name == normalized_model_id
+                    || m.model_name == normalized_model_id
+            })
+            .ok_or_else(|| anyhow!("Model configuration not found: {}", normalized_model_id))?;
 
         let ai_config = AIConfig::try_from(model_config.clone())
             .map_err(|e| anyhow!("AI configuration conversion failed: {}", e))?;
@@ -175,12 +188,12 @@ impl AIClientFactory {
                     poisoned.into_inner()
                 }
             };
-            cache.insert(model_id.to_string(), client.clone());
+            cache.insert(model_config.id.clone(), client.clone());
         }
 
         debug!(
             "AI client created: model_id={}, name={}",
-            model_id, model_config.name
+            model_config.id, model_config.name
         );
 
         Ok(client)
@@ -256,4 +269,77 @@ pub async fn get_global_ai_client_factory() -> BitFunResult<Arc<AIClientFactory>
 
 pub async fn initialize_global_ai_client_factory() -> BitFunResult<()> {
     AIClientFactory::initialize_global().await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AIClientFactory;
+    use crate::service::config::types::{AIModelConfig, GlobalConfig};
+
+    fn build_model(id: &str, name: &str, model_name: &str) -> AIModelConfig {
+        AIModelConfig {
+            id: id.to_string(),
+            name: name.to_string(),
+            model_name: model_name.to_string(),
+            provider: "anthropic".to_string(),
+            enabled: true,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn resolve_model_reference_supports_id_name_and_model_name() {
+        let mut config = GlobalConfig::default();
+        config.ai.models = vec![build_model(
+            "model-123",
+            "Primary Chat",
+            "claude-sonnet-4.5",
+        )];
+
+        assert_eq!(
+            AIClientFactory::resolve_model_reference_in_config(&config, "model-123"),
+            Some("model-123".to_string())
+        );
+        assert_eq!(
+            AIClientFactory::resolve_model_reference_in_config(&config, "Primary Chat"),
+            Some("model-123".to_string())
+        );
+        assert_eq!(
+            AIClientFactory::resolve_model_reference_in_config(&config, "claude-sonnet-4.5"),
+            Some("model-123".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_fast_selection_falls_back_to_primary_when_fast_missing() {
+        let mut config = GlobalConfig::default();
+        config.ai.models = vec![build_model(
+            "model-primary",
+            "Primary Chat",
+            "claude-sonnet-4.5",
+        )];
+        config.ai.default_models.primary = Some("model-primary".to_string());
+
+        assert_eq!(
+            AIClientFactory::resolve_model_selection_in_config(&config, "fast"),
+            Some("model-primary".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_fast_selection_falls_back_to_primary_when_fast_is_stale() {
+        let mut config = GlobalConfig::default();
+        config.ai.models = vec![build_model(
+            "model-primary",
+            "Primary Chat",
+            "claude-sonnet-4.5",
+        )];
+        config.ai.default_models.primary = Some("model-primary".to_string());
+        config.ai.default_models.fast = Some("deleted-fast-model".to_string());
+
+        assert_eq!(
+            AIClientFactory::resolve_model_selection_in_config(&config, "fast"),
+            Some("model-primary".to_string())
+        );
+    }
 }

@@ -22,6 +22,11 @@ export interface ConnectionTestResult {
   error_details?: string;
 }
 
+export interface RemoteModelInfo {
+  id: string;
+  display_name?: string;
+}
+
 export class AIApi {
    
   async listModels(): Promise<any[]> {
@@ -97,6 +102,16 @@ export class AIApi {
       });
     } catch (error) {
       throw createTauriCommandError('test_ai_config_connection', error, { config });
+    }
+  }
+
+  async listModelsByConfig(config: any): Promise<RemoteModelInfo[]> {
+    try {
+      return await api.invoke<RemoteModelInfo[]>('list_ai_models_by_config', {
+        request: { config }
+      });
+    } catch (error) {
+      throw createTauriCommandError('list_ai_models_by_config', error, { config });
     }
   }
 

@@ -48,3 +48,13 @@ pub struct ConnectionTestResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_details: Option<String>,
 }
+
+/// Remote model info discovered from a provider API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteModelInfo {
+    /// Provider model identifier (used as the actual model_name).
+    pub id: String,
+    /// Optional human-readable display name returned by the provider.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+}

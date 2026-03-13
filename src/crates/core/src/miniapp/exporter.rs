@@ -80,7 +80,11 @@ impl MiniAppExporter {
     }
 
     /// Export the MiniApp to a standalone application.
-    pub async fn export(&self, _app_id: &str, _options: ExportOptions) -> BitFunResult<ExportResult> {
+    pub async fn export(
+        &self,
+        _app_id: &str,
+        _options: ExportOptions,
+    ) -> BitFunResult<ExportResult> {
         Err(BitFunError::validation(
             "Export not yet implemented (skeleton)".to_string(),
         ))

@@ -161,20 +161,10 @@ impl MiniAppManager {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp_millis();
 
-        let compiled_html = self.compile_source(
-            &id,
-            &source,
-            &permissions,
-            "dark",
-            workspace_root,
-        )?;
-        let runtime = Self::build_runtime_state(
-            1,
-            now,
-            &source,
-            !source.npm_dependencies.is_empty(),
-            true,
-        );
+        let compiled_html =
+            self.compile_source(&id, &source, &permissions, "dark", workspace_root)?;
+        let runtime =
+            Self::build_runtime_state(1, now, &source, !source.npm_dependencies.is_empty(), true);
 
         let app = MiniApp {
             id: id.clone(),
@@ -310,10 +300,7 @@ impl MiniAppManager {
     /// Get app storage (KV) value.
     pub async fn get_storage(&self, app_id: &str, key: &str) -> BitFunResult<serde_json::Value> {
         let storage = self.storage.load_app_storage(app_id).await?;
-        Ok(storage
-            .get(key)
-            .cloned()
-            .unwrap_or(serde_json::Value::Null))
+        Ok(storage.get(key).cloned().unwrap_or(serde_json::Value::Null))
     }
 
     /// Set app storage (KV) value.
@@ -379,13 +366,8 @@ impl MiniAppManager {
         workspace_root: Option<&Path>,
     ) -> BitFunResult<MiniApp> {
         let mut app = self.storage.load(app_id).await?;
-        app.compiled_html = self.compile_source(
-            app_id,
-            &app.source,
-            &app.permissions,
-            theme,
-            workspace_root,
-        )?;
+        app.compiled_html =
+            self.compile_source(app_id, &app.source, &app.permissions, theme, workspace_root)?;
         app.updated_at = Utc::now().timestamp_millis();
         Self::ensure_runtime_state(&mut app);
         app.runtime.ui_recompile_required = false;
@@ -405,13 +387,8 @@ impl MiniAppManager {
         app.version += 1;
         app.updated_at = Utc::now().timestamp_millis();
 
-        app.compiled_html = self.compile_source(
-            app_id,
-            &app.source,
-            &app.permissions,
-            theme,
-            workspace_root,
-        )?;
+        app.compiled_html =
+            self.compile_source(app_id, &app.source, &app.permissions, theme, workspace_root)?;
         app.runtime = Self::build_runtime_state(
             app.version,
             app.updated_at,
@@ -502,14 +479,13 @@ impl MiniAppManager {
         if esm_path.exists() {
             tokio::fs::copy(&esm_path, dest_source.join("esm_dependencies.json"))
                 .await
-                .map_err(|e| BitFunError::io(format!("Failed to copy esm_dependencies.json: {}", e)))?;
+                .map_err(|e| {
+                    BitFunError::io(format!("Failed to copy esm_dependencies.json: {}", e))
+                })?;
         } else {
-            tokio::fs::write(
-                dest_source.join("esm_dependencies.json"),
-                "[]",
-            )
-            .await
-            .map_err(|_e| BitFunError::io("Failed to write esm_dependencies.json"))?;
+            tokio::fs::write(dest_source.join("esm_dependencies.json"), "[]")
+                .await
+                .map_err(|_e| BitFunError::io("Failed to write esm_dependencies.json"))?;
         }
 
         let pkg_src = src.join("package.json");

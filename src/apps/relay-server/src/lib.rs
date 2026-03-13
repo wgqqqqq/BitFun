@@ -12,7 +12,7 @@
 pub mod relay;
 pub mod routes;
 
-pub use relay::room::{RoomManager, ResponsePayload};
+pub use relay::room::{ResponsePayload, RoomManager};
 pub use routes::api::AppState;
 
 use axum::extract::DefaultBodyLimit;
@@ -94,9 +94,7 @@ impl WebAssetStore for MemoryAssetStore {
 
     fn get_file(&self, room_id: &str, path: &str) -> Option<Vec<u8>> {
         let manifest = self.room_manifests.get(room_id)?;
-        let hash = manifest
-            .get(path)
-            .or_else(|| manifest.get("index.html"))?;
+        let hash = manifest.get(path).or_else(|| manifest.get("index.html"))?;
         let content = self.content_store.get(hash)?;
         Some(content.value().as_ref().clone())
     }

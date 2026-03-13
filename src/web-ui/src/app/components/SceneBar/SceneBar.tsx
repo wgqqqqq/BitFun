@@ -100,7 +100,7 @@ const SceneBar: React.FC<SceneBarProps> = ({
   const handleCreateSession = useCallback(async () => {
     activateScene('session');
     try {
-      await flowChatManager.createChatSession({ modelName: 'claude-sonnet-4.5' });
+      await flowChatManager.createChatSession({});
     } catch (err) {
       log.error('Failed to create session', err);
     }

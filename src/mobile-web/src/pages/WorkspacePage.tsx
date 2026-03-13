@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import LanguageToggleButton from '../components/LanguageToggleButton';
+import { useI18n } from '../i18n';
 import {
   RemoteSessionManager,
   WorkspaceInfo,
@@ -11,6 +13,7 @@ interface WorkspacePageProps {
 }
 
 const WorkspacePage: React.FC<WorkspacePageProps> = ({ sessionMgr, onReady }) => {
+  const { t } = useI18n();
   const [workspaceInfo, setWorkspaceInfo] = useState<WorkspaceInfo | null>(null);
   const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspaceEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +50,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ sessionMgr, onReady }) =>
     await loadRecentWorkspaces();
   };
 
-  const handleSelectWorkspace = async (path: string) => {
+  const handleSelectWorkspace = useCallback(async (path: string) => {
     if (switching) return;
     setSwitching(true);
     setError(null);
@@ -57,21 +60,21 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ sessionMgr, onReady }) =>
         await loadWorkspaceInfo();
         setShowRecent(false);
       } else {
-        setError(result.error || 'Failed to set workspace');
+        setError(result.error || t('workspace.failedToSetWorkspace'));
       }
     } catch (e: any) {
       setError(e.message);
     } finally {
       setSwitching(false);
     }
-  };
+  }, [loadWorkspaceInfo, sessionMgr, switching, t]);
 
   if (loading) {
     return (
       <div className="workspace-page">
         <div className="workspace-page__loading">
           <div className="spinner" />
-          <span>Loading workspace info...</span>
+          <span>{t('workspace.loadingInfo')}</span>
         </div>
       </div>
     );
@@ -80,16 +83,17 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ sessionMgr, onReady }) =>
   return (
     <div className="workspace-page">
       <div className="workspace-page__header">
-        <h1>Workspace</h1>
+        <h1>{t('workspace.title')}</h1>
+        <LanguageToggleButton />
       </div>
 
       <div className="workspace-page__content">
         {workspaceInfo?.has_workspace ? (
           <div className="workspace-page__current">
-            <div className="workspace-page__current-label">Current Workspace</div>
+            <div className="workspace-page__current-label">{t('workspace.currentWorkspace')}</div>
             <div className="workspace-page__current-card">
               <div className="workspace-page__project-name">
-                {workspaceInfo.project_name || 'Unknown Project'}
+                {workspaceInfo.project_name || t('workspace.unknownProject')}
               </div>
               <div className="workspace-page__project-path">{workspaceInfo.path}</div>
               {workspaceInfo.git_branch && (
@@ -101,10 +105,10 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ sessionMgr, onReady }) =>
             </div>
             <div className="workspace-page__actions">
               <button className="workspace-page__btn workspace-page__btn--primary" onClick={onReady}>
-                Continue
+                {t('common.continue')}
               </button>
               <button className="workspace-page__btn workspace-page__btn--secondary" onClick={handleShowRecent}>
-                Switch
+                {t('common.switch')}
               </button>
             </div>
           </div>
@@ -114,14 +118,14 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ sessionMgr, onReady }) =>
               <svg width="40" height="40" viewBox="0 0 16 16" fill="none"><path d="M2 4V12C2 12.5523 2.44772 13 3 13H13C13.5523 13 14 12.5523 14 12V6C14 5.44772 13.5523 5 13 5H8L6.5 3H3C2.44772 3 2 3.44772 2 4Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
             </div>
             <div className="workspace-page__no-workspace-text">
-              No workspace is currently open on the desktop.
+              {t('workspace.noWorkspaceOpen')}
             </div>
             <div className="workspace-page__no-workspace-hint">
-              Select a recent workspace below, or open one on the desktop first.
+              {t('workspace.noWorkspaceHint')}
             </div>
             {!showRecent && (
               <button className="workspace-page__btn workspace-page__btn--primary" onClick={handleShowRecent}>
-                Select Workspace
+                {t('workspace.selectWorkspace')}
               </button>
             )}
           </div>
@@ -129,10 +133,10 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ sessionMgr, onReady }) =>
 
         {showRecent && (
           <div className="workspace-page__recent">
-            <div className="workspace-page__recent-label">Recent Workspaces</div>
+            <div className="workspace-page__recent-label">{t('workspace.recentWorkspaces')}</div>
             {recentWorkspaces.length === 0 ? (
               <div className="workspace-page__recent-empty">
-                No recent workspaces found. Please open a workspace on the desktop first.
+                {t('workspace.noRecentWorkspaces')}
               </div>
             ) : (
               <div className="workspace-page__recent-list">
@@ -154,7 +158,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ sessionMgr, onReady }) =>
                 className="workspace-page__btn workspace-page__btn--secondary"
                 onClick={() => setShowRecent(false)}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
             )}
           </div>
@@ -163,7 +167,7 @@ const WorkspacePage: React.FC<WorkspacePageProps> = ({ sessionMgr, onReady }) =>
         {switching && (
           <div className="workspace-page__switching">
             <div className="spinner spinner--sm" />
-            <span>Opening workspace...</span>
+            <span>{t('workspace.openingWorkspace')}</span>
           </div>
         )}
 

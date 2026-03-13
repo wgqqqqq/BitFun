@@ -19,9 +19,10 @@ interface ModelConfigStepProps {
 }
 
 /** Provider display order */
-const PROVIDER_ORDER = ['zhipu', 'qwen', 'deepseek', 'volcengine', 'minimax', 'moonshot', 'gemini', 'anthropic'];
+const PROVIDER_ORDER = ['openbitfun', 'zhipu', 'qwen', 'deepseek', 'volcengine', 'minimax', 'moonshot', 'gemini', 'anthropic'];
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
+type RemoteModelOption = { id: string; display_name?: string };
 
 export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }) => {
   const { t } = useTranslation('onboarding');
@@ -38,6 +39,10 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
   );
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testError, setTestError] = useState<string>('');
+  const [remoteModelOptions, setRemoteModelOptions] = useState<RemoteModelOption[]>([]);
+  const [isFetchingRemoteModels, setIsFetchingRemoteModels] = useState(false);
+  const [remoteModelsError, setRemoteModelsError] = useState<string>('');
+  const [hasAttemptedRemoteFetch, setHasAttemptedRemoteFetch] = useState(false);
 
   // Advanced settings - restore from store so state survives unmount/remount
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(
@@ -105,6 +110,93 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
     };
   }, [selectedProviderId, tAiModel]);
 
+  const resetRemoteModelDiscovery = useCallback(() => {
+    setRemoteModelOptions([]);
+    setIsFetchingRemoteModels(false);
+    setRemoteModelsError('');
+    setHasAttemptedRemoteFetch(false);
+  }, []);
+
+  const buildModelDiscoveryConfig = useCallback(() => {
+    const template = selectedProviderId !== 'custom' ? PROVIDER_TEMPLATES[selectedProviderId] : null;
+    const resolvedBaseUrl = (baseUrl || template?.baseUrl || '').trim();
+    const resolvedModelName = (modelName || template?.models[0] || 'model-discovery').trim();
+    let resolvedFormat: 'openai' | 'responses' | 'anthropic' | 'gemini' = customFormat;
+    if (template) {
+      if (template.baseUrlOptions?.length) {
+        const effectiveUrl = baseUrl || template.baseUrl;
+        const matchedOption = template.baseUrlOptions.find(opt => opt.url === effectiveUrl);
+        resolvedFormat = matchedOption ? matchedOption.format : template.format;
+      } else {
+        resolvedFormat = template.format;
+      }
+    }
+    const resolvedApiKey = apiKey.trim();
+
+    if (!resolvedBaseUrl || !resolvedApiKey) {
+      return null;
+    }
+
+    return {
+      id: 'onboarding_model_discovery',
+      name: 'Onboarding Model Discovery',
+      provider: resolvedFormat,
+      api_key: resolvedApiKey,
+      base_url: resolvedBaseUrl,
+      request_url: resolvedBaseUrl,
+      model_name: resolvedModelName,
+      enabled: true,
+      category: 'general_chat',
+      capabilities: ['text_chat'],
+      recommended_for: [],
+      metadata: {},
+      context_window: 128000,
+      max_tokens: 8192,
+      enable_thinking_process: false,
+      support_preserved_thinking: false,
+      skip_ssl_verify: skipSslVerify,
+      custom_headers: Object.keys(customHeaders).length > 0 ? customHeaders : undefined,
+      custom_headers_mode: Object.keys(customHeaders).length > 0 ? customHeadersMode : undefined,
+      custom_request_body: customRequestBody.trim() || undefined,
+    };
+  }, [apiKey, baseUrl, modelName, selectedProviderId, customFormat, skipSslVerify, customHeaders, customHeadersMode, customRequestBody]);
+
+  const fetchRemoteModels = useCallback(async () => {
+    const discoveryConfig = buildModelDiscoveryConfig();
+    if (!discoveryConfig) {
+      setRemoteModelOptions([]);
+      setRemoteModelsError(tAiModel('providerSelection.fillApiKeyBeforeFetch'));
+      setHasAttemptedRemoteFetch(true);
+      return;
+    }
+
+    setIsFetchingRemoteModels(true);
+    setRemoteModelsError('');
+    setHasAttemptedRemoteFetch(true);
+
+    try {
+      const remoteModels = await aiApi.listModelsByConfig(discoveryConfig);
+      const dedupedModels = remoteModels.filter((model, index, arr) => (
+        !!model.id && arr.findIndex(item => item.id === model.id) === index
+      ));
+
+      if (dedupedModels.length === 0) {
+        setRemoteModelOptions([]);
+        setRemoteModelsError(tAiModel('providerSelection.fetchEmptyFallback'));
+        return;
+      }
+
+      setRemoteModelOptions(dedupedModels);
+      setRemoteModelsError('');
+    } catch (error) {
+      log.warn('Failed to fetch remote models during onboarding, falling back', { error });
+      setRemoteModelOptions([]);
+      setRemoteModelsError(tAiModel('providerSelection.fetchFailedFallback'));
+    } finally {
+      setIsFetchingRemoteModels(false);
+    }
+  }, [buildModelDiscoveryConfig, tAiModel]);
+
   // Stable JSON representation of customHeaders for useEffect dependency
   const customHeadersJson = useMemo(() => JSON.stringify(customHeaders), [customHeaders]);
 
@@ -133,9 +225,7 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
 
     const translatedName = template ? tAiModel(`providers.${template.id}.name`) : null;
     const customLabel = t('model.provider.options.custom');
-    const configName = translatedName
-      ? `${translatedName} - ${effectiveModelName}`
-      : effectiveModelName ? `${customLabel}-${effectiveModelName}` : customLabel;
+    const configName = translatedName || customLabel;
 
     const parsedHeaders = JSON.parse(customHeadersJson) as Record<string, string>;
 
@@ -156,6 +246,7 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
 
   // Handle provider change
   const handleProviderChange = useCallback((newProviderId: string) => {
+    resetRemoteModelDiscovery();
     setSelectedProviderId(newProviderId);
     setTestStatus('idle');
     setTestError('');
@@ -170,7 +261,7 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
         setModelName(template.models[0] || '');
       }
     }
-  }, []);
+  }, [resetRemoteModelDiscovery]);
 
   // Handle "skip for now": clear config and proceed
   const handleSkipForNow = useCallback(() => {
@@ -314,6 +405,29 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
 
   // Whether a provider is selected (to show the form)
   const isProviderSelected = !!selectedProviderId;
+  const availableModelOptions = (
+    remoteModelOptions.length > 0
+      ? remoteModelOptions.map(model => ({
+          label: `${currentTemplate?.name || t('model.provider.options.custom')}/${model.display_name || model.id}`,
+          value: model.id,
+          description: model.display_name && model.display_name !== model.id ? model.id : undefined
+        }))
+      : (currentTemplate?.models || []).map(model => ({
+          label: `${currentTemplate?.name || t('model.provider.options.custom')}/${model}`,
+          value: model
+        }))
+  );
+  const modelFetchHint = isFetchingRemoteModels
+    ? tAiModel('providerSelection.fetchingModels')
+    : remoteModelsError
+      ? remoteModelsError
+      : remoteModelOptions.length > 0
+        ? null
+        : currentTemplate?.models?.length
+          ? tAiModel('providerSelection.usingPresetModels')
+          : hasAttemptedRemoteFetch
+            ? tAiModel('providerSelection.noPresetModels')
+            : null;
 
   return (
     <div className="bitfun-onboarding-step bitfun-onboarding-model">
@@ -357,15 +471,29 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
                 value={modelName}
                 onChange={(value) => handleModelNameChange(value as string)}
                 placeholder={t('model.modelName.selectPlaceholder')}
-                options={currentTemplate.models.map(model => ({
-                  label: model,
-                  value: model
-                }))}
+                options={availableModelOptions}
                 searchable
                 allowCustomValue
+                loading={isFetchingRemoteModels}
+                emptyText={tAiModel('providerSelection.noPresetModels')}
                 searchPlaceholder={t('model.modelName.inputPlaceholder')}
                 customValueHint={t('model.modelName.customHint')}
               />
+              <div className="bitfun-onboarding-model__actions">
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => void fetchRemoteModels()}
+                  disabled={isFetchingRemoteModels || !apiKey.trim()}
+                >
+                  {isFetchingRemoteModels ? <Loader className="animate-spin" size={14} /> : tAiModel('providerSelection.fetchModels')}
+                </Button>
+              </div>
+              {modelFetchHint && (
+                <span className={`bitfun-onboarding-model__hint ${remoteModelsError ? 'bitfun-onboarding-model__hint--error' : ''}`}>
+                  {modelFetchHint}
+                </span>
+              )}
             </div>
 
             {/* API Key */}
@@ -379,6 +507,7 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
                 placeholder={t('model.apiKey.placeholder')}
                 value={apiKey}
                 onChange={(e) => {
+                  resetRemoteModelDiscovery();
                   setApiKey(e.target.value);
                   setTestStatus('idle');
                   setTestError('');
@@ -406,6 +535,7 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
                   value={baseUrl || currentTemplate.baseUrl}
                   onChange={(value) => {
                     const selectedOption = currentTemplate.baseUrlOptions!.find(opt => opt.url === value);
+                    resetRemoteModelDiscovery();
                     setBaseUrl(value as string);
                     if (selectedOption) {
                       setCustomFormat(selectedOption.format);
@@ -427,6 +557,7 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
                   placeholder={currentTemplate.baseUrl}
                   value={baseUrl}
                   onChange={(e) => {
+                    resetRemoteModelDiscovery();
                     setBaseUrl(e.target.value);
                     setTestStatus('idle');
                     setTestError('');
@@ -452,6 +583,7 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
                 placeholder={t('model.baseUrl.placeholder')}
                 value={baseUrl}
                 onChange={(e) => {
+                  resetRemoteModelDiscovery();
                   setBaseUrl(e.target.value);
                   setTestStatus('idle');
                   setTestError('');
@@ -464,17 +596,37 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
               <label className="bitfun-onboarding-model__label">
                 {t('model.modelName.label')}
               </label>
-              <input
-                type="text"
-                className="bitfun-onboarding-model__input"
-                placeholder={t('model.modelName.placeholder')}
+              <Select
                 value={modelName}
-                onChange={(e) => {
-                  setModelName(e.target.value);
+                onChange={(value) => {
+                  setModelName(value as string);
                   setTestStatus('idle');
                   setTestError('');
                 }}
+                placeholder={t('model.modelName.placeholder')}
+                options={availableModelOptions}
+                searchable
+                allowCustomValue
+                loading={isFetchingRemoteModels}
+                emptyText={tAiModel('providerSelection.noPresetModels')}
+                searchPlaceholder={t('model.modelName.inputPlaceholder')}
+                customValueHint={t('model.modelName.customHint')}
               />
+              <div className="bitfun-onboarding-model__actions">
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => void fetchRemoteModels()}
+                  disabled={isFetchingRemoteModels || !apiKey.trim()}
+                >
+                  {isFetchingRemoteModels ? <Loader className="animate-spin" size={14} /> : tAiModel('providerSelection.fetchModels')}
+                </Button>
+              </div>
+              {modelFetchHint && (
+                <span className={`bitfun-onboarding-model__hint ${remoteModelsError ? 'bitfun-onboarding-model__hint--error' : ''}`}>
+                  {modelFetchHint}
+                </span>
+              )}
             </div>
 
             {/* API Key */}
@@ -488,6 +640,7 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
                 placeholder={t('model.apiKey.placeholder')}
                 value={apiKey}
                 onChange={(e) => {
+                  resetRemoteModelDiscovery();
                   setApiKey(e.target.value);
                   setTestStatus('idle');
                   setTestError('');
@@ -506,7 +659,10 @@ export const ModelConfigStep: React.FC<ModelConfigStepProps> = ({ onSkipForNow }
                   { label: 'Gemini', value: 'gemini' }
                 ]}
                 value={customFormat}
-                onChange={(val) => setCustomFormat(val as 'openai' | 'responses' | 'anthropic' | 'gemini')}
+                onChange={(val) => {
+                  resetRemoteModelDiscovery();
+                  setCustomFormat(val as 'openai' | 'responses' | 'anthropic' | 'gemini');
+                }}
                 placeholder={t('model.format.placeholder')}
               />
             </div>

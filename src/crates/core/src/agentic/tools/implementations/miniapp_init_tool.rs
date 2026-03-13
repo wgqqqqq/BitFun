@@ -2,10 +2,10 @@
 
 use crate::agentic::tools::framework::{Tool, ToolResult, ToolUseContext};
 use crate::infrastructure::events::{emit_global_event, BackendEvent};
+use crate::miniapp::try_get_global_miniapp_manager;
 use crate::miniapp::types::{
     FsPermissions, MiniAppPermissions, MiniAppSource, NetPermissions, ShellPermissions,
 };
-use crate::miniapp::try_get_global_miniapp_manager;
 use crate::util::errors::{BitFunError, BitFunResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -146,8 +146,12 @@ Returns app_id and the app root directory. Use the root directory and file names
                 read: Some(vec!["{appdata}".to_string(), "{workspace}".to_string()]),
                 write: Some(vec!["{appdata}".to_string()]),
             }),
-            shell: Some(ShellPermissions { allow: Some(Vec::new()) }),
-            net: Some(NetPermissions { allow: Some(vec!["*".to_string()]) }),
+            shell: Some(ShellPermissions {
+                allow: Some(Vec::new()),
+            }),
+            net: Some(NetPermissions {
+                allow: Some(vec!["*".to_string()]),
+            }),
             node: None,
         };
 

@@ -66,6 +66,7 @@
 .session-list__header-actions {
   display: flex;
   align-items: center;
+  gap: var(--size-gap-2);
 }
 
 .session-list__theme-btn {

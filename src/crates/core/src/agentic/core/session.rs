@@ -11,11 +11,20 @@ pub struct Session {
     pub session_id: String,
     pub session_name: String,
     pub agent_type: String,
-    #[serde(default, skip_serializing_if = "Option::is_none", alias = "created_by", alias = "createdBy")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "created_by",
+        alias = "createdBy"
+    )]
     pub created_by: Option<String>,
 
     /// Associated resources
-    #[serde(skip_serializing_if = "Option::is_none", alias = "sandbox_session_id", alias = "sandboxSessionId")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        alias = "sandbox_session_id",
+        alias = "sandboxSessionId"
+    )]
     pub snapshot_session_id: Option<String>,
 
     /// Dialog turn ID list
@@ -146,7 +155,12 @@ pub struct SessionSummary {
     pub session_id: String,
     pub session_name: String,
     pub agent_type: String,
-    #[serde(default, skip_serializing_if = "Option::is_none", alias = "created_by", alias = "createdBy")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "created_by",
+        alias = "createdBy"
+    )]
     pub created_by: Option<String>,
     pub turn_count: usize,
     pub created_at: SystemTime,

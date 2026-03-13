@@ -180,8 +180,7 @@ impl FileWatcher {
             loop {
                 match rx.recv_timeout(poll) {
                     Ok(Ok(event)) => {
-                        let ignore =
-                            rt.block_on(Self::should_ignore_event(&event, &watched_paths));
+                        let ignore = rt.block_on(Self::should_ignore_event(&event, &watched_paths));
                         if !ignore {
                             if let Some(file_event) = Self::convert_event(&event) {
                                 lock_event_buffer(&event_buffer).push(file_event);

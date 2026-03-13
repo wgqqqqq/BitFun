@@ -108,6 +108,13 @@ impl AgentInfo {
     }
 }
 
+fn default_model_id_for_builtin_agent(agent_type: &str) -> &'static str {
+    match agent_type {
+        "agentic" | "Cowork" | "Plan" | "debug" | "Claw" => "auto",
+        _ => "primary",
+    }
+}
+
 async fn get_mode_configs() -> HashMap<String, ModeConfig> {
     if let Ok(config_service) = GlobalConfigManager::get_service().await {
         config_service
@@ -194,7 +201,11 @@ impl AgentRegistry {
         }
     }
 
-    fn find_agent_entry(&self, agent_type: &str, workspace_root: Option<&Path>) -> Option<AgentEntry> {
+    fn find_agent_entry(
+        &self,
+        agent_type: &str,
+        workspace_root: Option<&Path>,
+    ) -> Option<AgentEntry> {
         if let Some(entry) = self.read_agents().get(agent_type).cloned() {
             return Some(entry);
         }
@@ -297,7 +308,11 @@ impl AgentRegistry {
     }
 
     /// Get a agent by ID (searches all categories including hidden)
-    pub fn get_agent(&self, agent_type: &str, workspace_root: Option<&Path>) -> Option<Arc<dyn Agent>> {
+    pub fn get_agent(
+        &self,
+        agent_type: &str,
+        workspace_root: Option<&Path>,
+    ) -> Option<Arc<dyn Agent>> {
         self.find_agent_entry(agent_type, workspace_root)
             .map(|entry| entry.agent)
     }
@@ -340,7 +355,11 @@ impl AgentRegistry {
     /// get agent tools from config
     /// if not set, return default tools
     /// tool configuration synchronization is implemented through tool_config_sync, here only read configuration
-    pub async fn get_agent_tools(&self, agent_type: &str, workspace_root: Option<&Path>) -> Vec<String> {
+    pub async fn get_agent_tools(
+        &self,
+        agent_type: &str,
+        workspace_root: Option<&Path>,
+    ) -> Vec<String> {
         let entry = self.find_agent_entry(agent_type, workspace_root);
         let Some(entry) = entry else {
             return Vec::new();
@@ -418,7 +437,8 @@ impl AgentRegistry {
     /// - custom subagent: read enabled and model configuration from custom_config cache
     pub async fn get_subagents_info(&self, workspace_root: Option<&Path>) -> Vec<AgentInfo> {
         if let Some(workspace_root) = workspace_root {
-            let is_project_cache_loaded = self.read_project_subagents().contains_key(workspace_root);
+            let is_project_cache_loaded =
+                self.read_project_subagents().contains_key(workspace_root);
             if !is_project_cache_loaded {
                 self.load_custom_subagents(workspace_root).await;
             }
@@ -447,7 +467,11 @@ impl AgentRegistry {
         drop(map);
         if let Some(workspace_root) = workspace_root {
             if let Some(project_entries) = self.read_project_subagents().get(workspace_root) {
-                result.extend(project_entries.values().map(|entry| AgentInfo::from_agent_entry(entry)));
+                result.extend(
+                    project_entries
+                        .values()
+                        .map(|entry| AgentInfo::from_agent_entry(entry)),
+                );
             }
         }
         result
@@ -695,7 +719,10 @@ impl AgentRegistry {
             }
         }
 
-        Err(BitFunError::agent(format!("Subagent not found: {}", agent_id)))
+        Err(BitFunError::agent(format!(
+            "Subagent not found: {}",
+            agent_id
+        )))
     }
 
     /// get model ID used by agent from agent_models[agent_type] in configuration
@@ -718,20 +745,20 @@ impl AgentRegistry {
         // check if it is a custom subagent, if so, read from cache
         if let Some(entry) = self.find_agent_entry(agent_type, workspace_root) {
             if let Some(config) = entry.custom_config {
-            let model = config.model;
-            if !model.is_empty() {
+                let model = config.model;
+                if !model.is_empty() {
+                    debug!(
+                        "[AgentRegistry] Custom subagent '{}' using model from cache: {}",
+                        agent_type, model
+                    );
+                    return Ok(model);
+                }
+                // empty model, use default value
                 debug!(
-                    "[AgentRegistry] Custom subagent '{}' using model from cache: {}",
-                    agent_type, model
+                    "[AgentRegistry] Custom subagent '{}' using default model: primary",
+                    agent_type
                 );
-                return Ok(model);
-            }
-            // empty model, use default value
-            debug!(
-                "[AgentRegistry] Custom subagent '{}' using default model: primary",
-                agent_type
-            );
-            return Ok("primary".to_string());
+                return Ok("primary".to_string());
             }
         }
 
@@ -753,12 +780,12 @@ impl AgentRegistry {
             )
         };
 
-        // use default primary model
+        let default_model_id = default_model_id_for_builtin_agent(agent_type);
         warn!(
-            "[AgentRegistry] Agent '{}' has no model configured, using default primary model",
-            agent_type
+            "[AgentRegistry] Agent '{}' has no model configured, using default model '{}'",
+            agent_type, default_model_id
         );
-        Ok("primary".to_string())
+        Ok(default_model_id.to_string())
     }
 
     /// Get the default agent type
@@ -778,4 +805,22 @@ pub fn get_agent_registry() -> Arc<AgentRegistry> {
             Arc::new(AgentRegistry::new())
         })
         .clone()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_model_id_for_builtin_agent;
+
+    #[test]
+    fn top_level_modes_default_to_auto() {
+        for agent_type in ["agentic", "Cowork", "Plan", "debug", "Claw"] {
+            assert_eq!(default_model_id_for_builtin_agent(agent_type), "auto");
+        }
+    }
+
+    #[test]
+    fn non_mode_agents_default_to_primary() {
+        assert_eq!(default_model_id_for_builtin_agent("Explore"), "primary");
+        assert_eq!(default_model_id_for_builtin_agent("CodeReview"), "primary");
+    }
 }

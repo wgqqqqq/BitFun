@@ -9,12 +9,14 @@ use crate::service::config::ProxyConfig;
 use crate::util::types::*;
 use crate::util::JsonChecker;
 use ai_stream_handlers::{
-    handle_anthropic_stream, handle_gemini_stream, handle_openai_stream, handle_responses_stream, UnifiedResponse,
+    handle_anthropic_stream, handle_gemini_stream, handle_openai_stream, handle_responses_stream,
+    UnifiedResponse,
 };
 use anyhow::{anyhow, Result};
 use futures::StreamExt;
 use log::{debug, error, info, warn};
 use reqwest::{Client, Proxy};
+use serde::Deserialize;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
@@ -30,6 +32,28 @@ pub struct StreamResponse {
 pub struct AIClient {
     client: Client,
     pub config: AIConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIModelsResponse {
+    data: Vec<OpenAIModelEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIModelEntry {
+    id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AnthropicModelsResponse {
+    data: Vec<AnthropicModelEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AnthropicModelEntry {
+    id: String,
+    #[serde(default)]
+    display_name: Option<String>,
 }
 
 impl AIClient {
@@ -99,7 +123,10 @@ impl AIClient {
     }
 
     fn is_responses_api_format(api_format: &str) -> bool {
-        matches!(api_format.to_ascii_lowercase().as_str(), "response" | "responses")
+        matches!(
+            api_format.to_ascii_lowercase().as_str(),
+            "response" | "responses"
+        )
     }
 
     fn build_test_connection_extra_body(&self) -> Option<serde_json::Value> {
@@ -127,7 +154,113 @@ impl AIClient {
     }
 
     fn is_gemini_api_format(api_format: &str) -> bool {
-        matches!(api_format.to_ascii_lowercase().as_str(), "gemini" | "google")
+        matches!(
+            api_format.to_ascii_lowercase().as_str(),
+            "gemini" | "google"
+        )
+    }
+
+    fn normalize_base_url_for_discovery(base_url: &str) -> String {
+        base_url
+            .trim()
+            .trim_end_matches('#')
+            .trim_end_matches('/')
+            .to_string()
+    }
+
+    fn resolve_openai_models_url(&self) -> String {
+        let mut base = Self::normalize_base_url_for_discovery(&self.config.base_url);
+
+        for suffix in ["/chat/completions", "/responses", "/models"] {
+            if base.ends_with(suffix) {
+                base.truncate(base.len() - suffix.len());
+                break;
+            }
+        }
+
+        if base.is_empty() {
+            return "models".to_string();
+        }
+
+        format!("{}/models", base)
+    }
+
+    fn resolve_anthropic_models_url(&self) -> String {
+        let mut base = Self::normalize_base_url_for_discovery(&self.config.base_url);
+
+        if base.ends_with("/v1/messages") {
+            base.truncate(base.len() - "/v1/messages".len());
+            return format!("{}/v1/models", base);
+        }
+
+        if base.ends_with("/v1/models") {
+            return base;
+        }
+
+        if base.ends_with("/v1") {
+            return format!("{}/models", base);
+        }
+
+        if base.is_empty() {
+            return "v1/models".to_string();
+        }
+
+        format!("{}/v1/models", base)
+    }
+
+    fn dedupe_remote_models(models: Vec<RemoteModelInfo>) -> Vec<RemoteModelInfo> {
+        let mut seen = std::collections::HashSet::new();
+        let mut deduped = Vec::new();
+
+        for model in models {
+            if seen.insert(model.id.clone()) {
+                deduped.push(model);
+            }
+        }
+
+        deduped
+    }
+
+    async fn list_openai_models(&self) -> Result<Vec<RemoteModelInfo>> {
+        let url = self.resolve_openai_models_url();
+        let response = self
+            .apply_openai_headers(self.client.get(&url))
+            .send()
+            .await?
+            .error_for_status()?;
+
+        let payload: OpenAIModelsResponse = response.json().await?;
+        Ok(Self::dedupe_remote_models(
+            payload
+                .data
+                .into_iter()
+                .map(|model| RemoteModelInfo {
+                    id: model.id,
+                    display_name: None,
+                })
+                .collect(),
+        ))
+    }
+
+    async fn list_anthropic_models(&self) -> Result<Vec<RemoteModelInfo>> {
+        let url = self.resolve_anthropic_models_url();
+        let response = self
+            .apply_anthropic_headers(self.client.get(&url), &url)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        let payload: AnthropicModelsResponse = response.json().await?;
+        Ok(Self::dedupe_remote_models(
+            payload
+                .data
+                .into_iter()
+                .map(|model| RemoteModelInfo {
+                    id: model.id,
+                    display_name: model.display_name,
+                })
+                .collect(),
+        ))
     }
 
     /// Create an AIClient without proxy (backward compatible)
@@ -469,9 +602,11 @@ impl AIClient {
 
     fn normalize_gemini_stop_sequences(value: &serde_json::Value) -> Option<serde_json::Value> {
         match value {
-            serde_json::Value::String(sequence) => Some(serde_json::Value::Array(vec![
-                serde_json::Value::String(sequence.clone()),
-            ])),
+            serde_json::Value::String(sequence) => {
+                Some(serde_json::Value::Array(vec![serde_json::Value::String(
+                    sequence.clone(),
+                )]))
+            }
             serde_json::Value::Array(items) => {
                 let sequences = items
                     .iter()
@@ -557,7 +692,9 @@ impl AIClient {
             Self::insert_gemini_generation_field(request_body, "temperature", temperature);
         }
 
-        let top_p = extra_obj.remove("top_p").or_else(|| extra_obj.remove("topP"));
+        let top_p = extra_obj
+            .remove("top_p")
+            .or_else(|| extra_obj.remove("topP"));
         if let Some(top_p) = top_p {
             Self::insert_gemini_generation_field(request_body, "topP", top_p);
         }
@@ -567,11 +704,7 @@ impl AIClient {
             .and_then(Self::normalize_gemini_stop_sequences)
         {
             extra_obj.remove("stop");
-            Self::insert_gemini_generation_field(
-                request_body,
-                "stopSequences",
-                stop_sequences,
-            );
+            Self::insert_gemini_generation_field(request_body, "stopSequences", stop_sequences);
         }
 
         if let Some(response_mime_type) = extra_obj
@@ -863,21 +996,30 @@ impl AIClient {
         }
 
         if let Some(top_p) = self.config.top_p {
-            Self::insert_gemini_generation_field(&mut request_body, "topP", serde_json::json!(top_p));
+            Self::insert_gemini_generation_field(
+                &mut request_body,
+                "topP",
+                serde_json::json!(top_p),
+            );
         }
 
         if self.config.enable_thinking_process {
-            Self::insert_gemini_generation_field(&mut request_body, "thinkingConfig", serde_json::json!({
-                "includeThoughts": true,
-            }));
+            Self::insert_gemini_generation_field(
+                &mut request_body,
+                "thinkingConfig",
+                serde_json::json!({
+                    "includeThoughts": true,
+                }),
+            );
         }
 
         if let Some(tools) = gemini_tools {
             let tool_names = tools
                 .iter()
                 .flat_map(|tool| {
-                    if let Some(declarations) =
-                        tool.get("functionDeclarations").and_then(|value| value.as_array())
+                    if let Some(declarations) = tool
+                        .get("functionDeclarations")
+                        .and_then(|value| value.as_array())
                     {
                         declarations
                             .iter()
@@ -903,7 +1045,8 @@ impl AIClient {
                 let has_function_declarations = request_body["tools"]
                     .as_array()
                     .map(|tools| {
-                        tools.iter()
+                        tools
+                            .iter()
                             .any(|tool| tool.get("functionDeclarations").is_some())
                     })
                     .unwrap_or(false);
@@ -925,9 +1068,7 @@ impl AIClient {
 
                 for (key, value) in extra_obj {
                     if let Some(request_obj) = request_body.as_object_mut() {
-                        let target = request_obj
-                            .entry(key)
-                            .or_insert(serde_json::Value::Null);
+                        let target = request_obj.entry(key).or_insert(serde_json::Value::Null);
                         Self::merge_json_value(target, value);
                     }
                 }
@@ -1321,8 +1462,12 @@ impl AIClient {
         let (instructions, response_input) =
             OpenAIMessageConverter::convert_messages_to_responses_input(messages);
         let openai_tools = OpenAIMessageConverter::convert_tools(tools);
-        let request_body =
-            self.build_responses_request_body(instructions, response_input, openai_tools, extra_body);
+        let request_body = self.build_responses_request_body(
+            instructions,
+            response_input,
+            openai_tools,
+            extra_body,
+        );
 
         let mut last_error = None;
         let base_wait_time_ms = 500;
@@ -1343,7 +1488,11 @@ impl AIClient {
                             .await
                             .unwrap_or_else(|e| format!("Failed to read error response: {}", e));
                         error!("Responses API client error {}: {}", status, error_text);
-                        return Err(anyhow!("Responses API client error {}: {}", status, error_text));
+                        return Err(anyhow!(
+                            "Responses API client error {}: {}",
+                            status,
+                            error_text
+                        ));
                     }
 
                     if status.is_success() {
@@ -1843,6 +1992,17 @@ impl AIClient {
             }
         }
     }
+
+    pub async fn list_models(&self) -> Result<Vec<RemoteModelInfo>> {
+        match self.get_api_format().to_ascii_lowercase().as_str() {
+            "openai" | "response" | "responses" => self.list_openai_models().await,
+            "anthropic" => self.list_anthropic_models().await,
+            unsupported => Err(anyhow!(
+                "Listing models is not supported for API format: {}",
+                unsupported
+            )),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1913,6 +2073,62 @@ mod tests {
     }
 
     #[test]
+    fn resolves_openai_models_url_from_completion_endpoint() {
+        let client = AIClient::new(AIConfig {
+            name: "test".to_string(),
+            base_url: "https://api.openai.com/v1/chat/completions".to_string(),
+            request_url: "https://api.openai.com/v1/chat/completions".to_string(),
+            api_key: "test-key".to_string(),
+            model: "gpt-4.1".to_string(),
+            format: "openai".to_string(),
+            context_window: 128000,
+            max_tokens: Some(8192),
+            temperature: None,
+            top_p: None,
+            enable_thinking_process: false,
+            support_preserved_thinking: false,
+            custom_headers: None,
+            custom_headers_mode: None,
+            skip_ssl_verify: false,
+            reasoning_effort: None,
+            custom_request_body: None,
+        });
+
+        assert_eq!(
+            client.resolve_openai_models_url(),
+            "https://api.openai.com/v1/models"
+        );
+    }
+
+    #[test]
+    fn resolves_anthropic_models_url_from_messages_endpoint() {
+        let client = AIClient::new(AIConfig {
+            name: "test".to_string(),
+            base_url: "https://api.anthropic.com/v1/messages".to_string(),
+            request_url: "https://api.anthropic.com/v1/messages".to_string(),
+            api_key: "test-key".to_string(),
+            model: "claude-sonnet-4-5".to_string(),
+            format: "anthropic".to_string(),
+            context_window: 200000,
+            max_tokens: Some(8192),
+            temperature: None,
+            top_p: None,
+            enable_thinking_process: false,
+            support_preserved_thinking: false,
+            custom_headers: None,
+            custom_headers_mode: None,
+            skip_ssl_verify: false,
+            reasoning_effort: None,
+            custom_request_body: None,
+        });
+
+        assert_eq!(
+            client.resolve_anthropic_models_url(),
+            "https://api.anthropic.com/v1/models"
+        );
+    }
+
+    #[test]
     fn build_gemini_request_body_translates_response_format_and_merges_generation_config() {
         let client = AIClient::new(AIConfig {
             name: "gemini".to_string(),
@@ -1975,7 +2191,10 @@ mod tests {
             "application/json"
         );
         assert_eq!(request_body["generationConfig"]["candidateCount"], 1);
-        assert_eq!(request_body["generationConfig"]["stopSequences"], json!(["END"]));
+        assert_eq!(
+            request_body["generationConfig"]["stopSequences"],
+            json!(["END"])
+        );
         assert_eq!(
             request_body["generationConfig"]["responseJsonSchema"]["required"],
             json!(["answer"])

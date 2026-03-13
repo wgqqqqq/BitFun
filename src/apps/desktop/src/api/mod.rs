@@ -18,8 +18,10 @@ pub mod image_analysis_api;
 pub mod lsp_api;
 pub mod lsp_workspace_api;
 pub mod mcp_api;
+pub mod miniapp_api;
 pub mod project_context_api;
 pub mod prompt_template_api;
+pub mod remote_connect_api;
 pub mod runtime_api;
 pub mod session_api;
 pub mod skill_api;
@@ -31,7 +33,5 @@ pub mod system_api;
 pub mod terminal_api;
 pub mod token_usage_api;
 pub mod tool_api;
-pub mod remote_connect_api;
-pub mod miniapp_api;
 
 pub use app_state::{AppState, AppStatistics, HealthStatus};

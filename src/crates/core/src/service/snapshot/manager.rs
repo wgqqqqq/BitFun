@@ -508,14 +508,11 @@ impl WrappedTool {
             Err(e) => return Err(crate::util::errors::BitFunError::Tool(e.to_string())),
         };
 
-        let snapshot_workspace = context
-            .workspace_root()
-            .map(PathBuf::from)
-            .ok_or_else(|| {
-                crate::util::errors::BitFunError::Tool(
-                    "workspace is required in ToolUseContext for snapshot tracking".to_string(),
-                )
-            })?;
+        let snapshot_workspace = context.workspace_root().map(PathBuf::from).ok_or_else(|| {
+            crate::util::errors::BitFunError::Tool(
+                "workspace is required in ToolUseContext for snapshot tracking".to_string(),
+            )
+        })?;
 
         let snapshot_manager = get_or_create_snapshot_manager(snapshot_workspace.clone(), None)
             .await
@@ -636,9 +633,9 @@ pub async fn get_or_create_snapshot_manager(
 
     let manager = Arc::new(SnapshotManager::new(workspace_dir.clone(), config).await?);
     {
-        let mut managers = snapshot_managers()
-            .write()
-            .map_err(|_| SnapshotError::ConfigError("Snapshot manager store lock poisoned".to_string()))?;
+        let mut managers = snapshot_managers().write().map_err(|_| {
+            SnapshotError::ConfigError("Snapshot manager store lock poisoned".to_string())
+        })?;
         if let Some(existing) = managers.get(&workspace_dir) {
             return Ok(existing.clone());
         }
@@ -655,7 +652,9 @@ pub fn get_snapshot_manager_for_workspace(workspace_dir: &Path) -> Option<Arc<Sn
         .and_then(|managers| managers.get(workspace_dir).cloned())
 }
 
-pub fn ensure_snapshot_manager_for_workspace(workspace_dir: &Path) -> SnapshotResult<Arc<SnapshotManager>> {
+pub fn ensure_snapshot_manager_for_workspace(
+    workspace_dir: &Path,
+) -> SnapshotResult<Arc<SnapshotManager>> {
     get_snapshot_manager_for_workspace(workspace_dir).ok_or_else(|| {
         SnapshotError::ConfigError(format!(
             "Snapshot manager not initialized for workspace: {}",

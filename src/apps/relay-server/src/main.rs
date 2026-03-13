@@ -42,8 +42,7 @@ async fn main() -> anyhow::Result<()> {
     if let Some(static_dir) = &cfg.static_dir {
         info!("Serving static files from: {static_dir}");
         app = app.fallback_service(
-            tower_http::services::ServeDir::new(static_dir)
-                .append_index_html_on_directories(true),
+            tower_http::services::ServeDir::new(static_dir).append_index_html_on_directories(true),
         );
     }
 

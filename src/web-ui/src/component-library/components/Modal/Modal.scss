@@ -78,6 +78,12 @@
     max-height: calc(100vh - 48px);
   }
 
+  &--xlarge {
+    width: min(720px, 100%);
+    max-width: min(720px, 100%);
+    max-height: calc(100vh - 48px);
+  }
+
 
   &--draggable {
     cursor: default;

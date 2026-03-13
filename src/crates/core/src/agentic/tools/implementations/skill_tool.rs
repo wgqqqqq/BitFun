@@ -59,9 +59,11 @@ Important:
     async fn build_description(&self, workspace_root: Option<&Path>) -> String {
         let registry = get_skill_registry();
         let available_skills = match workspace_root {
-            Some(workspace_root) => registry
-                .get_enabled_skills_xml_for_workspace(Some(workspace_root))
-                .await,
+            Some(workspace_root) => {
+                registry
+                    .get_enabled_skills_xml_for_workspace(Some(workspace_root))
+                    .await
+            }
             None => registry.get_enabled_skills_xml().await,
         };
 

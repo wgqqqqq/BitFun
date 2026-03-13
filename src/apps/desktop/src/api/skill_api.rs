@@ -118,7 +118,9 @@ pub async fn get_skill_configs(
     let workspace_root = workspace_root_from_input(workspace_path.as_deref());
 
     if force_refresh.unwrap_or(false) {
-        registry.refresh_for_workspace(workspace_root.as_deref()).await;
+        registry
+            .refresh_for_workspace(workspace_root.as_deref())
+            .await;
     }
 
     let all_skills = registry
@@ -152,7 +154,9 @@ pub async fn set_skill_enabled(
     )
     .map_err(|e| format!("Failed to save skill config: {}", e))?;
 
-    registry.refresh_for_workspace(workspace_root.as_deref()).await;
+    registry
+        .refresh_for_workspace(workspace_root.as_deref())
+        .await;
 
     Ok(format!(
         "Skill '{}' configuration saved successfully",
@@ -329,7 +333,9 @@ pub async fn delete_skill(
         }
     }
 
-    registry.refresh_for_workspace(workspace_root.as_deref()).await;
+    registry
+        .refresh_for_workspace(workspace_root.as_deref())
+        .await;
 
     info!(
         "Skill deleted: name={}, path={}",
@@ -454,7 +460,9 @@ pub async fn download_skill_market(
         ));
     }
 
-    registry.refresh_for_workspace(workspace_path.as_deref()).await;
+    registry
+        .refresh_for_workspace(workspace_path.as_deref())
+        .await;
     let mut installed_skills: Vec<String> = registry
         .get_all_skills_for_workspace(workspace_path.as_deref())
         .await

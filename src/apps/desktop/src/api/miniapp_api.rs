@@ -1,11 +1,11 @@
 //! MiniApp API — Tauri commands for MiniApp CRUD, JS Worker, and dialog.
 
 use crate::api::app_state::AppState;
-use bitfun_core::miniapp::{
-    MiniApp, MiniAppAiContext, MiniAppMeta, MiniAppPermissions, MiniAppSource,
-    InstallResult as CoreInstallResult,
-};
 use bitfun_core::infrastructure::events::{emit_global_event, BackendEvent};
+use bitfun_core::miniapp::{
+    InstallResult as CoreInstallResult, MiniApp, MiniAppAiContext, MiniAppMeta, MiniAppPermissions,
+    MiniAppSource,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -481,18 +481,21 @@ pub async fn miniapp_worker_call(
         .resolve_policy_for_app(&request.app_id, &app.permissions, workspace_root.as_deref())
         .await;
     let policy_json = serde_json::to_string(&policy).map_err(|e| e.to_string())?;
-    let worker_revision = state.miniapp_manager.build_worker_revision(&app, &policy_json);
+    let worker_revision = state
+        .miniapp_manager
+        .build_worker_revision(&app, &policy_json);
     let should_emit_restart = !was_running || deps_installed || app.runtime.worker_restart_required;
-    let result = pool.call(
-        &request.app_id,
-        &worker_revision,
-        &policy_json,
-        app.permissions.node.as_ref(),
-        &request.method,
-        request.params,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
+    let result = pool
+        .call(
+            &request.app_id,
+            &worker_revision,
+            &policy_json,
+            app.permissions.node.as_ref(),
+            &request.method,
+            request.params,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
     if should_emit_restart {
         let app = state
             .miniapp_manager
@@ -501,7 +504,14 @@ pub async fn miniapp_worker_call(
             .map_err(|e| e.to_string())?;
         emit_miniapp_event(
             "miniapp-worker-restarted",
-            miniapp_payload(&app, if deps_installed { "deps-installed" } else { "runtime-restart" }),
+            miniapp_payload(
+                &app,
+                if deps_installed {
+                    "deps-installed"
+                } else {
+                    "runtime-restart"
+                },
+            ),
         )
         .await;
     }
@@ -522,7 +532,9 @@ pub async fn miniapp_worker_stop(state: State<'_, AppState>, app_id: String) -> 
 }
 
 #[tauri::command]
-pub async fn miniapp_worker_list_running(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+pub async fn miniapp_worker_list_running(
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
     let Some(ref pool) = state.js_worker_pool else {
         return Ok(vec![]);
     };

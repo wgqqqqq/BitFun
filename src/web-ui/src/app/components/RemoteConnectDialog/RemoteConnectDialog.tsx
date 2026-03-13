@@ -334,20 +334,18 @@ export const RemoteConnectDialog: React.FC<RemoteConnectDialogProps> = ({
   };
 
   const renderConnectedView = (
-    peerName: string,
     onDisconnect: () => void,
     userId?: string | null,
   ) => (
     <div className="bitfun-remote-connect__connected">
       <div className="bitfun-remote-connect__status">
         <Badge variant="success">{t('remoteConnect.stateConnected')}</Badge>
-        <span className="bitfun-remote-connect__peer-name">{peerName}</span>
+        {userId && (
+          <span className="bitfun-remote-connect__peer-user-id">
+            {t('remoteConnect.connectedUserId')}: {userId}
+          </span>
+        )}
       </div>
-      {userId && (
-        <p className="bitfun-remote-connect__hint">
-          {t('remoteConnect.connectedUserId')}: {userId}
-        </p>
-      )}
       <p className="bitfun-remote-connect__hint">{t('remoteConnect.connectedHint')}</p>
       <button type="button" className="bitfun-remote-connect__btn bitfun-remote-connect__btn--disconnect" onClick={onDisconnect}>
         {t('remoteConnect.disconnect')}
@@ -421,7 +419,6 @@ export const RemoteConnectDialog: React.FC<RemoteConnectDialogProps> = ({
             </p>
           )}
           {renderConnectedView(
-            status?.peer_device_name ?? t('remoteConnect.stateConnected'),
             handleDisconnectRelay,
             status?.peer_user_id,
           )}
@@ -510,7 +507,7 @@ export const RemoteConnectDialog: React.FC<RemoteConnectDialogProps> = ({
 
   const renderBotContent = () => {
     if (isBotConnected && connectedBotTab === botTab) {
-      return renderConnectedView(status!.bot_connected!, handleDisconnectBot);
+      return renderConnectedView(handleDisconnectBot);
     }
     if (connectionResult && activeGroup === 'bot') {
       return renderPairingInProgress();

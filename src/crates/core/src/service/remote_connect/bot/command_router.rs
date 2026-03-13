@@ -13,6 +13,20 @@ use std::sync::Arc;
 
 // ── Per-chat state ──────────────────────────────────────────────────
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum BotLanguage {
+    #[serde(rename = "zh-CN")]
+    ZhCN,
+    #[serde(rename = "en-US")]
+    EnUS,
+}
+
+impl BotLanguage {
+    pub fn is_chinese(self) -> bool {
+        matches!(self, Self::ZhCN)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BotChatState {
     pub chat_id: String,
@@ -39,6 +53,17 @@ impl BotChatState {
             pending_action: None,
             pending_files: std::collections::HashMap::new(),
         }
+    }
+}
+
+pub async fn current_bot_language() -> BotLanguage {
+    if let Some(service) = crate::service::get_global_i18n_service().await {
+        match service.get_current_locale().await {
+            crate::service::LocaleId::ZhCN => BotLanguage::ZhCN,
+            crate::service::LocaleId::EnUS => BotLanguage::EnUS,
+        }
+    } else {
+        BotLanguage::ZhCN
     }
 }
 
@@ -94,13 +119,11 @@ pub struct BotInteractiveRequest {
     pub pending_action: PendingAction,
 }
 
-pub type BotInteractionHandler = Arc<
-    dyn Fn(BotInteractiveRequest) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync,
->;
+pub type BotInteractionHandler =
+    Arc<dyn Fn(BotInteractiveRequest) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
-pub type BotMessageSender = Arc<
-    dyn Fn(String) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync,
->;
+pub type BotMessageSender =
+    Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
 pub struct ForwardRequest {
     pub session_id: String,
@@ -207,60 +230,157 @@ pub fn parse_command(text: &str) -> BotCommand {
 
 // ── Static messages ─────────────────────────────────────────────────
 
-pub const WELCOME_MESSAGE: &str = "\
+pub fn welcome_message(language: BotLanguage) -> &'static str {
+    if language.is_chinese() {
+        "\
+欢迎使用 BitFun！
+
+要连接你的 BitFun 桌面端，请发送 BitFun Remote Connect 面板里显示的 6 位配对码。
+
+如果你还没有配对码，请打开 BitFun Desktop -> Remote Connect -> Telegram/飞书机器人，复制 6 位配对码并发送到这里。"
+    } else {
+        "\
 Welcome to BitFun!
 
 To connect your BitFun desktop app, please enter the 6-digit pairing code shown in your BitFun Remote Connect panel.
 
-Need a pairing code? Open BitFun Desktop -> Remote Connect -> Telegram/Feishu Bot -> copy the 6-digit code and send it here.";
+Need a pairing code? Open BitFun Desktop -> Remote Connect -> Telegram/Feishu Bot -> copy the 6-digit code and send it here."
+    }
+}
 
-pub const HELP_MESSAGE: &str = "\
+pub fn help_message(language: BotLanguage) -> &'static str {
+    if language.is_chinese() {
+        "\
+可用命令：
+/switch_workspace - 列出并切换工作区
+/resume_session - 恢复已有会话
+/new_code_session - 创建新的编码会话
+/new_cowork_session - 创建新的协作会话
+/cancel_task - 取消当前任务
+/help - 显示帮助信息"
+    } else {
+        "\
 Available commands:
 /switch_workspace - List and switch workspaces
 /resume_session - Resume an existing session
 /new_code_session - Create a new coding session
 /new_cowork_session - Create a new cowork session
 /cancel_task - Cancel the current task
-/help - Show this help message";
-
-pub fn paired_success_message() -> String {
-    format!(
-        "Pairing successful! BitFun is now connected.\n\n{}",
-        HELP_MESSAGE
-    )
+/help - Show this help message"
+    }
 }
 
-pub fn main_menu_actions() -> Vec<BotAction> {
+pub fn paired_success_message(language: BotLanguage) -> String {
+    if language.is_chinese() {
+        format!("配对成功！BitFun 已连接。\n\n{}", help_message(language))
+    } else {
+        format!(
+            "Pairing successful! BitFun is now connected.\n\n{}",
+            help_message(language)
+        )
+    }
+}
+
+fn label_switch_workspace(language: BotLanguage) -> &'static str {
+    if language.is_chinese() {
+        "切换工作区"
+    } else {
+        "Switch Workspace"
+    }
+}
+
+fn label_resume_session(language: BotLanguage) -> &'static str {
+    if language.is_chinese() {
+        "恢复会话"
+    } else {
+        "Resume Session"
+    }
+}
+
+fn label_new_code_session(language: BotLanguage) -> &'static str {
+    if language.is_chinese() {
+        "新建编码会话"
+    } else {
+        "New Code Session"
+    }
+}
+
+fn label_new_cowork_session(language: BotLanguage) -> &'static str {
+    if language.is_chinese() {
+        "新建协作会话"
+    } else {
+        "New Cowork Session"
+    }
+}
+
+fn label_cancel_task(language: BotLanguage) -> &'static str {
+    if language.is_chinese() {
+        "取消任务"
+    } else {
+        "Cancel Task"
+    }
+}
+
+fn label_next_page(language: BotLanguage) -> &'static str {
+    if language.is_chinese() {
+        "下一页"
+    } else {
+        "Next Page"
+    }
+}
+
+fn other_label(language: BotLanguage) -> &'static str {
+    if language.is_chinese() {
+        "其他"
+    } else {
+        "Other"
+    }
+}
+
+pub fn main_menu_actions(language: BotLanguage) -> Vec<BotAction> {
     vec![
-        BotAction::primary("Switch Workspace", "/switch_workspace"),
-        BotAction::secondary("Resume Session", "/resume_session"),
-        BotAction::secondary("New Code Session", "/new_code_session"),
-        BotAction::secondary("New Cowork Session", "/new_cowork_session"),
-        BotAction::secondary("Help (send /help for menu)", "/help"),
+        BotAction::primary(label_switch_workspace(language), "/switch_workspace"),
+        BotAction::secondary(label_resume_session(language), "/resume_session"),
+        BotAction::secondary(label_new_code_session(language), "/new_code_session"),
+        BotAction::secondary(label_new_cowork_session(language), "/new_cowork_session"),
+        BotAction::secondary(
+            if language.is_chinese() {
+                "帮助（发送 /help 查看菜单）"
+            } else {
+                "Help (send /help for menu)"
+            },
+            "/help",
+        ),
     ]
 }
 
-fn workspace_required_actions() -> Vec<BotAction> {
-    vec![BotAction::primary("Switch Workspace", "/switch_workspace")]
+fn workspace_required_actions(language: BotLanguage) -> Vec<BotAction> {
+    vec![BotAction::primary(
+        label_switch_workspace(language),
+        "/switch_workspace",
+    )]
 }
 
-fn session_entry_actions() -> Vec<BotAction> {
+fn session_entry_actions(language: BotLanguage) -> Vec<BotAction> {
     vec![
-        BotAction::primary("Resume Session", "/resume_session"),
-        BotAction::secondary("New Code Session", "/new_code_session"),
-        BotAction::secondary("New Cowork Session", "/new_cowork_session"),
+        BotAction::primary(label_resume_session(language), "/resume_session"),
+        BotAction::secondary(label_new_code_session(language), "/new_code_session"),
+        BotAction::secondary(label_new_cowork_session(language), "/new_cowork_session"),
     ]
 }
 
-fn new_session_actions() -> Vec<BotAction> {
+fn new_session_actions(language: BotLanguage) -> Vec<BotAction> {
     vec![
-        BotAction::primary("New Code Session", "/new_code_session"),
-        BotAction::secondary("New Cowork Session", "/new_cowork_session"),
+        BotAction::primary(label_new_code_session(language), "/new_code_session"),
+        BotAction::secondary(label_new_cowork_session(language), "/new_cowork_session"),
     ]
 }
 
-fn cancel_task_actions(command: impl Into<String>) -> Vec<BotAction> {
-    vec![BotAction::secondary("Cancel Task", command.into())]
+fn cancel_task_actions(language: BotLanguage, command: impl Into<String>) -> Vec<BotAction> {
+    vec![BotAction::secondary(
+        label_cancel_task(language),
+        command.into(),
+    )]
 }
 
 // ── Main dispatch ───────────────────────────────────────────────────
@@ -270,88 +390,95 @@ pub async fn handle_command(
     cmd: BotCommand,
     images: Vec<super::super::remote_server::ImageAttachment>,
 ) -> HandleResult {
+    let language = current_bot_language().await;
     let image_contexts: Vec<crate::agentic::image_analysis::ImageContextData> =
-        super::super::remote_server::images_to_contexts(
-            if images.is_empty() { None } else { Some(&images) },
-        );
+        super::super::remote_server::images_to_contexts(if images.is_empty() {
+            None
+        } else {
+            Some(&images)
+        });
 
     match cmd {
         BotCommand::Start | BotCommand::Help => {
             if state.paired {
                 HandleResult {
-                    reply: HELP_MESSAGE.to_string(),
-                    actions: main_menu_actions(),
+                    reply: help_message(language).to_string(),
+                    actions: main_menu_actions(language),
                     forward_to_session: None,
                 }
             } else {
                 HandleResult {
-                    reply: WELCOME_MESSAGE.to_string(),
+                    reply: welcome_message(language).to_string(),
                     actions: vec![],
                     forward_to_session: None,
                 }
             }
         }
         BotCommand::PairingCode(_) => HandleResult {
-            reply: "Pairing codes are handled automatically. If you need to re-pair, \
-                    please restart the connection from BitFun Desktop."
-                .to_string(),
+            reply: if language.is_chinese() {
+                "配对码会自动处理。如果你需要重新配对，请在 BitFun Desktop 中重新启动连接。"
+                    .to_string()
+            } else {
+                "Pairing codes are handled automatically. If you need to re-pair, please restart the connection from BitFun Desktop."
+                    .to_string()
+            },
             actions: vec![],
             forward_to_session: None,
         },
         BotCommand::SwitchWorkspace => {
             if !state.paired {
-                return not_paired();
+                return not_paired(language);
             }
             handle_switch_workspace(state).await
         }
         BotCommand::ResumeSession => {
             if !state.paired {
-                return not_paired();
+                return not_paired(language);
             }
             if state.current_workspace.is_none() {
-                return need_workspace();
+                return need_workspace(language);
             }
             handle_resume_session(state, 0).await
         }
         BotCommand::NewCodeSession => {
             if !state.paired {
-                return not_paired();
+                return not_paired(language);
             }
             if state.current_workspace.is_none() {
-                return need_workspace();
+                return need_workspace(language);
             }
             handle_new_session(state, "agentic").await
         }
         BotCommand::NewCoworkSession => {
             if !state.paired {
-                return not_paired();
+                return not_paired(language);
             }
             if state.current_workspace.is_none() {
-                return need_workspace();
+                return need_workspace(language);
             }
             handle_new_session(state, "Cowork").await
         }
         BotCommand::CancelTask(turn_id) => {
             if !state.paired {
-                return not_paired();
+                return not_paired(language);
             }
             handle_cancel_task(state, turn_id.as_deref()).await
         }
         BotCommand::NumberSelection(n) => {
             if !state.paired {
-                return not_paired();
+                return not_paired(language);
             }
             handle_number_selection(state, n).await
         }
         BotCommand::NextPage => {
             if !state.paired {
-                return not_paired();
+                return not_paired(language);
             }
             handle_next_page(state).await
         }
         BotCommand::ChatMessage(msg) => {
             if !state.paired {
-                return not_paired();
+                return not_paired(language);
             }
             handle_chat_message(state, &msg, image_contexts).await
         }
@@ -360,19 +487,27 @@ pub async fn handle_command(
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-fn not_paired() -> HandleResult {
+fn not_paired(language: BotLanguage) -> HandleResult {
     HandleResult {
-        reply: "Not connected to BitFun Desktop. Please enter the 6-digit pairing code first."
-            .to_string(),
+        reply: if language.is_chinese() {
+            "尚未连接到 BitFun Desktop。请先发送 6 位配对码。".to_string()
+        } else {
+            "Not connected to BitFun Desktop. Please enter the 6-digit pairing code first."
+                .to_string()
+        },
         actions: vec![],
         forward_to_session: None,
     }
 }
 
-fn need_workspace() -> HandleResult {
+fn need_workspace(language: BotLanguage) -> HandleResult {
     HandleResult {
-        reply: "No workspace selected. Use /switch_workspace first.".to_string(),
-        actions: workspace_required_actions(),
+        reply: if language.is_chinese() {
+            "尚未选择工作区。请先使用 /switch_workspace。".to_string()
+        } else {
+            "No workspace selected. Use /switch_workspace first.".to_string()
+        },
+        actions: workspace_required_actions(language),
         forward_to_session: None,
     }
 }
@@ -400,15 +535,13 @@ fn numbered_actions(labels: &[String]) -> Vec<BotAction> {
         .iter()
         .enumerate()
         .map(|(idx, label)| {
-            BotAction::secondary(
-                truncate_action_label(label, 28),
-                (idx + 1).to_string(),
-            )
+            BotAction::secondary(truncate_action_label(label, 28), (idx + 1).to_string())
         })
         .collect()
 }
 
 fn build_question_prompt(
+    language: BotLanguage,
     tool_id: String,
     questions: Vec<BotQuestion>,
     current_index: usize,
@@ -419,9 +552,14 @@ fn build_question_prompt(
     let question = &questions[current_index];
     let mut actions = Vec::new();
     let mut reply = format!(
-        "Question {}/{}\n",
+        "{} {}/{}\n",
+        if language.is_chinese() {
+            "问题"
+        } else {
+            "Question"
+        },
         current_index + 1,
-        questions.len()
+        questions.len(),
     );
     if !question.header.is_empty() {
         reply.push_str(&format!("{}\n", question.header));
@@ -431,21 +569,34 @@ fn build_question_prompt(
         reply.push_str(&format!("{}\n", question_option_line(idx, option)));
     }
     reply.push_str(&format!(
-        "{}. Other\n\n",
-        question.options.len() + 1
+        "{}. {}\n\n",
+        question.options.len() + 1,
+        other_label(language),
     ));
     if awaiting_custom_text {
-        reply.push_str("Please type your custom answer.");
+        reply.push_str(if language.is_chinese() {
+            "请输入你的自定义答案。"
+        } else {
+            "Please type your custom answer."
+        });
     } else if question.multi_select {
-        reply.push_str("Reply with one or more option numbers, separated by commas. Example: 1,3");
+        reply.push_str(if language.is_chinese() {
+            "请回复一个或多个选项编号，用逗号分隔，例如：1,3"
+        } else {
+            "Reply with one or more option numbers, separated by commas. Example: 1,3"
+        });
     } else {
-        reply.push_str("Reply with a single option number.");
+        reply.push_str(if language.is_chinese() {
+            "请回复单个选项编号。"
+        } else {
+            "Reply with a single option number."
+        });
         let mut labels: Vec<String> = question
             .options
             .iter()
             .map(|option| option.label.clone())
             .collect();
-        labels.push("Other".to_string());
+        labels.push(other_label(language).to_string());
         actions = numbered_actions(&labels);
     }
 
@@ -482,12 +633,17 @@ fn parse_question_numbers(input: &str) -> Option<Vec<usize>> {
 
 async fn handle_switch_workspace(state: &mut BotChatState) -> HandleResult {
     use crate::service::workspace::get_global_workspace_service;
+    let language = current_bot_language().await;
 
     let ws_service = match get_global_workspace_service() {
         Some(s) => s,
         None => {
             return HandleResult {
-                reply: "Workspace service not available.".to_string(),
+                reply: if language.is_chinese() {
+                    "工作区服务不可用。".to_string()
+                } else {
+                    "Workspace service not available.".to_string()
+                },
                 actions: vec![],
                 forward_to_session: None,
             };
@@ -497,8 +653,11 @@ async fn handle_switch_workspace(state: &mut BotChatState) -> HandleResult {
     let workspaces = ws_service.get_recent_workspaces().await;
     if workspaces.is_empty() {
         return HandleResult {
-            reply: "No workspaces found. Please open a project in BitFun Desktop first."
-                .to_string(),
+            reply: if language.is_chinese() {
+                "未找到工作区。请先在 BitFun Desktop 中打开一个项目。".to_string()
+            } else {
+                "No workspaces found. Please open a project in BitFun Desktop first.".to_string()
+            },
             actions: vec![],
             forward_to_session: None,
         };
@@ -506,16 +665,32 @@ async fn handle_switch_workspace(state: &mut BotChatState) -> HandleResult {
 
     let effective_current: Option<&str> = state.current_workspace.as_deref();
 
-    let mut text = String::from("Select a workspace:\n\n");
+    let mut text = if language.is_chinese() {
+        String::from("请选择工作区：\n\n")
+    } else {
+        String::from("Select a workspace:\n\n")
+    };
     let mut options: Vec<(String, String)> = Vec::new();
     for (i, ws) in workspaces.iter().enumerate() {
         let path = ws.root_path.to_string_lossy().to_string();
         let is_current = effective_current == Some(path.as_str());
-        let marker = if is_current { " [current]" } else { "" };
+        let marker = if is_current {
+            if language.is_chinese() {
+                " [当前]"
+            } else {
+                " [current]"
+            }
+        } else {
+            ""
+        };
         text.push_str(&format!("{}. {}{}\n   {}\n", i + 1, ws.name, marker, path));
         options.push((path, ws.name.clone()));
     }
-    text.push_str("\nReply with the workspace number.");
+    text.push_str(if language.is_chinese() {
+        "\n请回复工作区编号。"
+    } else {
+        "\nReply with the workspace number."
+    });
 
     let action_labels: Vec<String> = options.iter().map(|(_, name)| name.clone()).collect();
     state.pending_action = Some(PendingAction::SelectWorkspace { options });
@@ -529,10 +704,11 @@ async fn handle_switch_workspace(state: &mut BotChatState) -> HandleResult {
 async fn handle_resume_session(state: &mut BotChatState, page: usize) -> HandleResult {
     use crate::agentic::persistence::PersistenceManager;
     use crate::infrastructure::PathManager;
+    let language = current_bot_language().await;
 
     let ws_path = match &state.current_workspace {
         Some(p) => std::path::PathBuf::from(p),
-        None => return need_workspace(),
+        None => return need_workspace(language),
     };
 
     let page_size = 10usize;
@@ -542,7 +718,11 @@ async fn handle_resume_session(state: &mut BotChatState, page: usize) -> HandleR
         Ok(pm) => std::sync::Arc::new(pm),
         Err(e) => {
             return HandleResult {
-                reply: format!("Failed to load sessions: {e}"),
+                reply: if language.is_chinese() {
+                    format!("加载会话失败：{e}")
+                } else {
+                    format!("Failed to load sessions: {e}")
+                },
                 actions: vec![],
                 forward_to_session: None,
             };
@@ -553,7 +733,11 @@ async fn handle_resume_session(state: &mut BotChatState, page: usize) -> HandleR
         Ok(store) => store,
         Err(e) => {
             return HandleResult {
-                reply: format!("Failed to load sessions: {e}"),
+                reply: if language.is_chinese() {
+                    format!("加载会话失败：{e}")
+                } else {
+                    format!("Failed to load sessions: {e}")
+                },
                 actions: vec![],
                 forward_to_session: None,
             };
@@ -564,7 +748,11 @@ async fn handle_resume_session(state: &mut BotChatState, page: usize) -> HandleR
         Ok(m) => m,
         Err(e) => {
             return HandleResult {
-                reply: format!("Failed to list sessions: {e}"),
+                reply: if language.is_chinese() {
+                    format!("列出会话失败：{e}")
+                } else {
+                    format!("Failed to list sessions: {e}")
+                },
                 actions: vec![],
                 forward_to_session: None,
             };
@@ -573,10 +761,14 @@ async fn handle_resume_session(state: &mut BotChatState, page: usize) -> HandleR
 
     if all_meta.is_empty() {
         return HandleResult {
-            reply: "No sessions found in this workspace. Use /new_code_session or \
-                    /new_cowork_session to create one."
-                .to_string(),
-            actions: new_session_actions(),
+            reply: if language.is_chinese() {
+                "当前工作区没有会话。请使用 /new_code_session 或 /new_cowork_session 创建一个。"
+                    .to_string()
+            } else {
+                "No sessions found in this workspace. Use /new_code_session or /new_cowork_session to create one."
+                    .to_string()
+            },
+            actions: new_session_actions(language),
             forward_to_session: None,
         };
     }
@@ -588,23 +780,53 @@ async fn handle_resume_session(state: &mut BotChatState, page: usize) -> HandleR
     let ws_name = ws_path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "Unknown".to_string());
+        .unwrap_or_else(|| {
+            if language.is_chinese() {
+                "未知".to_string()
+            } else {
+                "Unknown".to_string()
+            }
+        });
 
-    let mut text = format!("Sessions in {} (page {}):\n\n", ws_name, page + 1);
+    let mut text = if language.is_chinese() {
+        format!("{} 中的会话（第 {} 页）：\n\n", ws_name, page + 1)
+    } else {
+        format!("Sessions in {} (page {}):\n\n", ws_name, page + 1)
+    };
     let mut options: Vec<(String, String)> = Vec::new();
     for (i, s) in sessions.iter().enumerate() {
         let is_current = state.current_session_id.as_deref() == Some(&s.session_id);
-        let marker = if is_current { " [current]" } else { "" };
+        let marker = if is_current {
+            if language.is_chinese() {
+                " [当前]"
+            } else {
+                " [current]"
+            }
+        } else {
+            ""
+        };
         let ts = chrono::DateTime::from_timestamp(s.last_active_at as i64 / 1000, 0)
             .map(|dt| dt.format("%m-%d %H:%M").to_string())
             .unwrap_or_default();
         let turn_count = s.turn_count;
         let msg_hint = if turn_count == 0 {
-            "no messages".to_string()
+            if language.is_chinese() {
+                "无消息".to_string()
+            } else {
+                "no messages".to_string()
+            }
         } else if turn_count == 1 {
-            "1 message".to_string()
+            if language.is_chinese() {
+                "1 条消息".to_string()
+            } else {
+                "1 message".to_string()
+            }
         } else {
-            format!("{turn_count} messages")
+            if language.is_chinese() {
+                format!("{turn_count} 条消息")
+            } else {
+                format!("{turn_count} messages")
+            }
         };
         text.push_str(&format!(
             "{}. [{}] {}{}\n   {} · {}\n",
@@ -618,19 +840,31 @@ async fn handle_resume_session(state: &mut BotChatState, page: usize) -> HandleR
         options.push((s.session_id.clone(), s.session_name.clone()));
     }
     if has_more {
-        text.push_str("\n0 - Next page\n");
+        text.push_str(if language.is_chinese() {
+            "\n0 - 下一页\n"
+        } else {
+            "\n0 - Next page\n"
+        });
     }
-    text.push_str("\nReply with the session number.");
+    text.push_str(if language.is_chinese() {
+        "\n请回复会话编号。"
+    } else {
+        "\nReply with the session number."
+    });
 
-    state.pending_action = Some(PendingAction::SelectSession { options, page, has_more });
+    state.pending_action = Some(PendingAction::SelectSession {
+        options,
+        page,
+        has_more,
+    });
     let mut action_labels: Vec<String> = sessions
         .iter()
         .map(|session| format!("[{}] {}", session.agent_type, session.session_name))
         .collect();
     let mut actions = numbered_actions(&action_labels);
     if has_more {
-        action_labels.push("Next Page".to_string());
-        actions.push(BotAction::secondary("Next Page", "0"));
+        action_labels.push(label_next_page(language).to_string());
+        actions.push(BotAction::secondary(label_next_page(language), "0"));
     }
     HandleResult {
         reply: text,
@@ -642,12 +876,17 @@ async fn handle_resume_session(state: &mut BotChatState, page: usize) -> HandleR
 async fn handle_new_session(state: &mut BotChatState, agent_type: &str) -> HandleResult {
     use crate::agentic::coordination::get_global_coordinator;
     use crate::agentic::core::SessionConfig;
+    let language = current_bot_language().await;
 
     let coordinator = match get_global_coordinator() {
         Some(c) => c,
         None => {
             return HandleResult {
-                reply: "BitFun session system not ready.".to_string(),
+                reply: if language.is_chinese() {
+                    "BitFun 会话系统尚未就绪。".to_string()
+                } else {
+                    "BitFun session system not ready.".to_string()
+                },
                 actions: vec![],
                 forward_to_session: None,
             };
@@ -656,13 +895,29 @@ async fn handle_new_session(state: &mut BotChatState, agent_type: &str) -> Handl
 
     let ws_path = state.current_workspace.clone();
     let session_name = match agent_type {
-        "Cowork" => "Remote Cowork Session",
-        _ => "Remote Code Session",
+        "Cowork" => {
+            if language.is_chinese() {
+                "远程协作会话"
+            } else {
+                "Remote Cowork Session"
+            }
+        }
+        _ => {
+            if language.is_chinese() {
+                "远程编码会话"
+            } else {
+                "Remote Code Session"
+            }
+        }
     };
 
     let Some(workspace_path) = ws_path.clone() else {
         return HandleResult {
-            reply: "Please select a workspace first.".to_string(),
+            reply: if language.is_chinese() {
+                "请先选择工作区。".to_string()
+            } else {
+                "Please select a workspace first.".to_string()
+            },
             actions: vec![],
             forward_to_session: None,
         };
@@ -685,23 +940,41 @@ async fn handle_new_session(state: &mut BotChatState, agent_type: &str) -> Handl
             let session_id = session.session_id.clone();
             state.current_session_id = Some(session_id.clone());
             let label = if agent_type == "Cowork" {
-                "cowork"
+                if language.is_chinese() {
+                    "协作"
+                } else {
+                    "cowork"
+                }
             } else {
-                "coding"
+                if language.is_chinese() {
+                    "编码"
+                } else {
+                    "coding"
+                }
             };
             let workspace = workspace_path.as_str();
             HandleResult {
-                reply: format!(
-                    "Created new {} session: {}\nWorkspace: {}\n\n\
-                     You can now send messages to interact with the AI agent.",
-                    label, session_name, workspace
-                ),
+                reply: if language.is_chinese() {
+                    format!(
+                        "已创建新的{}会话：{}\n工作区：{}\n\n你现在可以发送消息与 AI 助手交互。",
+                        label, session_name, workspace
+                    )
+                } else {
+                    format!(
+                        "Created new {} session: {}\nWorkspace: {}\n\nYou can now send messages to interact with the AI agent.",
+                        label, session_name, workspace
+                    )
+                },
                 actions: vec![],
                 forward_to_session: None,
             }
         }
         Err(e) => HandleResult {
-            reply: format!("Failed to create session: {e}"),
+            reply: if language.is_chinese() {
+                format!("创建会话失败：{e}")
+            } else {
+                format!("Failed to create session: {e}")
+            },
             actions: vec![],
             forward_to_session: None,
         },
@@ -709,15 +982,38 @@ async fn handle_new_session(state: &mut BotChatState, agent_type: &str) -> Handl
 }
 
 async fn handle_number_selection(state: &mut BotChatState, n: usize) -> HandleResult {
+    let language = current_bot_language().await;
     let pending = state.pending_action.take();
     match pending {
         Some(PendingAction::SelectWorkspace { options }) => {
             if n < 1 || n > options.len() {
                 state.pending_action = Some(PendingAction::SelectWorkspace { options });
                 return HandleResult {
-                    reply: format!("Invalid selection. Please enter 1-{}.", state.pending_action.as_ref()
-                        .map(|a| match a { PendingAction::SelectWorkspace { options } => options.len(), _ => 0 })
-                        .unwrap_or(0)),
+                    reply: if language.is_chinese() {
+                        format!(
+                            "无效选择。请输入 1-{}。",
+                            state
+                                .pending_action
+                                .as_ref()
+                                .map(|a| match a {
+                                    PendingAction::SelectWorkspace { options } => options.len(),
+                                    _ => 0,
+                                })
+                                .unwrap_or(0)
+                        )
+                    } else {
+                        format!(
+                            "Invalid selection. Please enter 1-{}.",
+                            state
+                                .pending_action
+                                .as_ref()
+                                .map(|a| match a {
+                                    PendingAction::SelectWorkspace { options } => options.len(),
+                                    _ => 0,
+                                })
+                                .unwrap_or(0)
+                        )
+                    },
                     actions: vec![],
                     forward_to_session: None,
                 };
@@ -738,7 +1034,11 @@ async fn handle_number_selection(state: &mut BotChatState, n: usize) -> HandleRe
                     has_more,
                 });
                 return HandleResult {
-                    reply: format!("Invalid selection. Please enter 1-{max}."),
+                    reply: if language.is_chinese() {
+                        format!("无效选择。请输入 1-{max}。")
+                    } else {
+                        format!("Invalid selection. Please enter 1-{max}.")
+                    },
                     actions: vec![],
                     forward_to_session: None,
                 };
@@ -772,12 +1072,17 @@ async fn handle_number_selection(state: &mut BotChatState, n: usize) -> HandleRe
 
 async fn select_workspace(state: &mut BotChatState, path: &str, name: &str) -> HandleResult {
     use crate::service::workspace::get_global_workspace_service;
+    let language = current_bot_language().await;
 
     let ws_service = match get_global_workspace_service() {
         Some(s) => s,
         None => {
             return HandleResult {
-                reply: "Workspace service not available.".to_string(),
+                reply: if language.is_chinese() {
+                    "工作区服务不可用。".to_string()
+                } else {
+                    "Workspace service not available.".to_string()
+                },
                 actions: vec![],
                 forward_to_session: None,
             };
@@ -800,11 +1105,11 @@ async fn select_workspace(state: &mut BotChatState, path: &str, name: &str) -> H
             info!("Bot switched workspace to: {path}");
 
             let session_count = count_workspace_sessions(path).await;
-            let reply = build_workspace_switched_reply(name, session_count);
+            let reply = build_workspace_switched_reply(language, name, session_count);
             let actions = if session_count > 0 {
-                session_entry_actions()
+                session_entry_actions(language)
             } else {
-                new_session_actions()
+                new_session_actions(language)
             };
             HandleResult {
                 reply,
@@ -813,7 +1118,11 @@ async fn select_workspace(state: &mut BotChatState, path: &str, name: &str) -> H
             }
         }
         Err(e) => HandleResult {
-            reply: format!("Failed to switch workspace: {e}"),
+            reply: if language.is_chinese() {
+                format!("切换工作区失败：{e}")
+            } else {
+                format!("Failed to switch workspace: {e}")
+            },
             actions: vec![],
             forward_to_session: None,
         },
@@ -840,22 +1149,47 @@ async fn count_workspace_sessions(workspace_path: &str) -> usize {
         .unwrap_or(0)
 }
 
-fn build_workspace_switched_reply(name: &str, session_count: usize) -> String {
-    let mut reply = format!("Switched to workspace: {name}\n\n");
-    if session_count > 0 {
-        let s = if session_count == 1 { "" } else { "s" };
-        reply.push_str(&format!(
-            "This workspace has {session_count} existing session{s}. What would you like to do?\n\n\
-             /resume_session - Resume an existing session\n\
-             /new_code_session - Start a new coding session\n\
-             /new_cowork_session - Start a new cowork session"
-        ));
+fn build_workspace_switched_reply(
+    language: BotLanguage,
+    name: &str,
+    session_count: usize,
+) -> String {
+    let mut reply = if language.is_chinese() {
+        format!("已切换到工作区：{name}\n\n")
     } else {
-        reply.push_str(
-            "No sessions found in this workspace. What would you like to do?\n\n\
-             /new_code_session - Start a new coding session\n\
-             /new_cowork_session - Start a new cowork session",
-        );
+        format!("Switched to workspace: {name}\n\n")
+    };
+    if session_count > 0 {
+        if language.is_chinese() {
+            reply.push_str(&format!(
+                "这个工作区已有 {session_count} 个会话。你想做什么？\n\n\
+                 /resume_session - 恢复已有会话\n\
+                 /new_code_session - 开始新的编码会话\n\
+                 /new_cowork_session - 开始新的协作会话"
+            ));
+        } else {
+            let s = if session_count == 1 { "" } else { "s" };
+            reply.push_str(&format!(
+                "This workspace has {session_count} existing session{s}. What would you like to do?\n\n\
+                 /resume_session - Resume an existing session\n\
+                 /new_code_session - Start a new coding session\n\
+                 /new_cowork_session - Start a new cowork session"
+            ));
+        }
+    } else {
+        if language.is_chinese() {
+            reply.push_str(
+                "这个工作区还没有会话。你想做什么？\n\n\
+                 /new_code_session - 开始新的编码会话\n\
+                 /new_cowork_session - 开始新的协作会话",
+            );
+        } else {
+            reply.push_str(
+                "No sessions found in this workspace. What would you like to do?\n\n\
+                 /new_code_session - Start a new coding session\n\
+                 /new_cowork_session - Start a new cowork session",
+            );
+        }
     }
     reply
 }
@@ -865,20 +1199,43 @@ async fn select_session(
     session_id: &str,
     session_name: &str,
 ) -> HandleResult {
+    let language = current_bot_language().await;
     state.current_session_id = Some(session_id.to_string());
     info!("Bot resumed session: {session_id}");
 
     let last_pair =
         load_last_dialog_pair_from_turns(state.current_workspace.as_deref(), session_id).await;
 
-    let mut reply = format!("Resumed session: {session_name}\n\n");
-    if let Some((user_text, assistant_text)) = last_pair {
-        reply.push_str("— Last conversation —\n");
-        reply.push_str(&format!("You: {user_text}\n\n"));
-        reply.push_str(&format!("AI: {assistant_text}\n\n"));
-        reply.push_str("You can continue the conversation.");
+    let mut reply = if language.is_chinese() {
+        format!("已恢复会话：{session_name}\n\n")
     } else {
-        reply.push_str("You can now send messages to interact with the AI agent.");
+        format!("Resumed session: {session_name}\n\n")
+    };
+    if let Some((user_text, assistant_text)) = last_pair {
+        reply.push_str(if language.is_chinese() {
+            "— 最近一次对话 —\n"
+        } else {
+            "— Last conversation —\n"
+        });
+        reply.push_str(&format!(
+            "{}: {user_text}\n\n",
+            if language.is_chinese() { "你" } else { "You" }
+        ));
+        reply.push_str(&format!(
+            "{}: {assistant_text}\n\n",
+            if language.is_chinese() { "AI" } else { "AI" }
+        ));
+        reply.push_str(if language.is_chinese() {
+            "你可以继续对话。"
+        } else {
+            "You can continue the conversation."
+        });
+    } else {
+        reply.push_str(if language.is_chinese() {
+            "你现在可以发送消息与 AI 助手交互。"
+        } else {
+            "You can now send messages to interact with the AI agent."
+        });
     }
 
     HandleResult {
@@ -979,33 +1336,43 @@ async fn handle_cancel_task(
     requested_turn_id: Option<&str>,
 ) -> HandleResult {
     use crate::service::remote_connect::remote_server::get_or_init_global_dispatcher;
+    let language = current_bot_language().await;
 
     let session_id = match state.current_session_id.clone() {
         Some(id) => id,
         None => {
             return HandleResult {
-                reply: "No active session to cancel.".to_string(),
-                actions: session_entry_actions(),
+                reply: if language.is_chinese() {
+                    "当前没有可取消的活动会话。".to_string()
+                } else {
+                    "No active session to cancel.".to_string()
+                },
+                actions: session_entry_actions(language),
                 forward_to_session: None,
             };
         }
     };
 
     let dispatcher = get_or_init_global_dispatcher();
-    match dispatcher
-        .cancel_task(&session_id, requested_turn_id)
-        .await
-    {
+    match dispatcher.cancel_task(&session_id, requested_turn_id).await {
         Ok(_) => {
             state.pending_action = None;
             HandleResult {
-                reply: "Cancellation requested for the current task.".to_string(),
+                reply: if language.is_chinese() {
+                    "已请求取消当前任务。".to_string()
+                } else {
+                    "Cancellation requested for the current task.".to_string()
+                },
                 actions: vec![],
                 forward_to_session: None,
             }
         }
         Err(e) => HandleResult {
-            reply: format!("Failed to cancel task: {e}"),
+            reply: if language.is_chinese() {
+                format!("取消任务失败：{e}")
+            } else {
+                format!("Failed to cancel task: {e}")
+            },
             actions: vec![],
             forward_to_session: None,
         },
@@ -1064,9 +1431,14 @@ async fn handle_question_reply(
     pending_answer: Option<Value>,
     message: &str,
 ) -> HandleResult {
+    let language = current_bot_language().await;
     let Some(question) = questions.get(current_index).cloned() else {
         return HandleResult {
-            reply: "Question state is invalid.".to_string(),
+            reply: if language.is_chinese() {
+                "问题状态无效。".to_string()
+            } else {
+                "Question state is invalid.".to_string()
+            },
             actions: vec![],
             forward_to_session: None,
         };
@@ -1085,7 +1457,11 @@ async fn handle_question_reply(
                 pending_answer,
             );
             return HandleResult {
-                reply: "Custom answer cannot be empty. Please type your custom answer.".to_string(),
+                reply: if language.is_chinese() {
+                    "自定义答案不能为空。请输入你的自定义答案。".to_string()
+                } else {
+                    "Custom answer cannot be empty. Please type your custom answer.".to_string()
+                },
                 actions: vec![],
                 forward_to_session: None,
             };
@@ -1119,9 +1495,17 @@ async fn handle_question_reply(
                 );
                 return HandleResult {
                     reply: if question.multi_select {
-                        "Invalid input. Reply with option numbers like `1,3`.".to_string()
+                        if language.is_chinese() {
+                            "输入无效。请回复选项编号，例如 `1,3`。".to_string()
+                        } else {
+                            "Invalid input. Reply with option numbers like `1,3`.".to_string()
+                        }
                     } else {
-                        "Invalid input. Reply with a single option number.".to_string()
+                        if language.is_chinese() {
+                            "输入无效。请回复单个选项编号。".to_string()
+                        } else {
+                            "Invalid input. Reply with a single option number.".to_string()
+                        }
                     },
                     actions: vec![],
                     forward_to_session: None,
@@ -1140,7 +1524,11 @@ async fn handle_question_reply(
                 None,
             );
             return HandleResult {
-                reply: "Please reply with a single option number.".to_string(),
+                reply: if language.is_chinese() {
+                    "请回复单个选项编号。".to_string()
+                } else {
+                    "Please reply with a single option number.".to_string()
+                },
                 actions: vec![],
                 forward_to_session: None,
             };
@@ -1152,11 +1540,9 @@ async fn handle_question_reply(
         for selection in selections {
             if selection == other_index {
                 includes_other = true;
-                labels.push(Value::String("Other".to_string()));
+                labels.push(Value::String(other_label(language).to_string()));
             } else if selection >= 1 && selection <= question.options.len() {
-                labels.push(Value::String(
-                    question.options[selection - 1].label.clone(),
-                ));
+                labels.push(Value::String(question.options[selection - 1].label.clone()));
             } else {
                 restore_question_pending_action(
                     state,
@@ -1169,7 +1555,13 @@ async fn handle_question_reply(
                 );
                 return HandleResult {
                     reply: format!(
-                        "Invalid selection. Please choose between 1 and {}.",
+                        "{} 1 {} {}。",
+                        if language.is_chinese() {
+                            "无效选择。请选择"
+                        } else {
+                            "Invalid selection. Please choose between"
+                        },
+                        if language.is_chinese() { "到" } else { "and" },
                         other_index
                     ),
                     actions: vec![],
@@ -1195,7 +1587,11 @@ async fn handle_question_reply(
                 pending_answer,
             );
             return HandleResult {
-                reply: "Please type your custom answer for `Other`.".to_string(),
+                reply: if language.is_chinese() {
+                    format!("请为“{}”输入你的自定义答案。", other_label(language))
+                } else {
+                    "Please type your custom answer for `Other`.".to_string()
+                },
                 actions: vec![],
                 forward_to_session: None,
             };
@@ -1210,6 +1606,7 @@ async fn handle_question_reply(
 
     if current_index + 1 < questions.len() {
         let prompt = build_question_prompt(
+            language,
             tool_id,
             questions,
             current_index + 1,
@@ -1245,10 +1642,17 @@ async fn handle_question_reply(
         };
     }
 
-    submit_question_answers(&tool_id, &answers).await
+    let mut result = submit_question_answers(&tool_id, &answers).await;
+    if language.is_chinese()
+        && result.reply == "Answers submitted. Waiting for the assistant to continue..."
+    {
+        result.reply = "答案已提交，等待助手继续...".to_string();
+    }
+    result
 }
 
 async fn handle_next_page(state: &mut BotChatState) -> HandleResult {
+    let language = current_bot_language().await;
     let pending = state.pending_action.take();
     match pending {
         Some(PendingAction::SelectSession { page, has_more, .. }) if has_more => {
@@ -1257,7 +1661,11 @@ async fn handle_next_page(state: &mut BotChatState) -> HandleResult {
         Some(action) => {
             state.pending_action = Some(action);
             HandleResult {
-                reply: "No more pages available.".to_string(),
+                reply: if language.is_chinese() {
+                    "没有更多页面了。".to_string()
+                } else {
+                    "No more pages available.".to_string()
+                },
                 actions: vec![],
                 forward_to_session: None,
             }
@@ -1271,6 +1679,7 @@ async fn handle_chat_message(
     message: &str,
     image_contexts: Vec<crate::agentic::image_analysis::ImageContextData>,
 ) -> HandleResult {
+    let language = current_bot_language().await;
     if let Some(PendingAction::AskUserQuestion {
         tool_id,
         questions,
@@ -1295,15 +1704,28 @@ async fn handle_chat_message(
     if let Some(pending) = state.pending_action.clone() {
         return match pending {
             PendingAction::SelectWorkspace { .. } => HandleResult {
-                reply: "Please reply with the workspace number.".to_string(),
+                reply: if language.is_chinese() {
+                    "请回复工作区编号。".to_string()
+                } else {
+                    "Please reply with the workspace number.".to_string()
+                },
                 actions: vec![],
                 forward_to_session: None,
             },
             PendingAction::SelectSession { has_more, .. } => HandleResult {
                 reply: if has_more {
-                    "Please reply with the session number, or `0` for the next page.".to_string()
+                    if language.is_chinese() {
+                        "请回复会话编号，或回复 `0` 查看下一页。".to_string()
+                    } else {
+                        "Please reply with the session number, or `0` for the next page."
+                            .to_string()
+                    }
                 } else {
-                    "Please reply with the session number.".to_string()
+                    if language.is_chinese() {
+                        "请回复会话编号。".to_string()
+                    } else {
+                        "Please reply with the session number.".to_string()
+                    }
                 },
                 actions: vec![],
                 forward_to_session: None,
@@ -1314,17 +1736,25 @@ async fn handle_chat_message(
 
     if state.current_workspace.is_none() {
         return HandleResult {
-            reply: "No workspace selected. Use /switch_workspace to select one first.".to_string(),
-            actions: workspace_required_actions(),
+            reply: if language.is_chinese() {
+                "尚未选择工作区。请先使用 /switch_workspace 选择工作区。".to_string()
+            } else {
+                "No workspace selected. Use /switch_workspace to select one first.".to_string()
+            },
+            actions: workspace_required_actions(language),
             forward_to_session: None,
         };
     }
     if state.current_session_id.is_none() {
         return HandleResult {
-            reply: "No active session. Use /resume_session to resume one or \
-                    /new_code_session /new_cowork_session to create a new one."
-                .to_string(),
-            actions: session_entry_actions(),
+            reply: if language.is_chinese() {
+                "当前没有活动会话。请使用 /resume_session 恢复已有会话，或使用 /new_code_session /new_cowork_session 创建新会话。"
+                    .to_string()
+            } else {
+                "No active session. Use /resume_session to resume one or /new_code_session /new_cowork_session to create a new one."
+                    .to_string()
+            },
+            actions: session_entry_actions(language),
             forward_to_session: None,
         };
     }
@@ -1334,10 +1764,19 @@ async fn handle_chat_message(
     let cancel_command = format!("/cancel_task {}", turn_id);
     HandleResult {
         reply: format!(
-            "Processing your message...\n\nIf needed, send `{}` to stop this request.",
-            cancel_command
+            "{}\n\n{}",
+            if language.is_chinese() {
+                "正在处理你的消息..."
+            } else {
+                "Processing your message..."
+            },
+            if language.is_chinese() {
+                format!("如需停止本次请求，请发送 `{}`。", cancel_command)
+            } else {
+                format!("If needed, send `{}` to stop this request.", cancel_command)
+            }
         ),
-        actions: cancel_task_actions(cancel_command),
+        actions: cancel_task_actions(language, cancel_command),
         forward_to_session: Some(ForwardRequest {
             session_id,
             content: message.to_string(),
@@ -1366,6 +1805,7 @@ pub async fn execute_forwarded_turn(
     use crate::service::remote_connect::remote_server::{
         get_or_init_global_dispatcher, TrackerEvent,
     };
+    let language = current_bot_language().await;
 
     let dispatcher = get_or_init_global_dispatcher();
 
@@ -1379,18 +1819,22 @@ pub async fn execute_forwarded_turn(
             Some(&forward.agent_type),
             forward.image_contexts,
             DialogTriggerSource::Bot,
-            Some(forward.turn_id),
+            Some(forward.turn_id.clone()),
         )
         .await
     {
-        let msg = format!("Failed to send message: {e}");
+        let msg = if language.is_chinese() {
+            format!("发送消息失败：{e}")
+        } else {
+            format!("Failed to send message: {e}")
+        };
         return ForwardedTurnResult {
             display_text: msg.clone(),
             full_text: msg,
         };
     }
 
-    let result = tokio::time::timeout(std::time::Duration::from_secs(300), async {
+    let result = tokio::time::timeout(std::time::Duration::from_secs(3600), async {
         let mut response = String::new();
         loop {
             match event_rx.recv().await {
@@ -1409,6 +1853,7 @@ pub async fn execute_forwarded_turn(
                                 serde_json::from_value::<Vec<BotQuestion>>(questions_value)
                             {
                                 let request = build_question_prompt(
+                                    language,
                                     tool_id,
                                     questions,
                                     0,
@@ -1424,14 +1869,22 @@ pub async fn execute_forwarded_turn(
                     }
                     TrackerEvent::TurnCompleted => break,
                     TrackerEvent::TurnFailed(e) => {
-                        let msg = format!("Error: {e}");
+                        let msg = if language.is_chinese() {
+                            format!("错误：{e}")
+                        } else {
+                            format!("Error: {e}")
+                        };
                         return ForwardedTurnResult {
                             display_text: msg.clone(),
                             full_text: msg,
                         };
                     }
                     TrackerEvent::TurnCancelled => {
-                        let msg = "Task was cancelled.".to_string();
+                        let msg = if language.is_chinese() {
+                            "任务已取消。".to_string()
+                        } else {
+                            "Task was cancelled.".to_string()
+                        };
                         return ForwardedTurnResult {
                             display_text: msg.clone(),
                             full_text: msg,
@@ -1452,7 +1905,11 @@ pub async fn execute_forwarded_turn(
         // response — it is maintained directly from AgenticEvent and is not
         // subject to broadcast channel lag.
         let full_text = tracker.accumulated_text();
-        let full_text = if full_text.is_empty() { response } else { full_text };
+        let full_text = if full_text.is_empty() {
+            response
+        } else {
+            full_text
+        };
 
         let mut display_text = full_text.clone();
         const MAX_BOT_MSG_LEN: usize = 4000;
@@ -1467,7 +1924,11 @@ pub async fn execute_forwarded_turn(
 
         ForwardedTurnResult {
             display_text: if display_text.is_empty() {
-                "(No response)".to_string()
+                if language.is_chinese() {
+                    "（无回复）".to_string()
+                } else {
+                    "(No response)".to_string()
+                }
             } else {
                 display_text
             },
@@ -1477,7 +1938,11 @@ pub async fn execute_forwarded_turn(
     .await;
 
     result.unwrap_or_else(|_| ForwardedTurnResult {
-        display_text: "Response timed out after 5 minutes.".to_string(),
+        display_text: if language.is_chinese() {
+            "等待 1 小时后响应超时。".to_string()
+        } else {
+            "Response timed out after 1 hour.".to_string()
+        },
         full_text: String::new(),
     })
 }

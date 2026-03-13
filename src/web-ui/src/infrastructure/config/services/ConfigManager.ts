@@ -8,6 +8,7 @@ import {
 import { configAPI } from '@/infrastructure/api';
 import { i18nService } from '@/infrastructure/i18n';
 import { createLogger } from '@/shared/utils/logger';
+import { extractProviderSegmentFromBaseUrl, matchProviderCatalogItemByBaseUrl } from './providerCatalog';
 
 const log = createLogger('ConfigManager');
 
@@ -21,6 +22,49 @@ class ConfigManagerImpl implements IConfigManager {
     log.info('Initializing config manager (proxy mode)');
   }
 
+  private async migrateLegacyAiModelsIfNeeded(config: unknown): Promise<unknown> {
+    if (!Array.isArray(config)) {
+      return config;
+    }
+
+    let migratedCount = 0;
+    const migratedModels = config.map(item => {
+      if (!item || typeof item !== 'object') {
+        return item;
+      }
+
+      const model = item as Record<string, unknown>;
+      const currentName = typeof model.name === 'string' ? model.name.trim() : '';
+      if (currentName) {
+        return item;
+      }
+
+      const baseUrl = typeof model.base_url === 'string' ? model.base_url : '';
+      const matchedProvider = matchProviderCatalogItemByBaseUrl(baseUrl);
+      const inferredProviderName = matchedProvider
+        ? i18nService.t(`settings/ai-model:providers.${matchedProvider.id}.name`)
+        : extractProviderSegmentFromBaseUrl(baseUrl);
+
+      if (!inferredProviderName) {
+        return item;
+      }
+
+      migratedCount += 1;
+      return {
+        ...model,
+        name: inferredProviderName,
+      };
+    });
+
+    if (migratedCount === 0) {
+      return config;
+    }
+
+    await configAPI.setConfig('ai.models', migratedModels);
+    log.info('Migrated legacy ai.models provider names', { migratedCount });
+    return migratedModels;
+  }
+
   
 
   async getConfig<T = any>(path?: string): Promise<T> {
@@ -32,13 +76,16 @@ class ConfigManagerImpl implements IConfigManager {
 
       
       const config = await configAPI.getConfig(path);
+      const resolvedConfig = path === 'ai.models'
+        ? await this.migrateLegacyAiModelsIfNeeded(config)
+        : config;
 
       
       if (path) {
-        this.configCache.set(path, config);
+        this.configCache.set(path, resolvedConfig);
       }
       
-      return config;
+      return resolvedConfig as T;
     } catch (error) {
       log.error('Failed to get config', { path, error });
       // Return defaults to avoid breaking the UI.

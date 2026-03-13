@@ -44,7 +44,10 @@ impl JsWorker {
         let stderr = child.stderr.take().ok_or("No stderr")?;
         let _stdout = child.stdout.take();
 
-        let pending = Arc::new(Mutex::new(HashMap::<String, oneshot::Sender<Result<Value, String>>>::new()));
+        let pending = Arc::new(Mutex::new(HashMap::<
+            String,
+            oneshot::Sender<Result<Value, String>>,
+        >::new()));
         let last_activity = Arc::new(AtomicI64::new(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -61,14 +64,15 @@ impl JsWorker {
                 if line.is_empty() {
                     continue;
                 }
-                let _ = last_activity_clone.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_| {
-                    Some(
-                        std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_millis() as i64,
-                    )
-                });
+                let _ =
+                    last_activity_clone.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_| {
+                        Some(
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_millis() as i64,
+                        )
+                    });
                 let msg: Value = match serde_json::from_str(&line) {
                     Ok(v) => v,
                     Err(_) => continue,
@@ -76,10 +80,15 @@ impl JsWorker {
                 let id = msg.get("id").and_then(Value::as_str).map(String::from);
                 if let Some(id) = id {
                     let result = if let Some(err) = msg.get("error") {
-                        let msg = err.get("message").and_then(Value::as_str).unwrap_or("RPC error");
+                        let msg = err
+                            .get("message")
+                            .and_then(Value::as_str)
+                            .unwrap_or("RPC error");
                         Err(msg.to_string())
                     } else {
-                        msg.get("result").cloned().ok_or_else(|| "Missing result".to_string())
+                        msg.get("result")
+                            .cloned()
+                            .ok_or_else(|| "Missing result".to_string())
                     };
                     let mut guard = pending_clone.lock().await;
                     if let Some(tx) = guard.remove(&id) {
@@ -98,7 +107,12 @@ impl JsWorker {
     }
 
     /// Send a JSON-RPC request and wait for the response (with timeout).
-    pub async fn call(&self, method: &str, params: Value, timeout_ms: u64) -> Result<Value, String> {
+    pub async fn call(
+        &self,
+        method: &str,
+        params: Value,
+        timeout_ms: u64,
+    ) -> Result<Value, String> {
         let id = format!("rpc-{}", uuid::Uuid::new_v4());
         let request = serde_json::json!({
             "jsonrpc": "2.0",
@@ -124,7 +138,10 @@ impl JsWorker {
         let mut stdin_guard = self.stdin.lock().await;
         let stdin = stdin_guard.as_mut().ok_or("Worker stdin closed")?;
         use tokio::io::AsyncWriteExt;
-        stdin.write_all(line.as_bytes()).await.map_err(|e| e.to_string())?;
+        stdin
+            .write_all(line.as_bytes())
+            .await
+            .map_err(|e| e.to_string())?;
         stdin.flush().await.map_err(|e| e.to_string())?;
         drop(stdin_guard);
 

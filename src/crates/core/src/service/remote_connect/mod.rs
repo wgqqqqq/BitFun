@@ -201,10 +201,9 @@ impl RemoteConnectService {
         message: String,
     ) {
         let server = RemoteServer::new(*shared_secret);
-        if let Ok((enc, nonce)) = server.encrypt_response(
-            &remote_server::RemoteResponse::Error { message },
-            None,
-        ) {
+        if let Ok((enc, nonce)) =
+            server.encrypt_response(&remote_server::RemoteResponse::Error { message }, None)
+        {
             if let Some(ref client) = *relay_arc.read().await {
                 let _ = client
                     .send_relay_response(correlation_id, &enc, &nonce)
@@ -375,7 +374,13 @@ impl RemoteConnectService {
             _ => self.config.web_app_url.clone(),
         };
 
-        let qr_url = QrGenerator::build_url(&qr_payload, &web_app_url);
+        let client_language = if let Some(service) = crate::service::get_global_i18n_service().await
+        {
+            service.get_current_locale().await.as_str().to_string()
+        } else {
+            crate::service::LocaleId::ZhCN.as_str().to_string()
+        };
+        let qr_url = QrGenerator::build_url(&qr_payload, &web_app_url, &client_language);
         let qr_svg = QrGenerator::generate_svg_from_url(&qr_url)?;
         let qr_data = QrGenerator::generate_png_base64_from_url(&qr_url)?;
 
@@ -407,9 +412,7 @@ impl RemoteConnectService {
                                     {
                                         if let Some(ref client) = *relay_arc.read().await {
                                             let _ = client
-                                                .send_relay_response(
-                                                    &correlation_id, &enc, &nonce,
-                                                )
+                                                .send_relay_response(&correlation_id, &enc, &nonce)
                                                 .await;
                                         }
                                     }
@@ -438,9 +441,7 @@ impl RemoteConnectService {
                                             .encrypt_response(&response, request_id.as_deref())
                                         {
                                             Ok((enc, resp_nonce)) => {
-                                                if let Some(ref client) =
-                                                    *relay_arc.read().await
-                                                {
+                                                if let Some(ref client) = *relay_arc.read().await {
                                                     let _ = client
                                                         .send_relay_response(
                                                             &correlation_id,
@@ -646,8 +647,7 @@ impl RemoteConnectService {
                             }
                         });
 
-                        *self.bot_telegram_handle.write().await =
-                            Some(BotHandle { stop_tx });
+                        *self.bot_telegram_handle.write().await = Some(BotHandle { stop_tx });
 
                         "https://t.me/BotFather".to_string()
                     }
@@ -667,12 +667,11 @@ impl RemoteConnectService {
                             handle.stop();
                         }
 
-                        let fs_bot = Arc::new(bot::feishu::FeishuBot::new(
-                            bot::feishu::FeishuConfig {
+                        let fs_bot =
+                            Arc::new(bot::feishu::FeishuBot::new(bot::feishu::FeishuConfig {
                                 app_id: app_id.clone(),
                                 app_secret: app_secret.clone(),
-                            },
-                        ));
+                            }));
                         fs_bot.register_pairing(&pairing_code).await?;
 
                         let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
@@ -756,8 +755,7 @@ impl RemoteConnectService {
 
                 let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
                 *self.telegram_bot.write().await = Some(tg_bot.clone());
-                *self.bot_connected_info.write().await =
-                    Some(format!("Telegram({chat_id})"));
+                *self.bot_connected_info.write().await = Some(format!("Telegram({chat_id})"));
 
                 let bot_for_loop = tg_bot.clone();
                 tokio::spawn(async move {
@@ -776,12 +774,10 @@ impl RemoteConnectService {
                     handle.stop();
                 }
 
-                let fs_bot = Arc::new(bot::feishu::FeishuBot::new(
-                    bot::feishu::FeishuConfig {
-                        app_id: app_id.clone(),
-                        app_secret: app_secret.clone(),
-                    },
-                ));
+                let fs_bot = Arc::new(bot::feishu::FeishuBot::new(bot::feishu::FeishuConfig {
+                    app_id: app_id.clone(),
+                    app_secret: app_secret.clone(),
+                }));
 
                 fs_bot
                     .restore_chat_state(&saved.chat_id, saved.chat_state.clone())
@@ -791,8 +787,7 @@ impl RemoteConnectService {
                 *self.feishu_bot.write().await = Some(fs_bot.clone());
 
                 let cid = saved.chat_id.clone();
-                *self.bot_connected_info.write().await =
-                    Some(format!("Feishu({cid})"));
+                *self.bot_connected_info.write().await = Some(format!("Feishu({cid})"));
 
                 let bot_for_loop = fs_bot.clone();
                 tokio::spawn(async move {
@@ -962,9 +957,10 @@ async fn upload_mobile_web(relay_url: &str, room_id: &str, web_dir: &str) -> Res
 
     match check_result {
         Ok(resp) if resp.status().is_success() => {
-            let body: serde_json::Value = resp.json().await.map_err(|e| {
-                anyhow::anyhow!("parse check-web-files response: {e}")
-            })?;
+            let body: serde_json::Value = resp
+                .json()
+                .await
+                .map_err(|e| anyhow::anyhow!("parse check-web-files response: {e}"))?;
             let needed: Vec<String> = body["needed"]
                 .as_array()
                 .map(|arr| {
@@ -977,9 +973,7 @@ async fn upload_mobile_web(relay_url: &str, room_id: &str, web_dir: &str) -> Res
             let existing = body["existing_count"].as_u64().unwrap_or(0);
             let total = body["total_count"].as_u64().unwrap_or(0);
             if needed.is_empty() {
-                info!(
-                    "All {total} files already exist on relay server, no upload needed"
-                );
+                info!("All {total} files already exist on relay server, no upload needed");
                 return Ok(());
             }
 
@@ -1017,8 +1011,7 @@ async fn upload_needed_files(
     use base64::{engine::general_purpose::STANDARD as B64, Engine};
     use std::collections::HashMap;
 
-    let needed_set: std::collections::HashSet<&str> =
-        needed.iter().map(|s| s.as_str()).collect();
+    let needed_set: std::collections::HashSet<&str> = needed.iter().map(|s| s.as_str()).collect();
 
     let mut files_payload: Vec<(String, serde_json::Value, usize)> = Vec::new();
     for f in all_files {

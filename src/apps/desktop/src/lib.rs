@@ -26,7 +26,6 @@ use api::ai_rules_api::*;
 use api::clipboard_file_api::*;
 use api::commands::*;
 use api::config_api::*;
-use api::session_api::*;
 use api::diff_api::*;
 use api::git_agent_api::*;
 use api::git_api::*;
@@ -35,6 +34,7 @@ use api::lsp_api::*;
 use api::lsp_workspace_api::*;
 use api::mcp_api::*;
 use api::runtime_api::*;
+use api::session_api::*;
 use api::skill_api::*;
 use api::snapshot_service::*;
 use api::startchat_agent_api::*;
@@ -326,6 +326,7 @@ pub async fn run() {
             get_statistics,
             test_ai_connection,
             test_ai_config_connection,
+            list_ai_models_by_config,
             initialize_ai,
             set_agent_model,
             get_agent_models,
@@ -716,10 +717,10 @@ async fn init_agentic_system() -> anyhow::Result<(
             .map_err(|e| anyhow::anyhow!("Failed to initialize token usage service: {}", e))?,
     );
     let token_usage_subscriber = Arc::new(
-        bitfun_core::service::token_usage::TokenUsageSubscriber::new(token_usage_service.clone())
+        bitfun_core::service::token_usage::TokenUsageSubscriber::new(token_usage_service.clone()),
     );
     event_router.subscribe_internal("token_usage".to_string(), token_usage_subscriber);
-    
+
     log::info!("Token usage service initialized and subscriber registered");
 
     // Create the DialogScheduler and wire up the outcome notification channel
@@ -839,7 +840,10 @@ fn init_services(app_handle: tauri::AppHandle, default_log_level: log::LevelFilt
             .set_event_emitter(emitter.clone())
             .await
         {
-            log::error!("Failed to initialize workspace identity watch service: {}", e);
+            log::error!(
+                "Failed to initialize workspace identity watch service: {}",
+                e
+            );
         }
 
         if let Err(e) = service::lsp::initialize_global_lsp_manager().await {

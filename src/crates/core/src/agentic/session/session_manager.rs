@@ -3,8 +3,8 @@
 //! Responsible for session CRUD, lifecycle management, and resource association
 
 use crate::agentic::core::{
-    CompressionState, DialogTurn, Message, ProcessingPhase, Session,
-    SessionConfig, SessionState, SessionSummary, TurnStats,
+    CompressionState, DialogTurn, Message, ProcessingPhase, Session, SessionConfig, SessionState,
+    SessionSummary, TurnStats,
 };
 use crate::agentic::image_analysis::ImageContextData;
 use crate::agentic::persistence::PersistenceManager;
@@ -131,7 +131,8 @@ impl SessionManager {
                 .join("\n\n");
 
             if !assistant_text.trim().is_empty() {
-                messages.push(Message::assistant(assistant_text).with_turn_id(turn.turn_id.clone()));
+                messages
+                    .push(Message::assistant(assistant_text).with_turn_id(turn.turn_id.clone()));
             }
         }
 
@@ -325,9 +326,10 @@ impl SessionManager {
         }
 
         if self.config.enable_persistence {
-            if let (Some(workspace_path), Some(session)) =
-                (self.session_workspace_path(session_id), self.sessions.get(session_id))
-            {
+            if let (Some(workspace_path), Some(session)) = (
+                self.session_workspace_path(session_id),
+                self.sessions.get(session_id),
+            ) {
                 self.persistence_manager
                     .save_session(&workspace_path, &session)
                     .await?;
@@ -342,6 +344,42 @@ impl SessionManager {
         Ok(())
     }
 
+    /// Update session model id (in-memory + persistence)
+    pub async fn update_session_model_id(
+        &self,
+        session_id: &str,
+        model_id: &str,
+    ) -> BitFunResult<()> {
+        if let Some(mut session) = self.sessions.get_mut(session_id) {
+            session.config.model_id = Some(model_id.to_string());
+            session.updated_at = SystemTime::now();
+            session.last_activity_at = SystemTime::now();
+        } else {
+            return Err(BitFunError::NotFound(format!(
+                "Session not found: {}",
+                session_id
+            )));
+        }
+
+        if self.config.enable_persistence {
+            if let (Some(workspace_path), Some(session)) = (
+                self.session_workspace_path(session_id),
+                self.sessions.get(session_id),
+            ) {
+                self.persistence_manager
+                    .save_session(&workspace_path, &session)
+                    .await?;
+            }
+        }
+
+        debug!(
+            "Session model id updated: session_id={}, model_id={}",
+            session_id, model_id
+        );
+
+        Ok(())
+    }
+
     /// Update session activity time
     pub fn touch_session(&self, session_id: &str) {
         if let Some(mut session) = self.sessions.get_mut(session_id) {
@@ -350,7 +388,11 @@ impl SessionManager {
     }
 
     /// Delete session (cascade delete all resources)
-    pub async fn delete_session(&self, workspace_path: &Path, session_id: &str) -> BitFunResult<()> {
+    pub async fn delete_session(
+        &self,
+        workspace_path: &Path,
+        session_id: &str,
+    ) -> BitFunResult<()> {
         // 1. Clean up snapshot system resources (including physical snapshot files)
         if let Ok(snapshot_manager) = ensure_snapshot_manager_for_workspace(workspace_path) {
             let snapshot_service = snapshot_manager.get_snapshot_service();
@@ -400,7 +442,11 @@ impl SessionManager {
     }
 
     /// Restore session (from persistent storage)
-    pub async fn restore_session(&self, workspace_path: &Path, session_id: &str) -> BitFunResult<Session> {
+    pub async fn restore_session(
+        &self,
+        workspace_path: &Path,
+        session_id: &str,
+    ) -> BitFunResult<Session> {
         // Check if session is already in memory
         let session_already_in_memory = self.sessions.contains_key(session_id);
 
@@ -432,9 +478,10 @@ impl SessionManager {
                 latest_turn_index = Some(turn_index);
                 msgs
             }
-            None => self
-                .rebuild_messages_from_turns(workspace_path, session_id)
-                .await?,
+            None => {
+                self.rebuild_messages_from_turns(workspace_path, session_id)
+                    .await?
+            }
         };
 
         if messages.is_empty() {
@@ -602,12 +649,13 @@ impl SessionManager {
         let session = self
             .get_session(session_id)
             .ok_or_else(|| BitFunError::NotFound(format!("Session not found: {}", session_id)))?;
-        let workspace_path = Self::session_workspace_from_config(&session.config).ok_or_else(|| {
-            BitFunError::Validation(format!(
-                "Session workspace_path is missing: {}",
-                session_id
-            ))
-        })?;
+        let workspace_path =
+            Self::session_workspace_from_config(&session.config).ok_or_else(|| {
+                BitFunError::Validation(format!(
+                    "Session workspace_path is missing: {}",
+                    session_id
+                ))
+            })?;
 
         let turn_index = session.dialog_turn_ids.len();
         // Pass frontend's turnId
@@ -706,10 +754,12 @@ impl SessionManager {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        let has_assistant_text = turn
-            .model_rounds
-            .iter()
-            .any(|round| round.text_items.iter().any(|item| !item.content.trim().is_empty()));
+        let has_assistant_text = turn.model_rounds.iter().any(|round| {
+            round
+                .text_items
+                .iter()
+                .any(|item| !item.content.trim().is_empty())
+        });
         if !has_assistant_text && !final_response.trim().is_empty() {
             let round_index = turn.model_rounds.len();
             turn.model_rounds.push(ModelRoundData {

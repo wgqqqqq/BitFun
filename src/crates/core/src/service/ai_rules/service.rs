@@ -353,7 +353,10 @@ impl AIRulesService {
         Ok(Self::calculate_stats(&rules))
     }
 
-    async fn load_project_rules_for_workspace(&self, workspace: &Path) -> BitFunResult<Vec<AIRule>> {
+    async fn load_project_rules_for_workspace(
+        &self,
+        workspace: &Path,
+    ) -> BitFunResult<Vec<AIRule>> {
         let mut all_rules = Vec::new();
         let mut loaded_names = std::collections::HashSet::new();
 
@@ -456,10 +459,16 @@ The rules section has a number of possible rules/memories/context that you shoul
         prompt
     }
 
-    pub async fn build_system_prompt_for(&self, workspace_root: Option<&Path>) -> BitFunResult<String> {
+    pub async fn build_system_prompt_for(
+        &self,
+        workspace_root: Option<&Path>,
+    ) -> BitFunResult<String> {
         let user_rules = self.user_rules.read().await.clone();
         let project_rules = match workspace_root {
-            Some(workspace_root) => self.load_project_rules_for_workspace(workspace_root).await?,
+            Some(workspace_root) => {
+                self.load_project_rules_for_workspace(workspace_root)
+                    .await?
+            }
             None => Vec::new(),
         };
 
@@ -485,7 +494,10 @@ The rules section has a number of possible rules/memories/context that you shoul
         let project_rules = match self.load_project_rules_for_workspace(workspace_path).await {
             Ok(rules) => rules,
             Err(e) => {
-                warn!("Failed to load project rules for file '{}': {}", file_path, e);
+                warn!(
+                    "Failed to load project rules for file '{}': {}",
+                    file_path, e
+                );
                 return FileRulesResult {
                     matched_count: 0,
                     formatted_content: None,

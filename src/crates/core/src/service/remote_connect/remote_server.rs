@@ -1529,6 +1529,7 @@ impl RemoteExecutionDispatcher {
                 .start_dialog_turn(
                     session_id.to_string(),
                     content.clone(),
+                    None,
                     Some(turn_id.clone()),
                     resolved_agent_type,
                     binding_workspace.clone(),
@@ -1541,6 +1542,7 @@ impl RemoteExecutionDispatcher {
                 .start_dialog_turn_with_image_contexts(
                     session_id.to_string(),
                     content.clone(),
+                    None,
                     image_contexts,
                     Some(turn_id.clone()),
                     resolved_agent_type,

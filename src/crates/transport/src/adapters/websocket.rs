@@ -1,13 +1,12 @@
 /// WebSocket transport adapter
 ///
 /// Used for Web Server version, pushes events to browser via WebSocket
-
 use crate::traits::{TextChunk, ToolEventPayload, TransportAdapter};
 use async_trait::async_trait;
+use bitfun_events::AgenticEvent;
 use serde_json::json;
 use std::fmt;
 use tokio::sync::mpsc;
-use bitfun_events::AgenticEvent;
 
 /// WebSocket message type
 #[derive(Debug, Clone)]
@@ -28,13 +27,13 @@ impl WebSocketTransportAdapter {
     pub fn new(tx: mpsc::UnboundedSender<WsMessage>) -> Self {
         Self { tx }
     }
-    
+
     /// Send JSON message
     fn send_json(&self, value: serde_json::Value) -> anyhow::Result<()> {
         let json_str = serde_json::to_string(&value)?;
-        self.tx.send(WsMessage::Text(json_str)).map_err(|e| {
-            anyhow::anyhow!("Failed to send WebSocket message: {}", e)
-        })?;
+        self.tx
+            .send(WsMessage::Text(json_str))
+            .map_err(|e| anyhow::anyhow!("Failed to send WebSocket message: {}", e))?;
         Ok(())
     }
 }
@@ -51,7 +50,12 @@ impl fmt::Debug for WebSocketTransportAdapter {
 impl TransportAdapter for WebSocketTransportAdapter {
     async fn emit_event(&self, _session_id: &str, event: AgenticEvent) -> anyhow::Result<()> {
         let message = match event {
-            AgenticEvent::ImageAnalysisStarted { session_id, image_count, user_input, image_metadata } => {
+            AgenticEvent::ImageAnalysisStarted {
+                session_id,
+                image_count,
+                user_input,
+                image_metadata,
+            } => {
                 json!({
                     "type": "image-analysis-started",
                     "sessionId": session_id,
@@ -60,7 +64,11 @@ impl TransportAdapter for WebSocketTransportAdapter {
                     "imageMetadata": image_metadata,
                 })
             }
-            AgenticEvent::ImageAnalysisCompleted { session_id, success, duration_ms } => {
+            AgenticEvent::ImageAnalysisCompleted {
+                session_id,
+                success,
+                duration_ms,
+            } => {
                 json!({
                     "type": "image-analysis-completed",
                     "sessionId": session_id,
@@ -68,7 +76,14 @@ impl TransportAdapter for WebSocketTransportAdapter {
                     "durationMs": duration_ms,
                 })
             }
-            AgenticEvent::DialogTurnStarted { session_id, turn_id, turn_index, original_user_input, user_message_metadata, .. } => {
+            AgenticEvent::DialogTurnStarted {
+                session_id,
+                turn_id,
+                turn_index,
+                original_user_input,
+                user_message_metadata,
+                ..
+            } => {
                 json!({
                     "type": "dialog-turn-started",
                     "sessionId": session_id,
@@ -78,7 +93,12 @@ impl TransportAdapter for WebSocketTransportAdapter {
                     "userMessageMetadata": user_message_metadata,
                 })
             }
-            AgenticEvent::ModelRoundStarted { session_id, turn_id, round_id, .. } => {
+            AgenticEvent::ModelRoundStarted {
+                session_id,
+                turn_id,
+                round_id,
+                ..
+            } => {
                 json!({
                     "type": "model-round-started",
                     "sessionId": session_id,
@@ -86,7 +106,13 @@ impl TransportAdapter for WebSocketTransportAdapter {
                     "roundId": round_id,
                 })
             }
-            AgenticEvent::TextChunk { session_id, turn_id, round_id, text, .. } => {
+            AgenticEvent::TextChunk {
+                session_id,
+                turn_id,
+                round_id,
+                text,
+                ..
+            } => {
                 json!({
                     "type": "text-chunk",
                     "sessionId": session_id,
@@ -95,7 +121,12 @@ impl TransportAdapter for WebSocketTransportAdapter {
                     "text": text,
                 })
             }
-            AgenticEvent::ToolEvent { session_id, turn_id, tool_event, .. } => {
+            AgenticEvent::ToolEvent {
+                session_id,
+                turn_id,
+                tool_event,
+                ..
+            } => {
                 json!({
                     "type": "tool-event",
                     "sessionId": session_id,
@@ -103,7 +134,11 @@ impl TransportAdapter for WebSocketTransportAdapter {
                     "toolEvent": tool_event,
                 })
             }
-            AgenticEvent::DialogTurnCompleted { session_id, turn_id, .. } => {
+            AgenticEvent::DialogTurnCompleted {
+                session_id,
+                turn_id,
+                ..
+            } => {
                 json!({
                     "type": "dialog-turn-completed",
                     "sessionId": session_id,
@@ -112,11 +147,11 @@ impl TransportAdapter for WebSocketTransportAdapter {
             }
             _ => return Ok(()),
         };
-        
+
         self.send_json(message)?;
         Ok(())
     }
-    
+
     async fn emit_text_chunk(&self, _session_id: &str, chunk: TextChunk) -> anyhow::Result<()> {
         self.send_json(json!({
             "type": "text-chunk",
@@ -128,8 +163,12 @@ impl TransportAdapter for WebSocketTransportAdapter {
         }))?;
         Ok(())
     }
-    
-    async fn emit_tool_event(&self, _session_id: &str, event: ToolEventPayload) -> anyhow::Result<()> {
+
+    async fn emit_tool_event(
+        &self,
+        _session_id: &str,
+        event: ToolEventPayload,
+    ) -> anyhow::Result<()> {
         self.send_json(json!({
             "type": "tool-event",
             "sessionId": event.session_id,
@@ -146,8 +185,13 @@ impl TransportAdapter for WebSocketTransportAdapter {
         }))?;
         Ok(())
     }
-    
-    async fn emit_stream_start(&self, session_id: &str, turn_id: &str, round_id: &str) -> anyhow::Result<()> {
+
+    async fn emit_stream_start(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        round_id: &str,
+    ) -> anyhow::Result<()> {
         self.send_json(json!({
             "type": "stream-start",
             "sessionId": session_id,
@@ -156,8 +200,13 @@ impl TransportAdapter for WebSocketTransportAdapter {
         }))?;
         Ok(())
     }
-    
-    async fn emit_stream_end(&self, session_id: &str, turn_id: &str, round_id: &str) -> anyhow::Result<()> {
+
+    async fn emit_stream_end(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        round_id: &str,
+    ) -> anyhow::Result<()> {
         self.send_json(json!({
             "type": "stream-end",
             "sessionId": session_id,
@@ -166,15 +215,19 @@ impl TransportAdapter for WebSocketTransportAdapter {
         }))?;
         Ok(())
     }
-    
-    async fn emit_generic(&self, event_name: &str, payload: serde_json::Value) -> anyhow::Result<()> {
+
+    async fn emit_generic(
+        &self,
+        event_name: &str,
+        payload: serde_json::Value,
+    ) -> anyhow::Result<()> {
         self.send_json(json!({
             "type": event_name,
             "payload": payload,
         }))?;
         Ok(())
     }
-    
+
     fn adapter_type(&self) -> &str {
         "websocket"
     }

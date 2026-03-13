@@ -1,13 +1,14 @@
+use crate::agent::{
+    agentic_system::AgenticSystem, core_adapter::CoreAgentAdapter, Agent, AgentEvent,
+};
+use crate::config::CliConfig;
 /// Exec mode implementation
-/// 
+///
 /// Single command execution mode
-
 use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use crate::config::CliConfig;
-use crate::agent::{Agent, AgentEvent, core_adapter::CoreAgentAdapter, agentic_system::AgenticSystem};
 
 pub struct ExecMode {
     #[allow(dead_code)]
@@ -21,8 +22,8 @@ pub struct ExecMode {
 
 impl ExecMode {
     pub fn new(
-        config: CliConfig, 
-        message: String, 
+        config: CliConfig,
+        message: String,
         agent_type: String,
         agentic_system: &AgenticSystem,
         workspace_path: Option<PathBuf>,
@@ -35,7 +36,7 @@ impl ExecMode {
             agentic_system.event_queue.clone(),
             workspace_path.clone(),
         )) as Arc<dyn Agent>;
-        
+
         Self {
             config,
             message,
@@ -44,22 +45,22 @@ impl ExecMode {
             output_patch,
         }
     }
-    
+
     fn get_git_diff(&self) -> Option<String> {
         let workspace = self.workspace_path.as_ref()?;
-        
+
         let git_dir = workspace.join(".git");
         if !git_dir.exists() {
             eprintln!("Warning: Workspace is not a git repository, cannot generate patch");
             return None;
         }
-        
+
         let output = bitfun_core::util::process_manager::create_command("git")
             .args(["diff", "--no-color"])
             .current_dir(workspace)
             .output()
             .ok()?;
-        
+
         if output.status.success() {
             Some(String::from_utf8_lossy(&output.stdout).to_string())
         } else {
@@ -69,7 +70,11 @@ impl ExecMode {
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        tracing::info!("Executing command, Agent: {}, Message: {}", self.agent.name(), self.message);
+        tracing::info!(
+            "Executing command, Agent: {}, Message: {}",
+            self.agent.name(),
+            self.message
+        );
 
         println!("Executing: {}", self.message);
         println!();
@@ -90,13 +95,23 @@ impl ExecMode {
                     use std::io::Write;
                     std::io::stdout().flush().ok();
                 }
-                AgentEvent::ToolCallStart { tool_name, parameters: _ } => {
+                AgentEvent::ToolCallStart {
+                    tool_name,
+                    parameters: _,
+                } => {
                     println!("\nTool call: {}", tool_name);
                 }
-                AgentEvent::ToolCallProgress { tool_name: _, message } => {
+                AgentEvent::ToolCallProgress {
+                    tool_name: _,
+                    message,
+                } => {
                     println!("   In progress: {}", message);
                 }
-                AgentEvent::ToolCallComplete { tool_name, result, success } => {
+                AgentEvent::ToolCallComplete {
+                    tool_name,
+                    result,
+                    success,
+                } => {
                     if success {
                         println!("   [+] {}: {}", tool_name, result);
                     } else {
@@ -115,13 +130,16 @@ impl ExecMode {
         }
 
         let result = handle.await;
-        
+
         match result {
             Ok(Ok(response)) => {
                 if response.success {
                     println!("Execution complete");
                     if !response.tool_calls.is_empty() {
-                        println!("\nTool call statistics: {} tools invoked", response.tool_calls.len());
+                        println!(
+                            "\nTool call statistics: {} tools invoked",
+                            response.tool_calls.len()
+                        );
                     }
                 } else {
                     println!("Execution failed");
@@ -136,7 +154,7 @@ impl ExecMode {
                 return Err(e.into());
             }
         }
-        
+
         if let Some(ref output_target) = self.output_patch {
             println!("\n--- Generating Patch ---");
             if let Some(patch) = self.get_git_diff() {
@@ -168,4 +186,3 @@ impl ExecMode {
         Ok(())
     }
 }
-

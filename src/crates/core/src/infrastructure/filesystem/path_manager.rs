@@ -75,22 +75,46 @@ impl PathManager {
             .join(".bitfun")
     }
 
-    /// Get assistant workspace base directory.
+    /// Get the legacy assistant workspace base directory: ~/.bitfun/
     ///
     /// `override_root` is reserved for future user customization.
-    pub fn assistant_workspace_base_dir(&self, override_root: Option<&Path>) -> PathBuf {
+    pub fn legacy_assistant_workspace_base_dir(&self, override_root: Option<&Path>) -> PathBuf {
         override_root
             .map(Path::to_path_buf)
             .unwrap_or_else(|| self.bitfun_home_dir())
     }
 
-    /// Get the default assistant workspace directory: ~/.bitfun/workspace
+    /// Get assistant workspace base directory: ~/.bitfun/personal_assistant/
+    ///
+    /// `override_root` is reserved for future user customization.
+    pub fn assistant_workspace_base_dir(&self, override_root: Option<&Path>) -> PathBuf {
+        self.legacy_assistant_workspace_base_dir(override_root)
+            .join("personal_assistant")
+    }
+
+    /// Get the legacy default assistant workspace directory: ~/.bitfun/workspace
+    pub fn legacy_default_assistant_workspace_dir(&self, override_root: Option<&Path>) -> PathBuf {
+        self.legacy_assistant_workspace_base_dir(override_root)
+            .join("workspace")
+    }
+
+    /// Get the default assistant workspace directory: ~/.bitfun/personal_assistant/workspace
     pub fn default_assistant_workspace_dir(&self, override_root: Option<&Path>) -> PathBuf {
         self.assistant_workspace_base_dir(override_root)
             .join("workspace")
     }
 
-    /// Get a named assistant workspace directory: ~/.bitfun/workspace-<id>
+    /// Get a legacy named assistant workspace directory: ~/.bitfun/workspace-<id>
+    pub fn legacy_assistant_workspace_dir(
+        &self,
+        assistant_id: &str,
+        override_root: Option<&Path>,
+    ) -> PathBuf {
+        self.legacy_assistant_workspace_base_dir(override_root)
+            .join(format!("workspace-{}", assistant_id))
+    }
+
+    /// Get a named assistant workspace directory: ~/.bitfun/personal_assistant/workspace-<id>
     pub fn assistant_workspace_dir(
         &self,
         assistant_id: &str,
@@ -339,6 +363,7 @@ impl PathManager {
     pub async fn initialize_user_directories(&self) -> BitFunResult<()> {
         let dirs = vec![
             self.bitfun_home_dir(),
+            self.assistant_workspace_base_dir(None),
             self.user_config_dir(),
             self.user_agents_dir(),
             self.agent_templates_dir(),
@@ -490,10 +515,56 @@ pub fn try_get_path_manager_arc() -> BitFunResult<Arc<PathManager>> {
     let manager = init_global_path_manager()?;
     match GLOBAL_PATH_MANAGER.set(Arc::clone(&manager)) {
         Ok(()) => Ok(manager),
-        Err(_) => Ok(Arc::clone(
-            GLOBAL_PATH_MANAGER
-                .get()
-                .expect("GLOBAL_PATH_MANAGER should be initialized after set failure"),
-        )),
+        Err(_) => Ok(Arc::clone(GLOBAL_PATH_MANAGER.get().expect(
+            "GLOBAL_PATH_MANAGER should be initialized after set failure",
+        ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PathManager;
+
+    #[test]
+    fn assistant_workspace_paths_use_personal_assistant_subdir() {
+        let path_manager = PathManager::default();
+        let base_dir = path_manager.assistant_workspace_base_dir(None);
+
+        assert_eq!(
+            base_dir,
+            path_manager.bitfun_home_dir().join("personal_assistant")
+        );
+        assert_eq!(
+            path_manager.default_assistant_workspace_dir(None),
+            base_dir.join("workspace")
+        );
+        assert_eq!(
+            path_manager.assistant_workspace_dir("demo", None),
+            base_dir.join("workspace-demo")
+        );
+        assert_eq!(
+            path_manager.resolve_assistant_workspace_dir(None, None),
+            base_dir.join("workspace")
+        );
+        assert_eq!(
+            path_manager.resolve_assistant_workspace_dir(Some("demo"), None),
+            base_dir.join("workspace-demo")
+        );
+    }
+
+    #[test]
+    fn legacy_assistant_workspace_paths_remain_at_bitfun_root() {
+        let path_manager = PathManager::default();
+        let legacy_base_dir = path_manager.legacy_assistant_workspace_base_dir(None);
+
+        assert_eq!(legacy_base_dir, path_manager.bitfun_home_dir());
+        assert_eq!(
+            path_manager.legacy_default_assistant_workspace_dir(None),
+            legacy_base_dir.join("workspace")
+        );
+        assert_eq!(
+            path_manager.legacy_assistant_workspace_dir("demo", None),
+            legacy_base_dir.join("workspace-demo")
+        );
     }
 }

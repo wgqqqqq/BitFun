@@ -331,14 +331,17 @@ pub async fn fetch_mcp_app_resource(
     state: State<'_, AppState>,
     request: FetchMCPAppResourceRequest,
 ) -> Result<FetchMCPAppResourceResponse, String> {
-    let mcp_service = state.mcp_service.as_ref()
+    let mcp_service = state
+        .mcp_service
+        .as_ref()
         .ok_or_else(|| "MCP service not initialized".to_string())?;
 
     if !request.resource_uri.starts_with("ui://") {
         return Err("Resource URI must use ui:// scheme".to_string());
     }
 
-    let connection = mcp_service.server_manager()
+    let connection = mcp_service
+        .server_manager()
         .get_connection(&request.server_id)
         .await
         .ok_or_else(|| format!("MCP server not connected: {}", request.server_id))?;
@@ -353,7 +356,8 @@ pub async fn fetch_mcp_app_resource(
         .into_iter()
         .map(|c| {
             // Extract CSP and permissions from _meta.ui (MCP Apps spec path)
-            let (csp, permissions) = c.meta
+            let (csp, permissions) = c
+                .meta
                 .as_ref()
                 .and_then(|meta| meta.ui.as_ref())
                 .map(|ui| {
@@ -363,12 +367,15 @@ pub async fn fetch_mcp_app_resource(
                         frame_domains: core_csp.frame_domains.clone(),
                         base_uri_domains: core_csp.base_uri_domains.clone(),
                     });
-                    let permissions = ui.permissions.as_ref().map(|core_perm| McpUiResourcePermissions {
-                        camera: core_perm.camera.clone(),
-                        microphone: core_perm.microphone.clone(),
-                        geolocation: core_perm.geolocation.clone(),
-                        clipboard_write: core_perm.clipboard_write.clone(),
-                    });
+                    let permissions =
+                        ui.permissions
+                            .as_ref()
+                            .map(|core_perm| McpUiResourcePermissions {
+                                camera: core_perm.camera.clone(),
+                                microphone: core_perm.microphone.clone(),
+                                geolocation: core_perm.geolocation.clone(),
+                                clipboard_write: core_perm.clipboard_write.clone(),
+                            });
                     (csp, permissions)
                 })
                 .unwrap_or((None, None));
@@ -410,29 +417,50 @@ pub async fn send_mcp_app_message(
     state: State<'_, AppState>,
     request: SendMCPAppMessageRequest,
 ) -> Result<SendMCPAppMessageResponse, String> {
-    let mcp_service = state.mcp_service.as_ref()
+    let mcp_service = state
+        .mcp_service
+        .as_ref()
         .ok_or_else(|| "MCP service not initialized".to_string())?;
 
-    let connection = mcp_service.server_manager()
+    let connection = mcp_service
+        .server_manager()
         .get_connection(&request.server_id)
         .await
         .ok_or_else(|| format!("MCP server not connected: {}", request.server_id))?;
 
     let msg = &request.message;
-    let method = msg.get("method").and_then(|m| m.as_str()).ok_or_else(|| "Missing method".to_string())?;
+    let method = msg
+        .get("method")
+        .and_then(|m| m.as_str())
+        .ok_or_else(|| "Missing method".to_string())?;
     let id = msg.get("id").cloned();
-    let params = msg.get("params").cloned().unwrap_or(serde_json::Value::Null);
+    let params = msg
+        .get("params")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
 
     let result_value: serde_json::Value = match method {
         "tools/call" => {
-            let name = params.get("name").and_then(|n| n.as_str()).ok_or_else(|| "tools/call: missing name".to_string())?;
+            let name = params
+                .get("name")
+                .and_then(|n| n.as_str())
+                .ok_or_else(|| "tools/call: missing name".to_string())?;
             let arguments = params.get("arguments").cloned();
-            let result = connection.call_tool(name, arguments).await.map_err(|e| e.to_string())?;
+            let result = connection
+                .call_tool(name, arguments)
+                .await
+                .map_err(|e| e.to_string())?;
             serde_json::to_value(result).map_err(|e| e.to_string())?
         }
         "resources/read" => {
-            let uri = params.get("uri").and_then(|u| u.as_str()).ok_or_else(|| "resources/read: missing uri".to_string())?;
-            let result = connection.read_resource(uri).await.map_err(|e| e.to_string())?;
+            let uri = params
+                .get("uri")
+                .and_then(|u| u.as_str())
+                .ok_or_else(|| "resources/read: missing uri".to_string())?;
+            let result = connection
+                .read_resource(uri)
+                .await
+                .map_err(|e| e.to_string())?;
             serde_json::to_value(result).map_err(|e| e.to_string())?
         }
         "ping" => {

@@ -13,15 +13,32 @@
     "customTitle": "自定义配置",
     "customDescription": "手动配置所有参数，适用于私有部署或其他未列出的提供商",
     "getApiKey": "获取 API Key",
+    "fetchModels": "获取模型列表",
+    "fetchHint": "可从当前供应商拉取模型列表；拉取失败时回退到常用预设模型",
+    "fetchingModels": "正在拉取模型列表...",
+    "fetchSuccessCount": "已从供应商拉取 {{count}} 个模型",
+    "fetchFailedFallback": "拉取模型列表失败，已回退到常用预设模型",
+    "fetchEmptyFallback": "供应商未返回可用模型，已回退到常用预设模型",
+    "fillApiKeyBeforeFetch": "请先填写 API Key 再获取模型列表",
+    "usingPresetModels": "当前显示的是常用预设模型",
+    "noPresetModels": "暂无可用模型，请获取模型列表或手动输入模型名",
     "backToSelection": "返回选择提供商",
     "selectModel": "选择模型",
+    "multiSelectHint": "支持多选；选中后可分别设置每个模型的上下文窗口、最大输出 Tokens 和思考开关",
     "searchOrInputModel": "搜索或输入模型名称...",
     "inputModelName": "输入模型名称...",
     "useCustomModel": "按 Enter 使用",
+    "addCustomModel": "添加自定义模型",
+    "noModelsSelected": "请先选择模型",
+    "removeModel": "移除模型",
     "urlHint": "已预填官方 API 地址，如使用代理或私有部署可修改",
     "formatHint": "已根据提供商自动选择，通常无需修改"
   },
   "providers": {
+    "openbitfun": {
+      "name": "OpenBitFun",
+      "description": "OpenBitFun 模型服务"
+    },
     "gemini": {
       "name": "Google Gemini",
       "description": "Google Gemini 2.5 系列多模态模型"
@@ -91,9 +108,10 @@
     "speech_recognition": "语音识别：将语音转换为文字（如智谱 GLM-ASR）"
   },
   "form": {
-    "configName": "配置名称",
-    "configNamePlaceholder": "为此配置起个名字",
+    "configName": "服务商名称",
+    "configNamePlaceholder": "输入服务商名称",
     "modelName": "模型名称",
+    "modelSelection": "选择模型",
     "modelNameHint": "智谱 GLM-ASR 使用 glm-asr，其他语音模型填写对应的模型名称",
     "baseUrl": "API地址",
     "resolvedUrlLabel": "实际请求地址：",
@@ -112,6 +130,8 @@
   "thinking": {
     "enable": "启用思考",
     "enableHint": "需要模型支持思考模式",
+    "optionEnabled": "启用",
+    "optionDisabled": "禁用",
     "preserve": "保留历史思考",
     "preserveHint": "开启后将保留历史对话的思考内容"
   },
@@ -164,6 +184,8 @@
     "delete": "删除",
     "test": "测试连接",
     "newConfig": "新建配置",
+    "addModel": "添加模型",
+    "addProvider": "添加服务商",
     "createFirst": "创建第一个配置",
     "viewStats": "查看统计"
   },

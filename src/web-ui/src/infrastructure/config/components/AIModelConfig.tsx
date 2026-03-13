@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Edit2, Trash2, Wifi, Loader, AlertTriangle, X, Settings, ArrowLeft, ExternalLink, BarChart3 } from 'lucide-react';
-import { Button, Switch, Select, IconButton, NumberInput, Card, Checkbox, Modal, Input, Textarea } from '@/component-library';
+import { Plus, Edit2, Trash2, Wifi, Loader, AlertTriangle, X, Settings, ExternalLink, BarChart3, Eye, EyeOff } from 'lucide-react';
+import { Button, Switch, Select, IconButton, NumberInput, Card, Checkbox, Modal, Input, Textarea, type SelectOption } from '@/component-library';
 import { 
   AIModelConfig as AIModelConfigType, 
   ProxyConfig, 
@@ -9,7 +9,7 @@ import {
   ModelCapability
 } from '../types';
 import { configManager } from '../services/ConfigManager';
-import { PROVIDER_TEMPLATES } from '../services/modelConfigs';
+import { PROVIDER_TEMPLATES, getModelDisplayName, getProviderDisplayName, getProviderTemplateId } from '../services/modelConfigs';
 import { aiApi, systemAPI } from '@/infrastructure/api';
 import { useNotification } from '@/shared/notification-system';
 import { ConfigPageHeader, ConfigPageLayout, ConfigPageContent, ConfigPageSection, ConfigPageRow, ConfigCollectionItem } from './common';
@@ -20,8 +20,66 @@ import './AIModelConfig.scss';
 
 const log = createLogger('AIModelConfig');
 
+interface RemoteModelOption {
+  id: string;
+  display_name?: string;
+}
+
+interface SelectedModelDraft {
+  key: string;
+  configId?: string;
+  modelName: string;
+  category: ModelCategory;
+  contextWindow: number;
+  maxTokens: number;
+  enableThinking: boolean;
+}
+
+interface ProviderGroup {
+  providerName: string;
+  providerId?: string;
+  models: AIModelConfigType[];
+}
+
 function isResponsesProvider(provider?: string): boolean {
   return provider === 'response' || provider === 'responses';
+}
+
+function createModelDraft(
+  modelName: string,
+  baseConfig?: Partial<AIModelConfigType>,
+  overrides?: Partial<SelectedModelDraft>
+): SelectedModelDraft {
+  const trimmedModelName = modelName.trim();
+
+  return {
+    key: overrides?.key ?? overrides?.configId ?? baseConfig?.id ?? trimmedModelName,
+    configId: overrides?.configId ?? baseConfig?.id,
+    modelName: trimmedModelName,
+    category: overrides?.category ?? baseConfig?.category ?? 'general_chat',
+    contextWindow: overrides?.contextWindow ?? baseConfig?.context_window ?? 128000,
+    maxTokens: overrides?.maxTokens ?? baseConfig?.max_tokens ?? 8192,
+    enableThinking: overrides?.enableThinking ?? baseConfig?.enable_thinking_process ?? false,
+  };
+}
+
+function uniqModelNames(modelNames: string[]): string[] {
+  return Array.from(new Set(modelNames.map(name => name.trim()).filter(Boolean)));
+}
+
+function getCapabilitiesByCategory(category: ModelCategory): ModelCapability[] {
+  switch (category) {
+    case 'general_chat':
+      return ['text_chat', 'function_calling'];
+    case 'multimodal':
+      return ['text_chat', 'image_understanding', 'function_calling'];
+    case 'image_generation':
+      return ['image_generation'];
+    case 'speech_recognition':
+      return ['speech_recognition'];
+    default:
+      return ['text_chat'];
+  }
 }
 
 /**
@@ -67,9 +125,11 @@ function resolveRequestUrl(baseUrl: string, provider: string, modelName = ''): s
 const AIModelConfig: React.FC = () => {
   const { t } = useTranslation('settings/ai-model');
   const { t: tDefault } = useTranslation('settings/default-model');
+  const { t: tComponents } = useTranslation('components');
   const [aiModels, setAiModels] = useState<AIModelConfigType[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editingConfig, setEditingConfig] = useState<Partial<AIModelConfigType> | null>(null);
+  const [showApiKey, setShowApiKey] = useState(false);
   const [testingConfigs, setTestingConfigs] = useState<Record<string, boolean>>({});
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string } | null>>({});
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -90,6 +150,12 @@ const AIModelConfig: React.FC = () => {
     password: ''
   });
   const [isProxySaving, setIsProxySaving] = useState(false);
+  const [remoteModelOptions, setRemoteModelOptions] = useState<RemoteModelOption[]>([]);
+  const [isFetchingRemoteModels, setIsFetchingRemoteModels] = useState(false);
+  const [remoteModelsError, setRemoteModelsError] = useState<string | null>(null);
+  const [hasAttemptedRemoteFetch, setHasAttemptedRemoteFetch] = useState(false);
+  const [selectedModelDrafts, setSelectedModelDrafts] = useState<SelectedModelDraft[]>([]);
+  const [manualModelInput, setManualModelInput] = useState('');
 
   const requestFormatOptions = useMemo(
     () => [
@@ -111,6 +177,34 @@ const AIModelConfig: React.FC = () => {
     []
   );
 
+  const thinkingModeOptions = useMemo(
+    () => [
+      { label: t('thinking.optionEnabled'), value: 'enabled' },
+      { label: t('thinking.optionDisabled'), value: 'disabled' },
+    ],
+    [t]
+  );
+
+  const categoryOptions = useMemo<SelectOption[]>(
+    () => [
+      { label: t('category.general_chat'), value: 'general_chat' },
+      { label: t('category.multimodal'), value: 'multimodal' },
+      { label: t('category.image_generation'), value: 'image_generation' },
+      { label: t('category.speech_recognition'), value: 'speech_recognition' },
+    ],
+    [t]
+  );
+
+  const categoryCompactLabels = useMemo<Record<ModelCategory, string>>(
+    () => ({
+      general_chat: t('categoryIcons.general_chat'),
+      multimodal: t('categoryIcons.multimodal'),
+      image_generation: t('categoryIcons.image_generation'),
+      speech_recognition: t('categoryIcons.speech_recognition'),
+    }),
+    [t]
+  );
+
   
   useEffect(() => {
     loadConfig();
@@ -130,7 +224,7 @@ const AIModelConfig: React.FC = () => {
   };
   
   // Provider options with translations (must be at top level, before any conditional returns)
-  const providerOrder = ['zhipu', 'qwen', 'deepseek', 'volcengine', 'minimax', 'moonshot', 'gemini', 'anthropic'];
+  const providerOrder = ['openbitfun', 'zhipu', 'qwen', 'deepseek', 'volcengine', 'minimax', 'moonshot', 'gemini', 'anthropic'];
   const providers = useMemo(() => {
     const sorted = Object.values(PROVIDER_TEMPLATES).sort((a, b) => {
       const indexA = providerOrder.indexOf(a.id);
@@ -163,8 +257,210 @@ const AIModelConfig: React.FC = () => {
     };
   }, [selectedProviderId, t]);
 
+  const getConfiguredModelsForProvider = (providerName: string) => {
+    const normalizedProviderName = providerName.trim();
+    if (!normalizedProviderName) {
+      return [];
+    }
+
+    return aiModels
+      .filter(model => getProviderDisplayName(model) === normalizedProviderName)
+      .sort((a, b) => a.model_name.localeCompare(b.model_name));
+  };
+
+  const createDraftsFromConfigs = (configs: AIModelConfigType[]) => (
+    configs.map(config => createModelDraft(config.model_name, config, {
+      configId: config.id,
+      contextWindow: config.context_window || 128000,
+      maxTokens: config.max_tokens || 8192,
+      enableThinking: config.enable_thinking_process ?? false,
+    }))
+  );
+
+  const resetRemoteModelDiscovery = () => {
+    setRemoteModelOptions([]);
+    setIsFetchingRemoteModels(false);
+    setRemoteModelsError(null);
+    setHasAttemptedRemoteFetch(false);
+  };
+
+  const syncSelectedModelDrafts = (
+    modelNames: string[],
+    baseConfig?: Partial<AIModelConfigType>,
+    singleSelection = false
+  ) => {
+    const nextModelNames = singleSelection
+      ? uniqModelNames(modelNames).slice(0, 1)
+      : uniqModelNames(modelNames);
+
+    const providerName = (
+      baseConfig?.name ||
+      editingConfig?.name ||
+      currentTemplate?.name ||
+      ''
+    ).trim();
+    const configuredModelsByName = new Map(
+      getConfiguredModelsForProvider(providerName).map(model => [model.model_name, model])
+    );
+
+    setSelectedModelDrafts(prevDrafts =>
+      nextModelNames.map(modelName => {
+        const existingDraft = prevDrafts.find(draft => draft.modelName === modelName);
+        if (existingDraft) {
+          return existingDraft;
+        }
+
+        const configuredModel = configuredModelsByName.get(modelName);
+        return createModelDraft(modelName, configuredModel || baseConfig, {
+          configId: configuredModel?.id,
+        });
+      })
+    );
+
+    setEditingConfig(prev => {
+      if (!prev) return prev;
+
+      const nextPrimaryModel = nextModelNames[0] || '';
+      const providerName = currentTemplate?.name || prev.name || '';
+      const oldAutoName = prev.model_name ? `${providerName} - ${prev.model_name}` : '';
+      const isAutoGenerated = !prev.name || prev.name === oldAutoName || prev.name === providerName;
+
+      return {
+        ...prev,
+        model_name: nextPrimaryModel,
+        request_url: resolveRequestUrl(
+          prev.base_url || currentTemplate?.baseUrl || '',
+          prev.provider || currentTemplate?.format || 'openai',
+          nextPrimaryModel
+        ),
+        name: isAutoGenerated ? providerName : prev.name
+      };
+    });
+  };
+
+  const updateModelDraft = (modelName: string, updates: Partial<SelectedModelDraft>) => {
+    setSelectedModelDrafts(prevDrafts => prevDrafts.map(draft => (
+      draft.modelName === modelName ? { ...draft, ...updates } : draft
+    )));
+  };
+
+  const removeSelectedModelDraft = (modelName: string) => {
+    const remainingModelNames = selectedModelDrafts
+      .filter(draft => draft.modelName !== modelName)
+      .map(draft => draft.modelName);
+
+    syncSelectedModelDrafts(remainingModelNames, editingConfig || undefined, !!editingConfig?.id);
+  };
+
+  const addManualModelDraft = () => {
+    const trimmedModelName = manualModelInput.trim();
+    if (!trimmedModelName) return;
+
+    const nextModelNames = editingConfig?.id
+      ? [trimmedModelName]
+      : uniqModelNames([
+          ...selectedModelDrafts.map(draft => draft.modelName),
+          trimmedModelName,
+        ]);
+
+    syncSelectedModelDrafts(nextModelNames, editingConfig || undefined, !!editingConfig?.id);
+    setManualModelInput('');
+  };
+
+  const buildModelDiscoveryConfig = (config: Partial<AIModelConfigType>): AIModelConfigType | null => {
+    const resolvedBaseUrl = (config.base_url || currentTemplate?.baseUrl || '').trim();
+    const resolvedProvider = (config.provider || currentTemplate?.format || 'openai').trim();
+    const resolvedApiKey = (config.api_key || '').trim();
+    const resolvedModelName = (
+      config.model_name ||
+      selectedModelDrafts[0]?.modelName ||
+      currentTemplate?.models[0] ||
+      'model-discovery'
+    ).trim();
+
+    if (!resolvedBaseUrl || !resolvedProvider || !resolvedApiKey) {
+      return null;
+    }
+
+    return {
+      id: config.id || 'model_discovery',
+      name: config.name || 'Model Discovery',
+      provider: resolvedProvider,
+      api_key: resolvedApiKey,
+      base_url: resolvedBaseUrl,
+      request_url: config.request_url || resolveRequestUrl(resolvedBaseUrl, resolvedProvider, resolvedModelName),
+      model_name: resolvedModelName,
+      description: config.description,
+      context_window: config.context_window || 128000,
+      max_tokens: config.max_tokens || 8192,
+      temperature: config.temperature,
+      top_p: config.top_p,
+      enabled: config.enabled ?? true,
+      category: config.category || 'general_chat',
+      capabilities: config.capabilities || ['text_chat'],
+      recommended_for: config.recommended_for || [],
+      metadata: config.metadata || {},
+      enable_thinking_process: config.enable_thinking_process ?? false,
+      support_preserved_thinking: config.support_preserved_thinking ?? false,
+      reasoning_effort: config.reasoning_effort,
+      custom_headers: config.custom_headers,
+      custom_headers_mode: config.custom_headers_mode,
+      skip_ssl_verify: config.skip_ssl_verify ?? false,
+      custom_request_body: config.custom_request_body
+    };
+  };
+
+  const fetchRemoteModels = async (config: Partial<AIModelConfigType> | null) => {
+    if (!config) return;
+
+    const discoveryConfig = buildModelDiscoveryConfig(config);
+    if (!discoveryConfig) {
+      setRemoteModelOptions([]);
+      setRemoteModelsError(t('providerSelection.fillApiKeyBeforeFetch'));
+      setHasAttemptedRemoteFetch(true);
+      return;
+    }
+
+    setIsFetchingRemoteModels(true);
+    setRemoteModelsError(null);
+    setHasAttemptedRemoteFetch(true);
+
+    try {
+      const remoteModels = await aiApi.listModelsByConfig(discoveryConfig);
+      const dedupedModels = remoteModels.filter((model, index, arr) => (
+        !!model.id && arr.findIndex(item => item.id === model.id) === index
+      ));
+
+      if (dedupedModels.length === 0) {
+        setRemoteModelOptions([]);
+        setRemoteModelsError(t('providerSelection.fetchEmptyFallback'));
+        return;
+      }
+
+      setRemoteModelOptions(dedupedModels);
+      setRemoteModelsError(null);
+    } catch (error) {
+      log.warn('Failed to fetch remote model list, falling back to presets', { error });
+      setRemoteModelOptions([]);
+      setRemoteModelsError(t('providerSelection.fetchFailedFallback'));
+    } finally {
+      setIsFetchingRemoteModels(false);
+    }
+  };
+
+  const handleModelSelectionOpenChange = (isOpen: boolean) => {
+    if (!isOpen || !editingConfig || isFetchingRemoteModels) return;
+    if (!editingConfig.api_key?.trim()) return;
+    if (remoteModelOptions.length > 0) return;
+    void fetchRemoteModels(editingConfig);
+  };
+
   
   const handleCreateNew = () => {
+    resetRemoteModelDiscovery();
+    setSelectedModelDrafts([]);
+    setManualModelInput('');
+    setShowApiKey(false);
     setSelectedProviderId(null);
     setCreationMode('selection');
   };
@@ -173,20 +469,28 @@ const AIModelConfig: React.FC = () => {
   const handleSelectProvider = (providerId: string) => {
     const template = PROVIDER_TEMPLATES[providerId];
     if (!template) return;
-    
-    const defaultModel = template.models[0] || '';
+    resetRemoteModelDiscovery();
+    setManualModelInput('');
+    setShowApiKey(false);
     setSelectedProviderId(providerId);
     
     // Dynamically get translated name
     const providerName = t(`providers.${template.id}.name`);
+    const configuredProviderModels = getConfiguredModelsForProvider(providerName);
+    const primaryConfiguredModel = configuredProviderModels[0];
+    const defaultModel = primaryConfiguredModel?.model_name || template.models[0] || '';
     
     setEditingConfig({
-      name: defaultModel ? `${providerName} - ${defaultModel}` : '',
-      base_url: template.baseUrl,
-      request_url: resolveRequestUrl(template.baseUrl, template.format, defaultModel),
-      api_key: '',
+      name: providerName,
+      base_url: primaryConfiguredModel?.base_url || template.baseUrl,
+      request_url: resolveRequestUrl(
+        primaryConfiguredModel?.base_url || template.baseUrl,
+        primaryConfiguredModel?.provider || template.format,
+        defaultModel
+      ),
+      api_key: primaryConfiguredModel?.api_key || '',
       model_name: defaultModel,
-      provider: template.format,  
+      provider: primaryConfiguredModel?.provider || template.format,
       enabled: true,
       context_window: 128000,
       max_tokens: 8192,
@@ -195,6 +499,15 @@ const AIModelConfig: React.FC = () => {
       recommended_for: [],
       metadata: {}
     });
+    setSelectedModelDrafts(
+      configuredProviderModels.length > 0
+        ? createDraftsFromConfigs(configuredProviderModels)
+        : (defaultModel ? [createModelDraft(defaultModel, {
+            context_window: 128000,
+            max_tokens: 8192,
+            enable_thinking_process: false,
+          })] : [])
+    );
     setShowAdvancedSettings(false);
     setCreationMode('form');
     setIsEditing(true);
@@ -202,6 +515,9 @@ const AIModelConfig: React.FC = () => {
 
   
   const handleSelectCustom = () => {
+    resetRemoteModelDiscovery();
+    setManualModelInput('');
+    setShowApiKey(false);
     setSelectedProviderId(null);
     setEditingConfig({
       name: '',
@@ -219,20 +535,67 @@ const AIModelConfig: React.FC = () => {
       recommended_for: [],
       metadata: {}
     });
+    setSelectedModelDrafts([]);
     setShowAdvancedSettings(false);  
     setCreationMode('form');
     setIsEditing(true);
   };
 
-  
-  const handleBackToSelection = () => {
-    setCreationMode('selection');
-    setIsEditing(false);
-    setEditingConfig(null);
+  const handleAddModelToExistingProvider = (config: AIModelConfigType) => {
+    resetRemoteModelDiscovery();
+    setManualModelInput('');
+    setShowApiKey(false);
+
+    const providerName = getProviderDisplayName(config);
+    const configuredProviderModels = getConfiguredModelsForProvider(providerName);
+    const providerTemplateId = getProviderTemplateId(config);
+    setSelectedProviderId(providerTemplateId || null);
+    setEditingConfig({
+      name: providerName,
+      base_url: config.base_url,
+      request_url: resolveRequestUrl(config.base_url, config.provider || 'openai'),
+      api_key: config.api_key || '',
+      model_name: '',
+      provider: config.provider,
+      enabled: true,
+      description: config.description,
+      context_window: config.context_window || 128000,
+      max_tokens: config.max_tokens || 8192,
+      category: config.category || 'general_chat',
+      capabilities: config.capabilities || getCapabilitiesByCategory(config.category || 'general_chat'),
+      recommended_for: config.recommended_for || [],
+      metadata: config.metadata || {},
+      enable_thinking_process: config.enable_thinking_process ?? false,
+      support_preserved_thinking: config.support_preserved_thinking ?? false,
+      reasoning_effort: config.reasoning_effort,
+      custom_headers: config.custom_headers,
+      custom_headers_mode: config.custom_headers_mode,
+      skip_ssl_verify: config.skip_ssl_verify ?? false,
+      custom_request_body: config.custom_request_body,
+    });
+    setSelectedModelDrafts(createDraftsFromConfigs(configuredProviderModels));
+    setShowAdvancedSettings(
+      !!config.skip_ssl_verify ||
+      (!!config.custom_request_body && config.custom_request_body.trim() !== '') ||
+      (!!config.custom_headers && Object.keys(config.custom_headers).length > 0)
+    );
+    setCreationMode('form');
+    setIsEditing(true);
   };
 
+  
   const handleEdit = (config: AIModelConfigType) => {
-    setEditingConfig({ ...config });
+    resetRemoteModelDiscovery();
+    setManualModelInput('');
+    setShowApiKey(false);
+    setEditingConfig({ ...config, name: getProviderDisplayName(config) });
+    setSelectedModelDrafts([
+      createModelDraft(config.model_name, config, {
+        contextWindow: config.context_window || 128000,
+        maxTokens: config.max_tokens || 8192,
+        enableThinking: config.enable_thinking_process ?? false,
+      })
+    ]);
     
     const hasCustomHeaders = !!config.custom_headers && Object.keys(config.custom_headers).length > 0;
     const hasCustomBody = !!config.custom_request_body && config.custom_request_body.trim() !== '';
@@ -247,52 +610,63 @@ const AIModelConfig: React.FC = () => {
       return;
     }
     
-    
-    if (!editingConfig.model_name) {
+    if (selectedModelDrafts.length === 0) {
       notification.warning(t('messages.fillModelName'));
       return;
     }
 
     try {
-      const newConfig: AIModelConfigType = {
-        id: editingConfig.id || `model_${Date.now()}`,
-        name: editingConfig.name,
-        base_url: editingConfig.base_url,
-        request_url: editingConfig.request_url || resolveRequestUrl(editingConfig.base_url, editingConfig.provider || 'openai', editingConfig.model_name || ''),
-        api_key: editingConfig.api_key || '',
-        model_name: editingConfig.model_name || 'search-api', 
-        provider: editingConfig.provider || 'openai',
-        enabled: editingConfig.enabled ?? true,
-        description: editingConfig.description,
-        context_window: editingConfig.context_window || 128000,
-        
-        max_tokens: editingConfig.category === 'multimodal' ? undefined : (editingConfig.max_tokens || 8192),
-        
-        category: editingConfig.category || 'general_chat',
-        capabilities: editingConfig.capabilities || ['text_chat'],
-        recommended_for: editingConfig.recommended_for || [],
-        metadata: editingConfig.metadata,
-        
-        enable_thinking_process: editingConfig.enable_thinking_process ?? false,
-        
-        support_preserved_thinking: editingConfig.support_preserved_thinking ?? false,
-
-        reasoning_effort: editingConfig.reasoning_effort,
-        
-        custom_headers: editingConfig.custom_headers,
-        
-        custom_headers_mode: editingConfig.custom_headers_mode,
-        
-        skip_ssl_verify: editingConfig.skip_ssl_verify ?? false,
-        
-        custom_request_body: editingConfig.custom_request_body
-      };
+      const providerName = editingConfig.name.trim();
+      const baseUrl = editingConfig.base_url;
+      if (!providerName || !baseUrl) {
+        notification.warning(t('messages.fillRequired'));
+        return;
+      }
+      const configuredProviderModels = getConfiguredModelsForProvider(providerName);
+      const configuredProviderModelIds = new Set(
+        configuredProviderModels
+          .map(model => model.id)
+          .filter((id): id is string => !!id)
+      );
+      const configsToSave: AIModelConfigType[] = selectedModelDrafts.map((draft, index) => {
+        return {
+          id: editingConfig.id || draft.configId || `model_${Date.now()}_${index}`,
+          name: providerName,
+          base_url: baseUrl,
+          request_url: resolveRequestUrl(
+            baseUrl,
+            editingConfig.provider || 'openai',
+            draft.modelName
+          ),
+          api_key: editingConfig.api_key || '',
+          model_name: draft.modelName,
+          provider: editingConfig.provider || 'openai',
+          enabled: editingConfig.enabled ?? true,
+          description: editingConfig.description,
+          context_window: draft.contextWindow,
+          max_tokens: draft.maxTokens,
+          category: draft.category,
+          capabilities: getCapabilitiesByCategory(draft.category),
+          recommended_for: editingConfig.recommended_for || [],
+          metadata: editingConfig.metadata,
+          enable_thinking_process: draft.enableThinking,
+          support_preserved_thinking: editingConfig.support_preserved_thinking ?? false,
+          reasoning_effort: editingConfig.reasoning_effort,
+          custom_headers: editingConfig.custom_headers,
+          custom_headers_mode: editingConfig.custom_headers_mode,
+          skip_ssl_verify: editingConfig.skip_ssl_verify ?? false,
+          custom_request_body: editingConfig.custom_request_body
+        };
+      });
 
       let updatedModels: AIModelConfigType[];
       if (editingConfig.id) {
-        updatedModels = aiModels.map(m => m.id === editingConfig.id ? newConfig : m);
+        updatedModels = aiModels.map(m => m.id === editingConfig.id ? configsToSave[0] : m);
       } else {
-        updatedModels = [...aiModels, newConfig];
+        updatedModels = [
+          ...aiModels.filter(model => !configuredProviderModelIds.has(model.id || '')),
+          ...configsToSave,
+        ];
       }
 
       
@@ -307,9 +681,9 @@ const AIModelConfig: React.FC = () => {
           if (!primaryModelExists) {
             await configManager.setConfig('ai.default_models', {
               ...currentDefaultModels,
-              primary: newConfig.id,
+              primary: configsToSave[0]?.id,
             });
-            log.info('Auto-set primary model for first configured model', { modelId: newConfig.id });
+            log.info('Auto-set primary model for first configured model', { modelId: configsToSave[0]?.id });
             notification.success(t('messages.autoSetPrimary'));
           }
         } catch (error) {
@@ -318,8 +692,8 @@ const AIModelConfig: React.FC = () => {
       }
       
       
-      const configId = newConfig.id;
-      if (!configId) {
+      const createdConfigIds = configsToSave.map(config => config.id).filter((id): id is string => !!id);
+      if (createdConfigIds.length === 0) {
         
         setIsEditing(false);
         setEditingConfig(null);
@@ -334,46 +708,46 @@ const AIModelConfig: React.FC = () => {
       setSelectedProviderId(null);
       
       
-      setExpandedIds(prev => new Set([...prev, configId]));
+      setExpandedIds(prev => new Set([...prev, ...createdConfigIds]));
       
       
       
-      (async () => {
-        
-        setTestingConfigs(prev => ({ ...prev, [configId]: true }));
-        setTestResults(prev => ({ ...prev, [configId]: null }));
-        
-        try {
-          
-          const result = await aiApi.testAIConfigConnection(newConfig);
-          
-          
-          const baseMessage = result.success ? t('messages.testSuccess') : t('messages.testFailed');
-          let message = baseMessage + (result.response_time_ms ? ` (${result.response_time_ms}ms)` : '');
-          
-          if (!result.success && result.error_details) {
-            message += `\n${t('messages.errorDetails')}: ${result.error_details}`;
-          }
-          
-          setTestResults(prev => ({
-            ...prev,
-            [configId]: { 
-              success: result.success, 
-              message
+      configsToSave.forEach(config => {
+        const configId = config.id;
+        if (!configId) return;
+
+        void (async () => {
+          setTestingConfigs(prev => ({ ...prev, [configId]: true }));
+          setTestResults(prev => ({ ...prev, [configId]: null }));
+
+          try {
+            const result = await aiApi.testAIConfigConnection(config);
+            const baseMessage = result.success ? t('messages.testSuccess') : t('messages.testFailed');
+            let message = baseMessage + (result.response_time_ms ? ` (${result.response_time_ms}ms)` : '');
+
+            if (!result.success && result.error_details) {
+              message += `\n${t('messages.errorDetails')}: ${result.error_details}`;
             }
-          }));
-        } catch (error) {
-          
-          const message = `${t('messages.testFailed')}\n${t('messages.errorDetails')}: ${error}`;
-          setTestResults(prev => ({
-            ...prev,
-            [configId]: { success: false, message }
-          }));
-          log.warn('Auto test failed after save', { configId, error });
-        } finally {
-          setTestingConfigs(prev => ({ ...prev, [configId]: false }));
-        }
-      })();
+
+            setTestResults(prev => ({
+              ...prev,
+              [configId]: {
+                success: result.success,
+                message
+              }
+            }));
+          } catch (error) {
+            const message = `${t('messages.testFailed')}\n${t('messages.errorDetails')}: ${error}`;
+            setTestResults(prev => ({
+              ...prev,
+              [configId]: { success: false, message }
+            }));
+            log.warn('Auto test failed after save', { configId, error });
+          } finally {
+            setTestingConfigs(prev => ({ ...prev, [configId]: false }));
+          }
+        })();
+      });
     } catch (error) {
       log.error('Failed to save config', error);
       notification.error(t('messages.saveFailed'));
@@ -381,9 +755,6 @@ const AIModelConfig: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    
-    if (!(await confirm(t('confirmDelete')))) return;
-
     try {
       const updatedModels = aiModels.filter(m => m.id !== id);
       await configManager.setConfig('ai.models', updatedModels);
@@ -472,11 +843,44 @@ const AIModelConfig: React.FC = () => {
   };
 
   const closeEditingModal = () => {
+    resetRemoteModelDiscovery();
+    setSelectedModelDrafts([]);
+    setManualModelInput('');
+    setShowApiKey(false);
     setIsEditing(false);
     setEditingConfig(null);
     setCreationMode(null);
     setSelectedProviderId(null);
   };
+
+  const providerGroups = useMemo<ProviderGroup[]>(() => {
+    const grouped = aiModels.reduce<Map<string, ProviderGroup>>((map, model) => {
+      const providerName = getProviderDisplayName(model);
+      const existingGroup = map.get(providerName);
+      if (existingGroup) {
+        existingGroup.models.push(model);
+        return map;
+      }
+
+      map.set(providerName, {
+        providerName,
+        providerId: getProviderTemplateId(model),
+        models: [model],
+      });
+      return map;
+    }, new Map());
+
+    return Array.from(grouped.values()).sort((a, b) => {
+      const indexA = a.providerId ? providerOrder.indexOf(a.providerId) : -1;
+      const indexB = b.providerId ? providerOrder.indexOf(b.providerId) : -1;
+
+      if (indexA !== indexB) {
+        return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+      }
+
+      return a.providerName.localeCompare(b.providerName);
+    });
+  }, [aiModels, providerOrder]);
 
   
   if (creationMode === 'selection') {
@@ -576,48 +980,143 @@ const AIModelConfig: React.FC = () => {
   const renderEditingForm = () => {
     if (!isEditing || !editingConfig) return null;
     const isFromTemplate = !editingConfig.id && !!currentTemplate;
+    const currentProviderLabel = (editingConfig.name || currentTemplate?.name || t('providerSelection.customTitle')).trim() || t('providerSelection.customTitle');
+    const configuredProviderModels = getConfiguredModelsForProvider(currentProviderLabel);
+    const configuredProviderModelOptions: SelectOption[] = configuredProviderModels.map(model => ({
+      label: model.model_name,
+      value: model.model_name,
+    }));
+    const fetchedOrPresetModelOptions: SelectOption[] = remoteModelOptions.length > 0
+      ? remoteModelOptions.map(model => ({
+          label: model.display_name || model.id,
+          value: model.id,
+          description: model.display_name && model.display_name !== model.id ? model.id : undefined
+        }))
+      : (currentTemplate?.models || []).map(model => ({
+          label: model,
+          value: model
+        }));
+    const availableModelOptions: SelectOption[] = Array.from(
+      new Map(
+        [...configuredProviderModelOptions, ...fetchedOrPresetModelOptions]
+          .map(option => [String(option.value), option] as const)
+      ).values()
+    );
+    const modelFetchHint = isFetchingRemoteModels
+      ? t('providerSelection.fetchingModels')
+      : remoteModelsError
+        ? remoteModelsError
+        : remoteModelOptions.length > 0
+          ? null
+          : currentTemplate?.models?.length
+            ? t('providerSelection.usingPresetModels')
+            : hasAttemptedRemoteFetch
+              ? t('providerSelection.noPresetModels')
+              : null;
+    const selectedModelValues = selectedModelDrafts.map(draft => draft.modelName);
+    const apiKeyVisibilityLabel = showApiKey ? tComponents('hide') : tComponents('show');
+    const apiKeySuffix = (
+      <button
+        type="button"
+        className="bitfun-ai-model-config__input-visibility-toggle"
+        onClick={() => setShowApiKey(prev => !prev)}
+        aria-label={apiKeyVisibilityLabel}
+        title={apiKeyVisibilityLabel}
+      >
+        {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
+      </button>
+    );
 
-    const handleCategoryChange = (value: string | number | (string | number)[]) => {
-      const category = value as ModelCategory;
-      setEditingConfig(prev => {
-        let defaultCapabilities: ModelCapability[] = ['text_chat'];
-        const updates: Partial<AIModelConfigType> = { category, capabilities: defaultCapabilities };
-        switch (category) {
-          case 'general_chat':
-            defaultCapabilities = ['text_chat', 'function_calling'];
-            updates.base_url = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-            updates.request_url = resolveRequestUrl(updates.base_url!, prev?.provider || 'openai', prev?.model_name || '');
-            break;
-          case 'multimodal':
-            defaultCapabilities = ['text_chat', 'image_understanding', 'function_calling'];
-            updates.base_url = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-            updates.request_url = resolveRequestUrl(updates.base_url!, prev?.provider || 'openai', prev?.model_name || '');
-            break;
-          case 'image_generation':
-            defaultCapabilities = ['image_generation'];
-            updates.base_url = 'https://open.bigmodel.cn/api/paas/v4/images/generations';
-            updates.request_url = resolveRequestUrl(updates.base_url!, prev?.provider || 'openai', prev?.model_name || '');
-            break;
-          case 'speech_recognition':
-            defaultCapabilities = ['speech_recognition'];
-            updates.base_url = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
-            updates.request_url = resolveRequestUrl(updates.base_url!, prev?.provider || 'openai', prev?.model_name || '');
-            break;
-        }
-        updates.capabilities = defaultCapabilities;
-        return { ...prev, ...updates };
-      });
+    const renderSelectedModelRows = () => {
+      if (selectedModelDrafts.length === 0) {
+        return (
+          <div className="bitfun-ai-model-config__selected-models-empty">
+            {t('providerSelection.noModelsSelected')}
+          </div>
+        );
+      }
+
+      return (
+        <div className="bitfun-ai-model-config__selected-models-list">
+          {selectedModelDrafts.map(draft => (
+            <div key={draft.key} className="bitfun-ai-model-config__selected-model-row">
+              <div className="bitfun-ai-model-config__selected-model-head">
+                <div className="bitfun-ai-model-config__selected-model-name">{`${currentProviderLabel}/${draft.modelName}`}</div>
+                {!editingConfig.id && (
+                  <IconButton
+                    variant="ghost"
+                    size="small"
+                    onClick={() => removeSelectedModelDraft(draft.modelName)}
+                    tooltip={t('providerSelection.removeModel')}
+                  >
+                    <X size={14} />
+                  </IconButton>
+                )}
+              </div>
+              <div className="bitfun-ai-model-config__selected-model-grid">
+                <div className="bitfun-ai-model-config__selected-model-field">
+                  <span>{t('category.label')}</span>
+                  <Select
+                    value={draft.category}
+                    onChange={(value) => updateModelDraft(draft.modelName, { category: value as ModelCategory })}
+                    options={categoryOptions}
+                    size="small"
+                    className="bitfun-ai-model-config__selected-model-category-select"
+                    renderValue={(option) => {
+                      if (!option || Array.isArray(option)) {
+                        return null;
+                      }
+
+                      const compactLabel = categoryCompactLabels[option.value as ModelCategory] ?? option.label;
+
+                      return (
+                        <span className="select__value">
+                          <span className="select__value-label">{compactLabel}</span>
+                        </span>
+                      );
+                    }}
+                  />
+                </div>
+                <div className="bitfun-ai-model-config__selected-model-field">
+                  <span>{t('form.contextWindow')}</span>
+                  <NumberInput
+                    value={draft.contextWindow}
+                    onChange={(value) => updateModelDraft(draft.modelName, { contextWindow: value })}
+                    min={1000}
+                    max={2000000}
+                    step={1000}
+                    size="small"
+                  />
+                </div>
+                <div className="bitfun-ai-model-config__selected-model-field">
+                  <span>{t('form.maxTokens')}</span>
+                  <NumberInput
+                    value={draft.maxTokens}
+                    onChange={(value) => updateModelDraft(draft.modelName, { maxTokens: value })}
+                    min={1000}
+                    max={1000000}
+                    step={1000}
+                    size="small"
+                  />
+                </div>
+                <div className="bitfun-ai-model-config__selected-model-field">
+                  <span>{t('thinking.enable')}</span>
+                  <Select
+                    value={draft.enableThinking ? 'enabled' : 'disabled'}
+                    onChange={(value) => updateModelDraft(draft.modelName, { enableThinking: value === 'enabled' })}
+                    options={thinkingModeOptions}
+                    size="small"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
     };
 
     return (
       <>
-        {!editingConfig.id && (
-          <button className="bitfun-ai-model-config__back-button" onClick={handleBackToSelection}>
-            <ArrowLeft size={16} />
-            {t('providerSelection.backToSelection')}
-          </button>
-        )}
-
         <div className="bitfun-ai-model-config__form bitfun-ai-model-config__form--modal">
           <ConfigPageSection
             title={t('editSubtitle')}
@@ -625,35 +1124,21 @@ const AIModelConfig: React.FC = () => {
           >
             {isFromTemplate ? (
               <>
-                <ConfigPageRow label={`${t('form.modelName')} *`} align="center" wide>
-                  <Select
-                    value={editingConfig.model_name || ''}
-                    onChange={(value) => {
-                      const newModelName = value as string;
-                      setEditingConfig(prev => {
-                        const oldAutoName = prev?.model_name ? `${currentTemplate?.name} - ${prev.model_name}` : '';
-                        const isAutoGenerated = !prev?.name || prev.name === oldAutoName;
-                        return {
-                          ...prev,
-                          model_name: newModelName,
-                          request_url: resolveRequestUrl(prev?.base_url || currentTemplate?.baseUrl || '', prev?.provider || currentTemplate?.format || 'openai', newModelName),
-                          name: isAutoGenerated && currentTemplate ? `${currentTemplate.name} - ${newModelName}` : prev?.name
-                        };
-                      });
-                    }}
-                    placeholder={t('providerSelection.selectModel')}
-                    options={(currentTemplate?.models || []).map(model => ({ label: model, value: model }))}
-                    searchable
-                    allowCustomValue
-                    searchPlaceholder={t('providerSelection.inputModelName')}
-                    customValueHint={t('providerSelection.useCustomModel')}
-                  />
-                </ConfigPageRow>
                 <ConfigPageRow label={`${t('form.configName')} *`} align="center" wide>
                   <Input value={editingConfig.name || ''} onChange={(e) => setEditingConfig(prev => ({ ...prev, name: e.target.value }))} placeholder={t('form.configNamePlaceholder')} inputSize="small" />
                 </ConfigPageRow>
                 <ConfigPageRow label={`${t('form.apiKey')} *`} align="center" wide>
-                  <Input type="password" value={editingConfig.api_key || ''} onChange={(e) => setEditingConfig(prev => ({ ...prev, api_key: e.target.value }))} placeholder={t('form.apiKeyPlaceholder')} inputSize="small" />
+                  <Input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={editingConfig.api_key || ''}
+                    onChange={(e) => {
+                      resetRemoteModelDiscovery();
+                      setEditingConfig(prev => ({ ...prev, api_key: e.target.value }));
+                    }}
+                    placeholder={t('form.apiKeyPlaceholder')}
+                    inputSize="small"
+                    suffix={apiKeySuffix}
+                  />
                 </ConfigPageRow>
                 <ConfigPageRow label={t('form.baseUrl')} align="center" wide>
                   {currentTemplate?.baseUrlOptions && currentTemplate.baseUrlOptions.length > 0 ? (
@@ -662,6 +1147,7 @@ const AIModelConfig: React.FC = () => {
                       onChange={(value) => {
                         const selectedOption = currentTemplate.baseUrlOptions!.find(opt => opt.url === value);
                         const newProvider = selectedOption?.format || editingConfig.provider || 'openai';
+                        resetRemoteModelDiscovery();
                         setEditingConfig(prev => ({
                           ...prev,
                           base_url: value as string,
@@ -671,70 +1157,108 @@ const AIModelConfig: React.FC = () => {
                       }}
                       placeholder={t('form.baseUrl')}
                       options={currentTemplate.baseUrlOptions.map(opt => ({ label: opt.url, value: opt.url, description: `${opt.format.toUpperCase()} · ${opt.note}` }))}
+                      size="small"
                     />
                   ) : (
                     <div className="bitfun-ai-model-config__control-stack">
                       <Input
                         type="url"
                         value={editingConfig.base_url || ''}
-                        onChange={(e) => setEditingConfig(prev => ({
-                          ...prev,
-                          base_url: e.target.value,
-                          request_url: resolveRequestUrl(e.target.value, prev?.provider || 'openai', prev?.model_name || '')
-                        }))}
+                        onChange={(e) => {
+                          resetRemoteModelDiscovery();
+                          setEditingConfig(prev => ({
+                            ...prev,
+                            base_url: e.target.value,
+                            request_url: resolveRequestUrl(e.target.value, prev?.provider || 'openai', prev?.model_name || '')
+                          }));
+                        }}
                         onFocus={(e) => e.target.select()}
                         placeholder={currentTemplate?.baseUrl}
                         inputSize="small"
                       />
                       {editingConfig.base_url && (
                         <div className="bitfun-ai-model-config__resolved-url">
-                          <span className="resolved-url__label">{t('form.resolvedUrlLabel')}</span>
-                          <code className="resolved-url__value">
-                            {resolveRequestUrl(editingConfig.base_url, editingConfig.provider || 'openai', editingConfig.model_name || '')}
-                          </code>
-                          <small className="resolved-url__hint">{t('form.forceUrlHint')}</small>
+                          <Input
+                            value={resolveRequestUrl(editingConfig.base_url, editingConfig.provider || 'openai', editingConfig.model_name || '')}
+                            readOnly
+                            onFocus={(e) => e.target.select()}
+                            inputSize="small"
+                            className="bitfun-ai-model-config__resolved-url-input"
+                          />
                         </div>
                       )}
                     </div>
                   )}
                 </ConfigPageRow>
-                <ConfigPageRow label={t('form.provider')} description={t('providerSelection.formatHint')} align="center" wide>
+                <ConfigPageRow label={t('form.provider')} align="center" wide>
                   <Select
                     value={editingConfig.provider || 'openai'}
-                    onChange={(value) => setEditingConfig(prev => ({
-                      ...prev,
-                      provider: value as string,
-                      request_url: resolveRequestUrl(prev?.base_url || '', value as string, prev?.model_name || '')
-                    }))}
+                    onChange={(value) => {
+                      resetRemoteModelDiscovery();
+                      setEditingConfig(prev => ({
+                        ...prev,
+                        provider: value as string,
+                        request_url: resolveRequestUrl(prev?.base_url || '', value as string, prev?.model_name || '')
+                      }));
+                    }}
                     placeholder={t('form.providerPlaceholder')}
                     options={requestFormatOptions}
+                    size="small"
                   />
                 </ConfigPageRow>
-                <ConfigPageRow label={t('form.contextWindow')} description={t('form.contextWindowHint')} align="center">
-                  <NumberInput value={editingConfig.context_window || 128000} onChange={(v) => setEditingConfig(prev => ({ ...prev, context_window: v }))} min={1000} max={2000000} step={1000} size="small" />
-                </ConfigPageRow>
-                <ConfigPageRow label={t('form.maxTokens')} description={t('form.maxTokensHint')} align="center">
-                  <NumberInput value={editingConfig.max_tokens || 8192} onChange={(v) => setEditingConfig(prev => ({ ...prev, max_tokens: v }))} min={1000} max={1000000} step={1000} size="small" />
-                </ConfigPageRow>
-                <ConfigPageRow label={t('thinking.enable')} description={t('thinking.enableHint')} align="center">
-                  <Switch checked={editingConfig.enable_thinking_process ?? false} onChange={(e) => setEditingConfig(prev => ({ ...prev, enable_thinking_process: e.target.checked }))} size="small" />
+                <ConfigPageRow label={`${t('form.modelSelection')} *`} wide multiline>
+                  <div className="bitfun-ai-model-config__control-stack">
+                    <div className="bitfun-ai-model-config__model-picker-row">
+                      <Select
+                        value={selectedModelValues}
+                        onChange={(value) => {
+                          const nextModelNames = Array.isArray(value) ? value.map(item => String(item)) : [String(value)];
+                          syncSelectedModelDrafts(nextModelNames, editingConfig);
+                        }}
+                        placeholder={t('providerSelection.selectModel')}
+                        options={availableModelOptions}
+                        searchable
+                        multiple
+                        loading={isFetchingRemoteModels}
+                        emptyText={t('providerSelection.noPresetModels')}
+                        searchPlaceholder={t('providerSelection.inputModelName')}
+                        size="small"
+                        onOpenChange={handleModelSelectionOpenChange}
+                      />
+                    </div>
+                    <div className="bitfun-ai-model-config__manual-model-entry">
+                      <Input
+                        value={manualModelInput}
+                        onChange={(e) => setManualModelInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addManualModelDraft();
+                          }
+                        }}
+                        placeholder={t('providerSelection.inputModelName')}
+                        inputSize="small"
+                      />
+                      <Button variant="secondary" size="small" onClick={addManualModelDraft}>
+                        {t('providerSelection.addCustomModel')}
+                      </Button>
+                    </div>
+                    {modelFetchHint && (
+                      <small className={`resolved-url__hint ${remoteModelsError ? 'bitfun-ai-model-config__json-status--error' : ''}`}>
+                        {modelFetchHint}
+                      </small>
+                    )}
+                    {renderSelectedModelRows()}
+                  </div>
                 </ConfigPageRow>
                 {isResponsesProvider(editingConfig.provider) && (
                   <ConfigPageRow label={t('reasoningEffort.label')} description={t('reasoningEffort.hint')} align="center">
-                    <Select value={editingConfig.reasoning_effort || ''} onChange={(v) => setEditingConfig(prev => ({ ...prev, reasoning_effort: (v as string) || undefined }))} placeholder={t('reasoningEffort.placeholder')} options={reasoningEffortOptions} />
+                    <Select value={editingConfig.reasoning_effort || ''} onChange={(v) => setEditingConfig(prev => ({ ...prev, reasoning_effort: (v as string) || undefined }))} placeholder={t('reasoningEffort.placeholder')} options={reasoningEffortOptions} size="small" />
                   </ConfigPageRow>
                 )}
               </>
             ) : (
               <>
-                <ConfigPageRow label={`${t('category.label')} *`} description={editingConfig.category ? t(`categoryHints.${editingConfig.category}`) : undefined} align="center">
-                  <Select value={editingConfig.category || 'general_chat'} onChange={handleCategoryChange} placeholder={t('category.placeholder')} options={[
-                    { label: t('category.general_chat'), value: 'general_chat' },
-                    { label: t('category.multimodal'), value: 'multimodal' },
-                    { label: t('category.image_generation'), value: 'image_generation' },
-                    { label: t('category.speech_recognition'), value: 'speech_recognition' },
-                  ]} />
-                </ConfigPageRow>
                 <ConfigPageRow label={`${t('form.configName')} *`} align="center" wide>
                   <Input value={editingConfig.name || ''} onChange={(e) => setEditingConfig(prev => ({ ...prev, name: e.target.value }))} placeholder={t('form.configNamePlaceholder')} inputSize="small" />
                 </ConfigPageRow>
@@ -743,66 +1267,111 @@ const AIModelConfig: React.FC = () => {
                     <Input
                       type="url"
                       value={editingConfig.base_url || ''}
-                      onChange={(e) => setEditingConfig(prev => ({
-                        ...prev,
-                        base_url: e.target.value,
-                        request_url: resolveRequestUrl(e.target.value, prev?.provider || 'openai', prev?.model_name || '')
-                      }))}
+                      onChange={(e) => {
+                        resetRemoteModelDiscovery();
+                        setEditingConfig(prev => ({
+                          ...prev,
+                          base_url: e.target.value,
+                          request_url: resolveRequestUrl(e.target.value, prev?.provider || 'openai', prev?.model_name || '')
+                        }));
+                      }}
                       onFocus={(e) => e.target.select()}
                       placeholder={'https://open.bigmodel.cn/api/paas/v4/chat/completions'}
                       inputSize="small"
                     />
                     {editingConfig.base_url && (
                       <div className="bitfun-ai-model-config__resolved-url">
-                        <span className="resolved-url__label">{t('form.resolvedUrlLabel')}</span>
-                        <code className="resolved-url__value">
-                          {resolveRequestUrl(editingConfig.base_url, editingConfig.provider || 'openai', editingConfig.model_name || '')}
-                        </code>
-                        <small className="resolved-url__hint">{t('form.forceUrlHint')}</small>
+                        <Input
+                          value={resolveRequestUrl(editingConfig.base_url, editingConfig.provider || 'openai', editingConfig.model_name || '')}
+                          readOnly
+                          onFocus={(e) => e.target.select()}
+                          inputSize="small"
+                          className="bitfun-ai-model-config__resolved-url-input"
+                        />
                       </div>
                     )}
                   </div>
                 </ConfigPageRow>
                 <ConfigPageRow label={`${t('form.apiKey')} *`} align="center" wide>
-                  <Input type="password" value={editingConfig.api_key || ''} onChange={(e) => setEditingConfig(prev => ({ ...prev, api_key: e.target.value }))} placeholder={t('form.apiKeyPlaceholder')} inputSize="small" />
+                  <Input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={editingConfig.api_key || ''}
+                    onChange={(e) => {
+                      resetRemoteModelDiscovery();
+                      setEditingConfig(prev => ({ ...prev, api_key: e.target.value }));
+                    }}
+                    placeholder={t('form.apiKeyPlaceholder')}
+                    inputSize="small"
+                    suffix={apiKeySuffix}
+                  />
                 </ConfigPageRow>
               </>
             )}
 
             {!isFromTemplate && (
               <>
-                <ConfigPageRow label={`${t('form.modelName')} *`} description={editingConfig.category === 'speech_recognition' ? t('form.modelNameHint') : undefined} align="center" wide>
-                  <Input value={editingConfig.model_name || ''} onChange={(e) => setEditingConfig(prev => ({ ...prev, model_name: e.target.value, request_url: resolveRequestUrl(prev?.base_url || '', prev?.provider || 'openai', e.target.value) }))} placeholder={editingConfig.category === 'speech_recognition' ? 'glm-asr' : 'glm-4.7'} inputSize="small" />
-                </ConfigPageRow>
                 <ConfigPageRow label={t('form.provider')} align="center" wide>
                   <Select value={editingConfig.provider || 'openai'} onChange={(value) => {
                     const provider = value as string;
+                    resetRemoteModelDiscovery();
                     setEditingConfig(prev => ({
                       ...prev,
                       provider,
                       request_url: resolveRequestUrl(prev?.base_url || '', provider, prev?.model_name || ''),
                       reasoning_effort: isResponsesProvider(provider) ? (prev?.reasoning_effort || 'medium') : undefined,
                     }));
-                  }} placeholder={t('form.providerPlaceholder')} options={requestFormatOptions} />
+                  }} placeholder={t('form.providerPlaceholder')} options={requestFormatOptions} size="small" />
                 </ConfigPageRow>
-                {editingConfig.category !== 'speech_recognition' && (
-                  <>
-                    <ConfigPageRow label={t('form.contextWindow')} description={t('form.contextWindowHint')} align="center">
-                      <NumberInput value={editingConfig.context_window || 128000} onChange={(v) => setEditingConfig(prev => ({ ...prev, context_window: v }))} min={1000} max={2000000} step={1000} size="small" />
-                    </ConfigPageRow>
-                    {editingConfig.category !== 'multimodal' && (
-                      <ConfigPageRow label={t('form.maxTokens')} description={t('form.maxTokensHint')} align="center">
-                        <NumberInput value={editingConfig.max_tokens || 65536} onChange={(v) => setEditingConfig(prev => ({ ...prev, max_tokens: v }))} min={1000} max={1000000} step={1000} size="small" />
-                      </ConfigPageRow>
+                <ConfigPageRow label={`${t('form.modelSelection')} *`} description={editingConfig.category === 'speech_recognition' ? t('form.modelNameHint') : undefined} wide multiline>
+                  <div className="bitfun-ai-model-config__control-stack">
+                    <div className="bitfun-ai-model-config__model-picker-row">
+                      <Select
+                        value={editingConfig.id ? (selectedModelValues[0] || '') : selectedModelValues}
+                        onChange={(value) => {
+                          const nextModelNames = Array.isArray(value)
+                            ? value.map(item => String(item))
+                            : [String(value)];
+                          syncSelectedModelDrafts(nextModelNames, editingConfig, !!editingConfig.id);
+                        }}
+                        placeholder={editingConfig.category === 'speech_recognition' ? 'glm-asr' : 'glm-4.7'}
+                        options={availableModelOptions}
+                        searchable
+                        multiple={!editingConfig.id}
+                        loading={isFetchingRemoteModels}
+                        emptyText={t('providerSelection.noPresetModels')}
+                        searchPlaceholder={t('providerSelection.inputModelName')}
+                        size="small"
+                        onOpenChange={handleModelSelectionOpenChange}
+                      />
+                    </div>
+                    <div className="bitfun-ai-model-config__manual-model-entry">
+                      <Input
+                        value={manualModelInput}
+                        onChange={(e) => setManualModelInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addManualModelDraft();
+                          }
+                        }}
+                        placeholder={t('providerSelection.inputModelName')}
+                        inputSize="small"
+                      />
+                      <Button variant="secondary" size="small" onClick={addManualModelDraft}>
+                        {t('providerSelection.addCustomModel')}
+                      </Button>
+                    </div>
+                    {modelFetchHint && (
+                      <small className={`resolved-url__hint ${remoteModelsError ? 'bitfun-ai-model-config__json-status--error' : ''}`}>
+                        {modelFetchHint}
+                      </small>
                     )}
-                  </>
-                )}
-                <ConfigPageRow label={t('thinking.enable')} description={t('thinking.enableHint')} align="center">
-                  <Switch checked={editingConfig.enable_thinking_process ?? false} onChange={(e) => setEditingConfig(prev => ({ ...prev, enable_thinking_process: e.target.checked }))} size="small" />
+                    {renderSelectedModelRows()}
+                  </div>
                 </ConfigPageRow>
                 {isResponsesProvider(editingConfig.provider) && (
                   <ConfigPageRow label={t('reasoningEffort.label')} description={t('reasoningEffort.hint')} align="center">
-                    <Select value={editingConfig.reasoning_effort || ''} onChange={(v) => setEditingConfig(prev => ({ ...prev, reasoning_effort: (v as string) || undefined }))} placeholder={t('reasoningEffort.placeholder')} options={reasoningEffortOptions} />
+                    <Select value={editingConfig.reasoning_effort || ''} onChange={(v) => setEditingConfig(prev => ({ ...prev, reasoning_effort: (v as string) || undefined }))} placeholder={t('reasoningEffort.placeholder')} options={reasoningEffortOptions} size="small" />
                   </ConfigPageRow>
                 )}
                 <ConfigPageRow label={t('form.description')} multiline>
@@ -888,6 +1457,159 @@ const AIModelConfig: React.FC = () => {
     );
   };
 
+  const renderModelCollectionItem = (config: AIModelConfigType) => {
+    const isExpanded = expandedIds.has(config.id || '');
+    const testResult = config.id ? testResults[config.id] : null;
+    const isTesting = config.id ? !!testingConfigs[config.id] : false;
+    const providerDisplayName = getProviderDisplayName(config);
+    const modelDisplayName = getModelDisplayName(config);
+    const modelLabel = config.model_name || modelDisplayName;
+
+    const badge = (
+      <>
+        <span className="bitfun-ai-model-config__meta-tag">
+          {t(`category.${config.category}`)}
+        </span>
+        <span className="bitfun-ai-model-config__meta-tag">
+          {config.provider}
+        </span>
+        {testResult && (
+          <span
+            className={`bitfun-ai-model-config__status-dot ${testResult.success ? 'is-success' : 'is-error'}`}
+            title={testResult.message}
+          />
+        )}
+      </>
+    );
+
+    const details = (
+      <div className="bitfun-ai-model-config__details">
+        <div className="bitfun-ai-model-config__details-section">
+          <div className="bitfun-ai-model-config__details-section-title">
+            {t('details.basicInfo')}
+          </div>
+          <div className="bitfun-ai-model-config__details-grid">
+            <div className="bitfun-ai-model-config__details-item">
+              <span className="bitfun-ai-model-config__details-label">{t('form.configName')}</span>
+              <span className="bitfun-ai-model-config__details-value">{providerDisplayName}</span>
+            </div>
+            <div className="bitfun-ai-model-config__details-item">
+              <span className="bitfun-ai-model-config__details-label">{t('details.modelName')}</span>
+              <span className="bitfun-ai-model-config__details-value">{config.model_name}</span>
+            </div>
+            <div className="bitfun-ai-model-config__details-item">
+              <span className="bitfun-ai-model-config__details-label">{t('details.provider')}</span>
+              <span className="bitfun-ai-model-config__details-value">{config.provider}</span>
+            </div>
+            <div className="bitfun-ai-model-config__details-item">
+              <span className="bitfun-ai-model-config__details-label">{t('details.contextWindow')}</span>
+              <span className="bitfun-ai-model-config__details-value">{config.context_window?.toLocaleString() || '128,000'}</span>
+            </div>
+            <div className="bitfun-ai-model-config__details-item">
+              <span className="bitfun-ai-model-config__details-label">{t('details.maxOutput')}</span>
+              <span className="bitfun-ai-model-config__details-value">{config.max_tokens?.toLocaleString() || '-'}</span>
+            </div>
+            <div className="bitfun-ai-model-config__details-item bitfun-ai-model-config__details-item--wide">
+              <span className="bitfun-ai-model-config__details-label">{t('details.apiUrl')}</span>
+              <span className="bitfun-ai-model-config__details-value">{config.base_url}</span>
+            </div>
+            {config.capabilities && config.capabilities.length > 0 && (
+              <div className="bitfun-ai-model-config__details-item bitfun-ai-model-config__details-item--wide">
+                <span className="bitfun-ai-model-config__details-label">{t('details.capabilities')}</span>
+                <div className="bitfun-ai-model-config__details-tags">
+                  {config.capabilities.map(capability => (
+                    <span key={capability} className="bitfun-ai-model-config__details-tag">
+                      {t(`capabilities.${capability}`, { defaultValue: capability })}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {config.description && (
+              <div className="bitfun-ai-model-config__details-item bitfun-ai-model-config__details-item--wide">
+                <span className="bitfun-ai-model-config__details-label">{t('details.description')}</span>
+                <span className="bitfun-ai-model-config__details-value bitfun-ai-model-config__details-value--text">
+                  {config.description}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+        {testResult && (
+          <div className="bitfun-ai-model-config__details-section">
+            <div className="bitfun-ai-model-config__details-section-title">
+              {t('actions.test')}
+            </div>
+            <div className={`bitfun-ai-model-config__test-result ${testResult.success ? 'success' : 'error'}`}>
+              {testResult.message}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+
+    const control = (
+      <>
+        <Switch
+          checked={config.enabled}
+          onChange={(e) => {
+            void handleToggleEnabled(config, e.target.checked);
+          }}
+          size="small"
+        />
+        <button
+          type="button"
+          className="bitfun-collection-btn"
+          onClick={() => void handleTest(config)}
+          disabled={isTesting}
+          title={t('actions.test')}
+        >
+          {isTesting ? <Loader size={14} className="spinning" /> : <Wifi size={14} />}
+        </button>
+        <button
+          type="button"
+          className="bitfun-collection-btn"
+          onClick={() => {
+            setSelectedModelForStats({ id: config.id!, name: modelLabel });
+            setShowTokenStats(true);
+          }}
+          title={t('actions.viewStats')}
+        >
+          <BarChart3 size={14} />
+        </button>
+        <button
+          type="button"
+          className="bitfun-collection-btn"
+          onClick={() => handleEdit(config)}
+          title={t('actions.edit')}
+        >
+          <Edit2 size={14} />
+        </button>
+        <button
+          type="button"
+          className="bitfun-collection-btn bitfun-collection-btn--danger"
+          onClick={() => void handleDelete(config.id!)}
+          title={t('actions.delete')}
+        >
+          <Trash2 size={14} />
+        </button>
+      </>
+    );
+
+    return (
+      <ConfigCollectionItem
+        key={config.id}
+        label={modelLabel}
+        badge={badge}
+        control={control}
+        details={details}
+        expanded={isExpanded}
+        onToggle={() => config.id && toggleExpanded(config.id)}
+        disabled={!config.enabled}
+      />
+    );
+  };
+
   
   return (
     <ConfigPageLayout className="bitfun-ai-model-config">
@@ -912,7 +1634,7 @@ const AIModelConfig: React.FC = () => {
               variant="primary"
               size="small"
               onClick={handleCreateNew}
-              tooltip={t('actions.newConfig')}
+              tooltip={t('actions.addProvider')}
             >
               <Plus size={16} />
             </IconButton>
@@ -929,151 +1651,27 @@ const AIModelConfig: React.FC = () => {
             </div>
           ) : (
             <div className="bitfun-ai-model-config__collection">
-              {aiModels.map(config => {
-                const isExpanded = expandedIds.has(config.id || '');
-                const testResult = config.id ? testResults[config.id] : null;
-                const isTesting = config.id ? !!testingConfigs[config.id] : false;
-
-                const badge = (
-                  <>
-                    <span className="bitfun-ai-model-config__meta-tag">
-                      {t(`category.${config.category}`)}
-                    </span>
-                    <span className="bitfun-ai-model-config__meta-tag">
-                      {config.provider}
-                    </span>
-                    {testResult && (
-                      <span
-                        className={`bitfun-ai-model-config__status-dot ${testResult.success ? 'is-success' : 'is-error'}`}
-                        title={testResult.message}
-                      />
-                    )}
-                  </>
-                );
-
-                const details = (
-                  <div className="bitfun-ai-model-config__details">
-                    <div className="bitfun-ai-model-config__details-section">
-                      <div className="bitfun-ai-model-config__details-section-title">
-                        {t('details.basicInfo')}
-                      </div>
-                      <div className="bitfun-ai-model-config__details-grid">
-                        <div className="bitfun-ai-model-config__details-item">
-                          <span className="bitfun-ai-model-config__details-label">{t('details.modelName')}</span>
-                          <span className="bitfun-ai-model-config__details-value">{config.model_name}</span>
-                        </div>
-                        <div className="bitfun-ai-model-config__details-item">
-                          <span className="bitfun-ai-model-config__details-label">{t('details.provider')}</span>
-                          <span className="bitfun-ai-model-config__details-value">{config.provider}</span>
-                        </div>
-                        <div className="bitfun-ai-model-config__details-item">
-                          <span className="bitfun-ai-model-config__details-label">{t('details.contextWindow')}</span>
-                          <span className="bitfun-ai-model-config__details-value">{config.context_window?.toLocaleString() || '128,000'}</span>
-                        </div>
-                        <div className="bitfun-ai-model-config__details-item">
-                          <span className="bitfun-ai-model-config__details-label">{t('details.maxOutput')}</span>
-                          <span className="bitfun-ai-model-config__details-value">{config.max_tokens?.toLocaleString() || '-'}</span>
-                        </div>
-                        <div className="bitfun-ai-model-config__details-item bitfun-ai-model-config__details-item--wide">
-                          <span className="bitfun-ai-model-config__details-label">{t('details.apiUrl')}</span>
-                          <span className="bitfun-ai-model-config__details-value">{config.base_url}</span>
-                        </div>
-                        {config.capabilities && config.capabilities.length > 0 && (
-                          <div className="bitfun-ai-model-config__details-item bitfun-ai-model-config__details-item--wide">
-                            <span className="bitfun-ai-model-config__details-label">{t('details.capabilities')}</span>
-                            <div className="bitfun-ai-model-config__details-tags">
-                              {config.capabilities.map(capability => (
-                                <span key={capability} className="bitfun-ai-model-config__details-tag">
-                                  {t(`capabilities.${capability}`, { defaultValue: capability })}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {config.description && (
-                          <div className="bitfun-ai-model-config__details-item bitfun-ai-model-config__details-item--wide">
-                            <span className="bitfun-ai-model-config__details-label">{t('details.description')}</span>
-                            <span className="bitfun-ai-model-config__details-value bitfun-ai-model-config__details-value--text">
-                              {config.description}
-                            </span>
-                          </div>
-                        )}
-                      </div>
+              {providerGroups.map(group => (
+                <div key={group.providerName} className="bitfun-ai-model-config__provider-group">
+                  <div className="bitfun-ai-model-config__provider-group-header">
+                    <div className="bitfun-ai-model-config__provider-group-title">
+                      <span>{group.providerName}</span>
+                      <span className="bitfun-ai-model-config__provider-group-count">{group.models.length}</span>
                     </div>
-                    {testResult && (
-                      <div className="bitfun-ai-model-config__details-section">
-                        <div className="bitfun-ai-model-config__details-section-title">
-                          {t('actions.test')}
-                        </div>
-                        <div className={`bitfun-ai-model-config__test-result ${testResult.success ? 'success' : 'error'}`}>
-                          {testResult.message}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-
-                const control = (
-                  <>
-                    <Switch
-                      checked={config.enabled}
-                      onChange={(e) => {
-                        void handleToggleEnabled(config, e.target.checked);
-                      }}
+                    <IconButton
+                      variant="ghost"
                       size="small"
-                    />
-                    <button
-                      type="button"
-                      className="bitfun-collection-btn"
-                      onClick={() => void handleTest(config)}
-                      disabled={isTesting}
-                      title={t('actions.test')}
+                      onClick={() => handleAddModelToExistingProvider(group.models[0])}
+                      tooltip={t('actions.addModel')}
                     >
-                      {isTesting ? <Loader size={14} className="spinning" /> : <Wifi size={14} />}
-                    </button>
-                    <button
-                      type="button"
-                      className="bitfun-collection-btn"
-                      onClick={() => {
-                        setSelectedModelForStats({ id: config.id!, name: config.name });
-                        setShowTokenStats(true);
-                      }}
-                      title={t('actions.viewStats')}
-                    >
-                      <BarChart3 size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      className="bitfun-collection-btn"
-                      onClick={() => handleEdit(config)}
-                      title={t('actions.edit')}
-                    >
-                      <Edit2 size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      className="bitfun-collection-btn bitfun-collection-btn--danger"
-                      onClick={() => void handleDelete(config.id!)}
-                      title={t('actions.delete')}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </>
-                );
-
-                return (
-                  <ConfigCollectionItem
-                    key={config.id}
-                    label={config.name}
-                    badge={badge}
-                    control={control}
-                    details={details}
-                    expanded={isExpanded}
-                    onToggle={() => config.id && toggleExpanded(config.id)}
-                    disabled={!config.enabled}
-                  />
-                );
-              })}
+                      <Plus size={14} />
+                    </IconButton>
+                  </div>
+                  <div className="bitfun-ai-model-config__provider-group-list">
+                    {group.models.map(config => renderModelCollectionItem(config))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </ConfigPageSection>
@@ -1136,7 +1734,7 @@ const AIModelConfig: React.FC = () => {
         title={editingConfig?.id
           ? t('editModel')
           : (currentTemplate ? `${t('newModel')} - ${currentTemplate.name}` : t('newModel'))}
-        size="large"
+        size="xlarge"
       >
         {renderEditingForm()}
       </Modal>

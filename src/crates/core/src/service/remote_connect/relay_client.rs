@@ -16,9 +16,8 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tokio_tungstenite::tungstenite::Message;
 
-type WsStream = tokio_tungstenite::WebSocketStream<
-    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
->;
+type WsStream =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 /// Messages in the relay protocol (both directions).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -403,9 +402,8 @@ async fn dial(ws_url: &str) -> Result<WsStream> {
         max_write_buffer_size: 64 * 1024 * 1024,
         ..Default::default()
     };
-    let (stream, _) =
-        tokio_tungstenite::connect_async_with_config(ws_url, Some(config), false)
-            .await
-            .map_err(|e| anyhow!("dial {ws_url}: {e}"))?;
+    let (stream, _) = tokio_tungstenite::connect_async_with_config(ws_url, Some(config), false)
+        .await
+        .map_err(|e| anyhow!("dial {ws_url}: {e}"))?;
     Ok(stream)
 }

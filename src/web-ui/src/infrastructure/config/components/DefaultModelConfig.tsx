@@ -4,10 +4,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Layers,
+  Sparkles,
 } from 'lucide-react';
-import { Select, CubeLoading } from '@/component-library';
+import { Select, CubeLoading, type SelectOption } from '@/component-library';
 import { notificationService } from '@/shared/notification-system';
 import { configManager } from '../services/ConfigManager';
+import { getProviderDisplayName } from '../services/modelConfigs';
 import type {
   AIModelConfig,
   DefaultModels,
@@ -29,6 +31,11 @@ const OPTIONAL_CAPABILITY_TYPES: OptionalCapabilityType[] = [
 
 const normalizeSelectValue = (value: string | number | (string | number)[]): string | number =>
   Array.isArray(value) ? (value[0] ?? '') : value;
+
+type ModelSelectOption = SelectOption & {
+  meta?: string;
+  enableThinking?: boolean;
+};
 
 export const DefaultModelConfig: React.FC = () => {
   const { t } = useTranslation('settings/default-model');
@@ -85,8 +92,76 @@ export const DefaultModelConfig: React.FC = () => {
   
   const getModelName = useCallback((modelId: string | null | undefined): string | undefined => {
     if (!modelId) return undefined;
-    return models.find(m => m.id === modelId)?.name;
+    const model = models.find(m => m.id === modelId);
+    return model?.model_name;
   }, [models]);
+
+  const formatContextWindow = useCallback((contextWindow?: number) => {
+    if (!contextWindow) return null;
+    return `${Math.round(contextWindow / 1000)}k`;
+  }, []);
+
+  const buildModelMeta = useCallback((model: AIModelConfig) => {
+    const parts = [getProviderDisplayName(model)];
+    const contextWindow = formatContextWindow(model.context_window);
+
+    if (contextWindow) {
+      parts.push(contextWindow);
+    }
+
+    if (model.reasoning_effort) {
+      parts.push(model.reasoning_effort);
+    }
+
+    return parts.join(' · ');
+  }, [formatContextWindow]);
+
+  const buildModelOption = useCallback((model: AIModelConfig): ModelSelectOption => ({
+    label: model.model_name,
+    value: model.id!,
+    meta: buildModelMeta(model),
+    enableThinking: model.enable_thinking_process,
+  }), [buildModelMeta]);
+
+  const renderModelOption = useCallback((option: SelectOption) => {
+    const modelOption = option as ModelSelectOption;
+
+    return (
+      <div className="default-model-config__model-option">
+        <div className="default-model-config__model-option-title">
+          <span className="default-model-config__model-option-name">{modelOption.label}</span>
+          {modelOption.enableThinking && (
+            <Sparkles size={12} className="default-model-config__model-option-thinking" />
+          )}
+        </div>
+        {modelOption.meta && (
+          <div className="default-model-config__model-option-meta">{modelOption.meta}</div>
+        )}
+      </div>
+    );
+  }, []);
+
+  const renderModelValue = useCallback((option?: SelectOption | SelectOption[]) => {
+    const selectedOption = Array.isArray(option) ? option[0] : option;
+    if (!selectedOption) return null;
+
+    const modelOption = selectedOption as ModelSelectOption;
+    return (
+      <span className="select__value default-model-config__model-value">
+        <span className="default-model-config__model-value-text">
+          <span className="default-model-config__model-value-title">
+            <span className="default-model-config__model-value-name">{modelOption.label}</span>
+            {modelOption.enableThinking && (
+              <Sparkles size={12} className="default-model-config__model-option-thinking" />
+            )}
+          </span>
+          {modelOption.meta && (
+            <span className="default-model-config__model-value-meta">{modelOption.meta}</span>
+          )}
+        </span>
+      </span>
+    );
+  }, []);
 
   
   const handleDefaultModelChange = async (slot: 'primary' | 'fast', modelId: string | number) => {
@@ -191,10 +266,10 @@ export const DefaultModelConfig: React.FC = () => {
             value={defaultModels.primary || ''}
             onChange={(value) => handleDefaultModelChange('primary', normalizeSelectValue(value))}
           placeholder={t('core.primary.placeholder')}
-          options={enabledModels.map(model => ({
-            label: model.name,
-            value: model.id!,
-          }))}
+          options={enabledModels.map(buildModelOption)}
+          renderOption={renderModelOption}
+          renderValue={renderModelValue}
+          className="default-model-config__model-select"
           disabled={enabledModels.length === 0}
           size="small"
         />
@@ -211,11 +286,11 @@ export const DefaultModelConfig: React.FC = () => {
           placeholder={t('core.fast.placeholder')}
           options={[
             { label: t('core.fast.notSet'), value: '' },
-            ...enabledModels.map(model => ({
-              label: model.name,
-              value: model.id!,
-            })),
+            ...enabledModels.map(buildModelOption),
           ]}
+          renderOption={renderModelOption}
+          renderValue={renderModelValue}
+          className="default-model-config__model-select"
           size="small"
         />
       </ConfigPageRow>
@@ -236,13 +311,10 @@ export const DefaultModelConfig: React.FC = () => {
               onChange={(value) => handleCapabilityChange(capability, normalizeSelectValue(value))}
               placeholder={t('optional.selectModel')}
               disabled={availableModels.length === 0}
-              options={[
-                { label: t('optional.notSet'), value: '' },
-                ...availableModels.map(model => ({
-                  label: model.name,
-                  value: model.id!,
-                })),
-              ]}
+              options={availableModels.map(buildModelOption)}
+              renderOption={renderModelOption}
+              renderValue={renderModelValue}
+              className="default-model-config__model-select"
               size="small"
             />
           </ConfigPageRow>

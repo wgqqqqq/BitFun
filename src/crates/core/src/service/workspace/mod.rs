@@ -18,9 +18,8 @@ pub use context_generator::{
 pub use factory::WorkspaceFactory;
 pub use identity_watch::WorkspaceIdentityWatchService;
 pub use manager::{
-    GitInfo, ScanOptions, WorkspaceIdentity, WorkspaceInfo, WorkspaceManager,
-    WorkspaceManagerConfig,
-    WorkspaceManagerStatistics, WorkspaceKind, WorkspaceOpenOptions, WorkspaceStatistics,
+    GitInfo, ScanOptions, WorkspaceIdentity, WorkspaceInfo, WorkspaceKind, WorkspaceManager,
+    WorkspaceManagerConfig, WorkspaceManagerStatistics, WorkspaceOpenOptions, WorkspaceStatistics,
     WorkspaceStatus, WorkspaceSummary, WorkspaceType,
 };
 pub use provider::{WorkspaceCleanupResult, WorkspaceProvider, WorkspaceSystemSummary};

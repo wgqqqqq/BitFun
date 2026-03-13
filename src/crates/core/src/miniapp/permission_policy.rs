@@ -55,9 +55,7 @@ pub fn resolve_policy(
         let allow = shell
             .allow
             .as_ref()
-            .map(|v| {
-                Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())
-            })
+            .map(|v| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect()))
             .unwrap_or_else(|| Value::Array(Vec::new()));
         policy.insert("shell".to_string(), serde_json::json!({ "allow": allow }));
     }
@@ -66,9 +64,7 @@ pub fn resolve_policy(
         let allow = net
             .allow
             .as_ref()
-            .map(|v| {
-                Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())
-            })
+            .map(|v| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect()))
             .unwrap_or_else(|| Value::Array(Vec::new()));
         policy.insert("net".to_string(), serde_json::json!({ "allow": allow }));
     }

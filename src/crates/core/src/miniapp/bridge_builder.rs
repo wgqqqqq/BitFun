@@ -145,19 +145,14 @@ fn escape_js_str(s: &str) -> String {
 pub fn build_import_map(deps: &[EsmDep]) -> String {
     let mut imports = serde_json::Map::new();
     for dep in deps {
-        let url = dep.url.clone().unwrap_or_else(|| {
-            match &dep.version {
-                Some(v) => format!("https://esm.sh/{}@{}", dep.name, v),
-                None => format!("https://esm.sh/{}", dep.name),
-            }
+        let url = dep.url.clone().unwrap_or_else(|| match &dep.version {
+            Some(v) => format!("https://esm.sh/{}@{}", dep.name, v),
+            None => format!("https://esm.sh/{}", dep.name),
         });
         imports.insert(dep.name.clone(), serde_json::Value::String(url));
     }
     let json = serde_json::json!({ "imports": imports });
-    format!(
-        r#"<script type="importmap">{}</script>"#,
-        json.to_string()
-    )
+    format!(r#"<script type="importmap">{}</script>"#, json.to_string())
 }
 
 /// Build CSP meta content from permissions (net.allow → connect-src).

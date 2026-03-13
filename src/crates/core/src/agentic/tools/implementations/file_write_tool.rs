@@ -69,10 +69,7 @@ Usage:
         input: &Value,
         context: Option<&ToolUseContext>,
     ) -> ValidationResult {
-        let file_path = match input
-            .get("file_path")
-            .and_then(|v| v.as_str())
-        {
+        let file_path = match input.get("file_path").and_then(|v| v.as_str()) {
             Some(path) if !path.is_empty() => path,
             _ => {
                 return ValidationResult {
@@ -93,10 +90,9 @@ Usage:
             };
         }
 
-        if let Err(err) = resolve_path_with_workspace(
-            file_path,
-            context.and_then(|ctx| ctx.workspace_root()),
-        ) {
+        if let Err(err) =
+            resolve_path_with_workspace(file_path, context.and_then(|ctx| ctx.workspace_root()))
+        {
             return ValidationResult {
                 result: false,
                 message: Some(err.to_string()),

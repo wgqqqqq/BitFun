@@ -93,22 +93,18 @@ pub async fn get_model_token_stats(
     debug!("Getting token stats for model: {}", request.model_id);
 
     match request.time_range {
-        Some(time_range) => {
-            state
-                .token_usage_service
-                .get_model_stats_filtered(&request.model_id, time_range, request.include_subagent)
-                .await
-                .map_err(|e| {
-                    error!("Failed to get filtered model stats: {}", e);
-                    format!("Failed to get filtered model stats: {}", e)
-                })
-        }
-        None => {
-            Ok(state
-                .token_usage_service
-                .get_model_stats(&request.model_id)
-                .await)
-        }
+        Some(time_range) => state
+            .token_usage_service
+            .get_model_stats_filtered(&request.model_id, time_range, request.include_subagent)
+            .await
+            .map_err(|e| {
+                error!("Failed to get filtered model stats: {}", e);
+                format!("Failed to get filtered model stats: {}", e)
+            }),
+        None => Ok(state
+            .token_usage_service
+            .get_model_stats(&request.model_id)
+            .await),
     }
 }
 
@@ -197,4 +193,3 @@ pub async fn clear_all_token_stats(state: State<'_, AppState>) -> Result<(), Str
             format!("Failed to clear all stats: {}", e)
         })
 }
-

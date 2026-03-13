@@ -98,8 +98,9 @@ fn handle_function_call_output_item_done(
         .and_then(Value::as_str)
         .unwrap_or_default();
     let need_fallback_full = !tc.saw_any_delta;
-    let need_tail =
-        tc.saw_any_delta && tc.args_so_far.len() < full_args.len() && full_args.starts_with(&tc.args_so_far);
+    let need_tail = tc.saw_any_delta
+        && tc.args_so_far.len() < full_args.len()
+        && full_args.starts_with(&tc.args_so_far);
 
     if need_fallback_full || need_tail {
         let delta = if need_fallback_full {
@@ -215,7 +216,10 @@ pub async fn handle_responses_stream(
         };
 
         if let Some(api_error_message) = extract_api_error_message(&event_json) {
-            let error_msg = format!("Responses SSE API error: {}, data: {}", api_error_message, raw);
+            let error_msg = format!(
+                "Responses SSE API error: {}, data: {}",
+                api_error_message, raw
+            );
             error!("{}", error_msg);
             let _ = tx_event.send(Err(anyhow!(error_msg)));
             return;
@@ -234,7 +238,8 @@ pub async fn handle_responses_stream(
         match event.kind.as_str() {
             "response.output_item.added" => {
                 // Track tool calls so we can stream arguments via `response.function_call_arguments.delta`.
-                if let (Some(output_index), Some(item)) = (event.output_index, event.item.as_ref()) {
+                if let (Some(output_index), Some(item)) = (event.output_index, event.item.as_ref())
+                {
                     if let Some(tc) = InProgressToolCall::from_item_value(item) {
                         if let Some(ref call_id) = tc.call_id {
                             tool_call_index_by_id.insert(call_id.clone(), output_index);
@@ -340,28 +345,31 @@ pub async fn handle_responses_stream(
                                 && full_args.starts_with(&tc.args_so_far)
                             {
                                 let delta = full_args[tc.args_so_far.len()..].to_string();
-                            if !delta.is_empty() {
-                                tc.args_so_far.push_str(&delta);
-                                let (id, name) = if tc.sent_header {
-                                    (None, None)
-                                } else {
-                                    tc.sent_header = true;
-                                    (tc.call_id.clone(), tc.name.clone())
-                                };
-                                let _ = tx_event.send(Ok(UnifiedResponse {
-                                    tool_call: Some(crate::types::unified::UnifiedToolCall {
-                                        id,
-                                        name,
-                                        arguments: Some(delta),
-                                    }),
-                                    ..Default::default()
-                                }));
+                                if !delta.is_empty() {
+                                    tc.args_so_far.push_str(&delta);
+                                    let (id, name) = if tc.sent_header {
+                                        (None, None)
+                                    } else {
+                                        tc.sent_header = true;
+                                        (tc.call_id.clone(), tc.name.clone())
+                                    };
+                                    let _ = tx_event.send(Ok(UnifiedResponse {
+                                        tool_call: Some(crate::types::unified::UnifiedToolCall {
+                                            id,
+                                            name,
+                                            arguments: Some(delta),
+                                        }),
+                                        ..Default::default()
+                                    }));
+                                }
                             }
                         }
                     }
                 }
-                }
-                match event.response.map(serde_json::from_value::<ResponsesCompleted>) {
+                match event
+                    .response
+                    .map(serde_json::from_value::<ResponsesCompleted>)
+                {
                     Some(Ok(response)) => {
                         received_finish_reason = true;
                         let _ = tx_event.send(Ok(UnifiedResponse {
@@ -372,7 +380,8 @@ pub async fn handle_responses_stream(
                         continue;
                     }
                     Some(Err(e)) => {
-                        let error_msg = format!("Failed to parse response.completed payload: {}", e);
+                        let error_msg =
+                            format!("Failed to parse response.completed payload: {}", e);
                         error!("{}", error_msg);
                         let _ = tx_event.send(Err(anyhow!(error_msg)));
                         return;
@@ -539,10 +548,16 @@ mod tests {
             &mut tool_call_index_by_id,
         );
 
-        let response = rx_event.try_recv().expect("tool call event").expect("ok response");
+        let response = rx_event
+            .try_recv()
+            .expect("tool call event")
+            .expect("ok response");
         let tool_call = response.tool_call.expect("tool call");
         assert_eq!(tool_call.id.as_deref(), Some("call_1"));
         assert_eq!(tool_call.name.as_deref(), Some("get_weather"));
-        assert_eq!(tool_call.arguments.as_deref(), Some("{\"city\":\"Beijing\"}"));
+        assert_eq!(
+            tool_call.arguments.as_deref(),
+            Some("{\"city\":\"Beijing\"}")
+        );
     }
 }

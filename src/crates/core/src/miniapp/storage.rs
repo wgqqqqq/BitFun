@@ -59,10 +59,18 @@ impl MiniAppStorage {
         let dir = self.app_dir(app_id);
         let source = self.source_dir(app_id);
         tokio::fs::create_dir_all(&dir).await.map_err(|e| {
-            BitFunError::io(format!("Failed to create miniapp dir {}: {}", dir.display(), e))
+            BitFunError::io(format!(
+                "Failed to create miniapp dir {}: {}",
+                dir.display(),
+                e
+            ))
         })?;
         tokio::fs::create_dir_all(&source).await.map_err(|e| {
-            BitFunError::io(format!("Failed to create source dir {}: {}", source.display(), e))
+            BitFunError::io(format!(
+                "Failed to create source dir {}: {}",
+                source.display(),
+                e
+            ))
         })?;
         Ok(())
     }
@@ -74,12 +82,14 @@ impl MiniAppStorage {
             return Ok(Vec::new());
         }
         let mut ids = Vec::new();
-        let mut read_dir = tokio::fs::read_dir(&root).await.map_err(|e| {
-            BitFunError::io(format!("Failed to read miniapps dir: {}", e))
-        })?;
-        while let Some(entry) = read_dir.next_entry().await.map_err(|e| {
-            BitFunError::io(format!("Failed to read miniapps entry: {}", e))
-        })? {
+        let mut read_dir = tokio::fs::read_dir(&root)
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to read miniapps dir: {}", e)))?;
+        while let Some(entry) = read_dir
+            .next_entry()
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to read miniapps entry: {}", e)))?
+        {
             let path = entry.path();
             if path.is_dir() {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
@@ -136,9 +146,8 @@ impl MiniAppStorage {
                 BitFunError::io(format!("Failed to read meta: {}", e))
             }
         })?;
-        serde_json::from_str(&content).map_err(|e| {
-            BitFunError::parse(format!("Invalid meta.json: {}", e))
-        })
+        serde_json::from_str(&content)
+            .map_err(|e| BitFunError::parse(format!("Invalid meta.json: {}", e)))
     }
 
     async fn load_source(&self, app_id: &str) -> BitFunResult<MiniAppSource> {
@@ -187,9 +196,9 @@ impl MiniAppStorage {
         if !p.exists() {
             return Ok(Vec::new());
         }
-        let c = tokio::fs::read_to_string(&p).await.map_err(|e| {
-            BitFunError::io(format!("Failed to read package.json: {}", e))
-        })?;
+        let c = tokio::fs::read_to_string(&p)
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to read package.json: {}", e)))?;
         let pkg: serde_json::Value = serde_json::from_str(&c)
             .map_err(|e| BitFunError::parse(format!("Invalid package.json: {}", e)))?;
         let empty = serde_json::Map::new();
@@ -225,29 +234,31 @@ impl MiniAppStorage {
         let meta = MiniAppMeta::from(app);
         let meta_path = self.meta_path(&app.id);
         let meta_json = serde_json::to_string_pretty(&meta).map_err(BitFunError::from)?;
-        tokio::fs::write(&meta_path, meta_json).await.map_err(|e| {
-            BitFunError::io(format!("Failed to write meta: {}", e))
-        })?;
+        tokio::fs::write(&meta_path, meta_json)
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to write meta: {}", e)))?;
 
         let sd = self.source_dir(&app.id);
-        tokio::fs::write(sd.join(INDEX_HTML), &app.source.html).await.map_err(|e| {
-            BitFunError::io(format!("Failed to write index.html: {}", e))
-        })?;
-        tokio::fs::write(sd.join(STYLE_CSS), &app.source.css).await.map_err(|e| {
-            BitFunError::io(format!("Failed to write style.css: {}", e))
-        })?;
-        tokio::fs::write(sd.join(UI_JS), &app.source.ui_js).await.map_err(|e| {
-            BitFunError::io(format!("Failed to write ui.js: {}", e))
-        })?;
-        tokio::fs::write(sd.join(WORKER_JS), &app.source.worker_js).await.map_err(|e| {
-            BitFunError::io(format!("Failed to write worker.js: {}", e))
-        })?;
+        tokio::fs::write(sd.join(INDEX_HTML), &app.source.html)
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to write index.html: {}", e)))?;
+        tokio::fs::write(sd.join(STYLE_CSS), &app.source.css)
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to write style.css: {}", e)))?;
+        tokio::fs::write(sd.join(UI_JS), &app.source.ui_js)
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to write ui.js: {}", e)))?;
+        tokio::fs::write(sd.join(WORKER_JS), &app.source.worker_js)
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to write worker.js: {}", e)))?;
 
-        let esm_json =
-            serde_json::to_string_pretty(&app.source.esm_dependencies).map_err(BitFunError::from)?;
-        tokio::fs::write(sd.join(ESM_DEPS_JSON), esm_json).await.map_err(|e| {
-            BitFunError::io(format!("Failed to write esm_dependencies.json: {}", e))
-        })?;
+        let esm_json = serde_json::to_string_pretty(&app.source.esm_dependencies)
+            .map_err(BitFunError::from)?;
+        tokio::fs::write(sd.join(ESM_DEPS_JSON), esm_json)
+            .await
+            .map_err(|e| {
+                BitFunError::io(format!("Failed to write esm_dependencies.json: {}", e))
+            })?;
 
         self.write_package_json(&app.id, &app.source.npm_dependencies)
             .await?;
@@ -271,23 +282,28 @@ impl MiniAppStorage {
         });
         let p = self.app_dir(app_id).join(PACKAGE_JSON);
         let json = serde_json::to_string_pretty(&pkg).map_err(BitFunError::from)?;
-        tokio::fs::write(&p, json).await.map_err(|e| {
-            BitFunError::io(format!("Failed to write package.json: {}", e))
-        })?;
+        tokio::fs::write(&p, json)
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to write package.json: {}", e)))?;
         Ok(())
     }
 
     /// Save a version snapshot (for rollback).
-    pub async fn save_version(&self, app_id: &str, version: u32, app: &MiniApp) -> BitFunResult<()> {
+    pub async fn save_version(
+        &self,
+        app_id: &str,
+        version: u32,
+        app: &MiniApp,
+    ) -> BitFunResult<()> {
         let versions_dir = self.app_dir(app_id).join(VERSIONS_DIR);
-        tokio::fs::create_dir_all(&versions_dir).await.map_err(|e| {
-            BitFunError::io(format!("Failed to create versions dir: {}", e))
-        })?;
+        tokio::fs::create_dir_all(&versions_dir)
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to create versions dir: {}", e)))?;
         let path = self.version_path(app_id, version);
         let json = serde_json::to_string_pretty(app).map_err(BitFunError::from)?;
-        tokio::fs::write(&path, json).await.map_err(|e| {
-            BitFunError::io(format!("Failed to write version file: {}", e))
-        })?;
+        tokio::fs::write(&path, json)
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to write version file: {}", e)))?;
         Ok(())
     }
 
@@ -297,9 +313,9 @@ impl MiniAppStorage {
         if !p.exists() {
             return Ok(serde_json::json!({}));
         }
-        let c = tokio::fs::read_to_string(&p).await.map_err(|e| {
-            BitFunError::io(format!("Failed to read storage: {}", e))
-        })?;
+        let c = tokio::fs::read_to_string(&p)
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to read storage: {}", e)))?;
         Ok(serde_json::from_str(&c).unwrap_or_else(|_| serde_json::json!({})))
     }
 
@@ -312,15 +328,15 @@ impl MiniAppStorage {
     ) -> BitFunResult<()> {
         self.ensure_app_dir(app_id).await?;
         let mut current = self.load_app_storage(app_id).await?;
-        let obj = current.as_object_mut().ok_or_else(|| {
-            BitFunError::validation("App storage is not an object".to_string())
-        })?;
+        let obj = current
+            .as_object_mut()
+            .ok_or_else(|| BitFunError::validation("App storage is not an object".to_string()))?;
         obj.insert(key.to_string(), value);
         let p = self.storage_path(app_id);
         let json = serde_json::to_string_pretty(&current).map_err(BitFunError::from)?;
-        tokio::fs::write(&p, json).await.map_err(|e| {
-            BitFunError::io(format!("Failed to write storage: {}", e))
-        })?;
+        tokio::fs::write(&p, json)
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to write storage: {}", e)))?;
         Ok(())
     }
 
@@ -328,9 +344,9 @@ impl MiniAppStorage {
     pub async fn delete(&self, app_id: &str) -> BitFunResult<()> {
         let dir = self.app_dir(app_id);
         if dir.exists() {
-            tokio::fs::remove_dir_all(&dir).await.map_err(|e| {
-                BitFunError::io(format!("Failed to delete miniapp dir: {}", e))
-            })?;
+            tokio::fs::remove_dir_all(&dir)
+                .await
+                .map_err(|e| BitFunError::io(format!("Failed to delete miniapp dir: {}", e)))?;
         }
         Ok(())
     }
@@ -342,12 +358,14 @@ impl MiniAppStorage {
             return Ok(Vec::new());
         }
         let mut versions = Vec::new();
-        let mut read_dir = tokio::fs::read_dir(&vdir).await.map_err(|e| {
-            BitFunError::io(format!("Failed to read versions dir: {}", e))
-        })?;
-        while let Some(entry) = read_dir.next_entry().await.map_err(|e| {
-            BitFunError::io(format!("Failed to read versions entry: {}", e))
-        })? {
+        let mut read_dir = tokio::fs::read_dir(&vdir)
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to read versions dir: {}", e)))?;
+        while let Some(entry) = read_dir
+            .next_entry()
+            .await
+            .map_err(|e| BitFunError::io(format!("Failed to read versions entry: {}", e)))?
+        {
             let name = entry.file_name();
             let name = name.to_string_lossy();
             if name.starts_with('v') && name.ends_with(".json") {
@@ -370,8 +388,7 @@ impl MiniAppStorage {
                 BitFunError::io(format!("Failed to read version: {}", e))
             }
         })?;
-        serde_json::from_str(&c).map_err(|e| {
-            BitFunError::parse(format!("Invalid version file: {}", e))
-        })
+        serde_json::from_str(&c)
+            .map_err(|e| BitFunError::parse(format!("Invalid version file: {}", e)))
     }
 }

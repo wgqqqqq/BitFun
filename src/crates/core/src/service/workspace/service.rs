@@ -116,6 +116,13 @@ impl WorkspaceService {
             warn!("Failed to load workspace history on startup: {}", e);
         }
 
+        if let Err(e) = service.remap_legacy_assistant_workspace_records().await {
+            warn!(
+                "Failed to remap legacy assistant workspace records on startup: {}",
+                e
+            );
+        }
+
         if let Err(e) = service.ensure_assistant_workspaces().await {
             warn!("Failed to ensure assistant workspaces on startup: {}", e);
         }
@@ -180,7 +187,9 @@ impl WorkspaceService {
             })?;
         }
 
-        let mut workspace = self.open_workspace_with_options(path, options.clone()).await?;
+        let mut workspace = self
+            .open_workspace_with_options(path, options.clone())
+            .await?;
 
         if let Some(description) = options.description {
             workspace.description = Some(description);
@@ -522,21 +531,24 @@ impl WorkspaceService {
             return Ok(None);
         }
 
-        let updated_identity = match WorkspaceIdentity::load_from_workspace_root(&workspace.root_path).await {
-            Ok(identity) => identity,
-            Err(error) => {
-                warn!(
-                    "Failed to refresh workspace identity: workspace_id={} path={} error={}",
-                    workspace_id,
-                    workspace.root_path.display(),
-                    error
-                );
-                return Ok(None);
-            }
-        };
+        let updated_identity =
+            match WorkspaceIdentity::load_from_workspace_root(&workspace.root_path).await {
+                Ok(identity) => identity,
+                Err(error) => {
+                    warn!(
+                        "Failed to refresh workspace identity: workspace_id={} path={} error={}",
+                        workspace_id,
+                        workspace.root_path.display(),
+                        error
+                    );
+                    return Ok(None);
+                }
+            };
 
-        let changed_fields =
-            WorkspaceIdentity::collect_changed_fields(workspace.identity.as_ref(), updated_identity.as_ref());
+        let changed_fields = WorkspaceIdentity::collect_changed_fields(
+            workspace.identity.as_ref(),
+            updated_identity.as_ref(),
+        );
         let fallback_name = Self::assistant_display_name(workspace.assistant_id.as_deref());
         let updated_name = updated_identity
             .as_ref()
@@ -552,7 +564,9 @@ impl WorkspaceService {
             let workspace = manager
                 .get_workspaces_mut()
                 .get_mut(workspace_id)
-                .ok_or_else(|| BitFunError::service(format!("Workspace not found: {}", workspace_id)))?;
+                .ok_or_else(|| {
+                    BitFunError::service(format!("Workspace not found: {}", workspace_id))
+                })?;
 
             workspace.identity = updated_identity.clone();
             workspace.name = updated_name.clone();
@@ -1009,6 +1023,198 @@ impl WorkspaceService {
         })
     }
 
+    fn legacy_assistant_descriptor_from_path(
+        &self,
+        path: &Path,
+    ) -> Option<AssistantWorkspaceDescriptor> {
+        let default_workspace = self
+            .path_manager
+            .legacy_default_assistant_workspace_dir(None);
+        if path == default_workspace {
+            return Some(AssistantWorkspaceDescriptor {
+                path: path.to_path_buf(),
+                assistant_id: None,
+                display_name: Self::assistant_display_name(None),
+            });
+        }
+
+        let assistant_root = self.path_manager.legacy_assistant_workspace_base_dir(None);
+        if path.parent()? != assistant_root {
+            return None;
+        }
+
+        let file_name = path.file_name()?.to_string_lossy();
+        let assistant_id = file_name.strip_prefix("workspace-")?;
+        if assistant_id.trim().is_empty() {
+            return None;
+        }
+
+        Some(AssistantWorkspaceDescriptor {
+            path: path.to_path_buf(),
+            assistant_id: Some(assistant_id.to_string()),
+            display_name: Self::assistant_display_name(Some(assistant_id)),
+        })
+    }
+
+    async fn remap_legacy_assistant_workspace_records(&self) -> BitFunResult<()> {
+        let mut changed = false;
+        let mut manager = self.manager.write().await;
+
+        for workspace in manager.get_workspaces_mut().values_mut() {
+            let Some(descriptor) = self.legacy_assistant_descriptor_from_path(&workspace.root_path)
+            else {
+                continue;
+            };
+            let new_path = self
+                .path_manager
+                .resolve_assistant_workspace_dir(descriptor.assistant_id.as_deref(), None);
+
+            if workspace.root_path != new_path {
+                info!(
+                    "Remap legacy assistant workspace record: workspace_id={}, from={}, to={}",
+                    workspace.id,
+                    workspace.root_path.display(),
+                    new_path.display()
+                );
+                workspace.root_path = new_path;
+                changed = true;
+            }
+
+            if workspace.workspace_kind != WorkspaceKind::Assistant {
+                workspace.workspace_kind = WorkspaceKind::Assistant;
+                changed = true;
+            }
+
+            if workspace.assistant_id != descriptor.assistant_id {
+                workspace.assistant_id = descriptor.assistant_id.clone();
+                changed = true;
+            }
+        }
+
+        drop(manager);
+
+        if changed {
+            self.save_workspace_data().await?;
+        }
+
+        Ok(())
+    }
+
+    async fn migrate_legacy_assistant_workspaces(&self) -> BitFunResult<()> {
+        let assistant_root = self.path_manager.assistant_workspace_base_dir(None);
+        fs::create_dir_all(&assistant_root).await.map_err(|e| {
+            BitFunError::service(format!(
+                "Failed to create assistant workspace root '{}': {}",
+                assistant_root.display(),
+                e
+            ))
+        })?;
+
+        let legacy_root = self.path_manager.legacy_assistant_workspace_base_dir(None);
+        let default_legacy_workspace = self
+            .path_manager
+            .legacy_default_assistant_workspace_dir(None);
+        let default_workspace = self.path_manager.default_assistant_workspace_dir(None);
+
+        if fs::try_exists(&default_legacy_workspace)
+            .await
+            .map_err(|e| {
+                BitFunError::service(format!(
+                    "Failed to inspect legacy assistant workspace '{}': {}",
+                    default_legacy_workspace.display(),
+                    e
+                ))
+            })?
+            && !fs::try_exists(&default_workspace).await.map_err(|e| {
+                BitFunError::service(format!(
+                    "Failed to inspect assistant workspace '{}': {}",
+                    default_workspace.display(),
+                    e
+                ))
+            })?
+        {
+            fs::rename(&default_legacy_workspace, &default_workspace)
+                .await
+                .map_err(|e| {
+                    BitFunError::service(format!(
+                        "Failed to migrate assistant workspace '{}' to '{}': {}",
+                        default_legacy_workspace.display(),
+                        default_workspace.display(),
+                        e
+                    ))
+                })?;
+            info!(
+                "Migrated default assistant workspace: from={}, to={}",
+                default_legacy_workspace.display(),
+                default_workspace.display()
+            );
+        }
+
+        let mut entries = fs::read_dir(&legacy_root).await.map_err(|e| {
+            BitFunError::service(format!(
+                "Failed to read legacy assistant workspace root '{}': {}",
+                legacy_root.display(),
+                e
+            ))
+        })?;
+
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            BitFunError::service(format!(
+                "Failed to iterate legacy assistant workspace root '{}': {}",
+                legacy_root.display(),
+                e
+            ))
+        })? {
+            let file_type = entry.file_type().await.map_err(|e| {
+                BitFunError::service(format!(
+                    "Failed to inspect legacy assistant workspace entry '{}': {}",
+                    entry.path().display(),
+                    e
+                ))
+            })?;
+            if !file_type.is_dir() {
+                continue;
+            }
+
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            let Some(assistant_id) = file_name.strip_prefix("workspace-") else {
+                continue;
+            };
+            if assistant_id.trim().is_empty() {
+                continue;
+            }
+
+            let target_path = self
+                .path_manager
+                .assistant_workspace_dir(assistant_id, None);
+            if fs::try_exists(&target_path).await.map_err(|e| {
+                BitFunError::service(format!(
+                    "Failed to inspect assistant workspace '{}': {}",
+                    target_path.display(),
+                    e
+                ))
+            })? {
+                continue;
+            }
+
+            fs::rename(entry.path(), &target_path).await.map_err(|e| {
+                BitFunError::service(format!(
+                    "Failed to migrate assistant workspace '{}' to '{}': {}",
+                    file_name,
+                    target_path.display(),
+                    e
+                ))
+            })?;
+            info!(
+                "Migrated named assistant workspace: assistant_id={}, to={}",
+                assistant_id,
+                target_path.display()
+            );
+        }
+
+        Ok(())
+    }
+
     fn normalize_workspace_options_for_path(
         &self,
         path: &Path,
@@ -1016,8 +1222,9 @@ impl WorkspaceService {
     ) -> WorkspaceCreateOptions {
         if options.workspace_kind == WorkspaceKind::Assistant {
             if options.display_name.is_none() {
-                options.display_name =
-                    Some(Self::assistant_display_name(options.assistant_id.as_deref()));
+                options.display_name = Some(Self::assistant_display_name(
+                    options.assistant_id.as_deref(),
+                ));
             }
             return options;
         }
@@ -1035,7 +1242,11 @@ impl WorkspaceService {
         options
     }
 
-    async fn discover_assistant_workspaces(&self) -> BitFunResult<Vec<AssistantWorkspaceDescriptor>> {
+    async fn discover_assistant_workspaces(
+        &self,
+    ) -> BitFunResult<Vec<AssistantWorkspaceDescriptor>> {
+        self.migrate_legacy_assistant_workspaces().await?;
+
         let assistant_root = self.path_manager.assistant_workspace_base_dir(None);
         fs::create_dir_all(&assistant_root).await.map_err(|e| {
             BitFunError::service(format!(
@@ -1127,7 +1338,8 @@ impl WorkspaceService {
                 ..Default::default()
             };
 
-            self.open_workspace_with_options(descriptor.path, options).await?;
+            self.open_workspace_with_options(descriptor.path, options)
+                .await?;
             has_current_workspace = true;
         }
 

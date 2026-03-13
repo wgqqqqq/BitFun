@@ -418,7 +418,10 @@ Usage:
 
         // Priority 1: Try baseline diff
         let path = Path::new(&resolved_path);
-        if let Some(result) = self.try_baseline_diff(&path, context.workspace_root()).await {
+        if let Some(result) = self
+            .try_baseline_diff(&path, context.workspace_root())
+            .await
+        {
             match result {
                 Ok(data) => {
                     debug!("GetFileDiff tool using baseline diff");

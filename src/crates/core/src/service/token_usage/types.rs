@@ -77,7 +77,10 @@ pub enum TimeRange {
     ThisWeek,
     ThisMonth,
     All,
-    Custom { start: DateTime<Utc>, end: DateTime<Utc> },
+    Custom {
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    },
 }
 
 /// Query parameters for token usage
