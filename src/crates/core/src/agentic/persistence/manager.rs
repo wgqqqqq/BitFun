@@ -579,12 +579,6 @@ impl PersistenceManager {
         self.write_json_atomic(&index_path, &index).await
     }
 
-    async fn rebuild_index(&self, workspace_path: &Path) -> BitFunResult<Vec<SessionMetadata>> {
-        let lock = self.get_session_index_lock(workspace_path).await;
-        let _guard = lock.lock().await;
-        self.rebuild_index_locked(workspace_path).await
-    }
-
     async fn upsert_index_entry(
         &self,
         workspace_path: &Path,

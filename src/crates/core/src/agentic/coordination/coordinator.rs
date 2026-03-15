@@ -244,6 +244,30 @@ Update the persona files and delete BOOTSTRAP.md as soon as bootstrap is complet
         .await
     }
 
+    pub async fn update_session_model(
+        &self,
+        session_id: &str,
+        model_id: &str,
+    ) -> BitFunResult<()> {
+        let normalized_model_id = model_id.trim();
+        let normalized_model_id = if normalized_model_id.is_empty() {
+            "auto"
+        } else {
+            normalized_model_id
+        };
+
+        self.session_manager
+            .update_session_model_id(session_id, normalized_model_id)
+            .await?;
+
+        info!(
+            "Coordinator updated session model: session_id={}, model_id={}",
+            session_id, normalized_model_id
+        );
+
+        Ok(())
+    }
+
     /// Create a new session with explicit creator identity.
     pub async fn create_session_with_workspace_and_creator(
         &self,

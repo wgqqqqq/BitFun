@@ -4,7 +4,9 @@
  */
 
 import { agentAPI } from '@/infrastructure/api/service-api/AgentAPI';
+import { configManager } from '@/infrastructure/config/services/ConfigManager';
 import { aiExperienceConfigService } from '@/infrastructure/config/services';
+import type { AIModelConfig, DefaultModelsConfig } from '@/infrastructure/config/types';
 import { notificationService } from '../../../shared/notification-system';
 import { stateMachineManager } from '../../state-machine';
 import { SessionExecutionEvent, SessionExecutionState } from '../../state-machine/types';
@@ -16,6 +18,66 @@ import { cleanupSessionBuffers } from './TextChunkModule';
 import type { ImageContextData as ImageInputContextData } from '@/infrastructure/api/service-api/ImageAnalysisAPI';
 
 const log = createLogger('MessageModule');
+
+function normalizeModelSelection(
+  modelId: string | undefined,
+  models: AIModelConfig[],
+  defaultModels: DefaultModelsConfig,
+): string {
+  const value = modelId?.trim();
+  if (!value || value === 'auto') return 'auto';
+
+  if (value === 'primary' || value === 'fast') {
+    const resolvedDefaultId = value === 'primary' ? defaultModels.primary : defaultModels.fast;
+    const matchedModel = models.find(model => model.id === resolvedDefaultId);
+    return matchedModel ? value : 'auto';
+  }
+
+  const matchedModel = models.find(model =>
+    model.id === value || model.name === value || model.model_name === value,
+  );
+  return matchedModel ? value : 'auto';
+}
+
+async function syncSessionModelSelection(
+  context: FlowChatContext,
+  sessionId: string,
+  agentType: string,
+): Promise<void> {
+  const session = context.flowChatStore.getState().sessions.get(sessionId);
+  if (!session) {
+    throw new Error(`Session does not exist: ${sessionId}`);
+  }
+
+  const [agentModels, allModels, defaultModels] = await Promise.all([
+    configManager.getConfig<Record<string, string>>('ai.agent_models') || {},
+    configManager.getConfig<AIModelConfig[]>('ai.models') || [],
+    configManager.getConfig<DefaultModelsConfig>('ai.default_models') || {},
+  ]);
+
+  const desiredModelId = normalizeModelSelection(agentModels[agentType], allModels, defaultModels);
+  const currentModelId = (session.config.modelName || 'auto').trim() || 'auto';
+  const shouldForceAutoSync = desiredModelId === 'auto';
+  if (!shouldForceAutoSync && desiredModelId === currentModelId) {
+    return;
+  }
+
+  if (currentModelId !== desiredModelId) {
+    context.flowChatStore.updateSessionModelName(sessionId, desiredModelId);
+  }
+  await agentAPI.updateSessionModel({
+    sessionId,
+    modelName: desiredModelId,
+  });
+
+  log.info('Session model synchronized before send', {
+    sessionId,
+    agentType,
+    previousModelId: currentModelId,
+    nextModelId: desiredModelId,
+    forcedAutoSync: shouldForceAutoSync,
+  });
+}
 
 /**
  * Send message and handle response
@@ -90,6 +152,9 @@ export async function sendMessage(
       metadata: { sessionId: sessionId, dialogTurnId }
     });
 
+    const currentAgentType = agentType || session.mode || 'agentic';
+    await syncSessionModelSelection(context, sessionId, currentAgentType);
+
     const updatedSession = context.flowChatStore.getState().sessions.get(sessionId);
     if (!updatedSession) {
       throw new Error(`Session lost after adding dialog turn: ${sessionId}`);
@@ -104,7 +169,6 @@ export async function sendMessage(
     context.contentBuffers.set(sessionId, new Map());
     context.activeTextItems.set(sessionId, new Map());
 
-    const currentAgentType = agentType || 'agentic';
     const workspacePath = updatedSession.workspacePath;
     
     try {

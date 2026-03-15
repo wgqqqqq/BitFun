@@ -85,6 +85,11 @@ export interface EnsureAssistantBootstrapResponse {
   detail?: string;
 }
 
+export interface UpdateSessionModelRequest {
+  sessionId: string;
+  modelName: string;
+}
+
  
 export interface Message {
   id: string;
@@ -220,6 +225,14 @@ export class AgentAPI {
       return await api.invoke<SessionInfo>('restore_session', { request: { sessionId, workspacePath } });
     } catch (error) {
       throw createTauriCommandError('restore_session', error, { sessionId, workspacePath });
+    }
+  }
+
+  async updateSessionModel(request: UpdateSessionModelRequest): Promise<void> {
+    try {
+      await api.invoke<void>('update_session_model', { request });
+    } catch (error) {
+      throw createTauriCommandError('update_session_model', error, request);
     }
   }
 

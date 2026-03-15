@@ -322,6 +322,35 @@ export class FlowChatStore {
     });
   }
 
+  public updateSessionModelName(sessionId: string, modelName: string): void {
+    this.setState(prev => {
+      const session = prev.sessions.get(sessionId);
+      if (!session) return prev;
+
+      const normalizedModelName = modelName.trim() || 'auto';
+      if ((session.config.modelName || 'auto') === normalizedModelName) {
+        return prev;
+      }
+
+      const updatedSession = {
+        ...session,
+        config: {
+          ...session.config,
+          modelName: normalizedModelName,
+        },
+        lastActiveAt: Date.now(),
+      };
+
+      const newSessions = new Map(prev.sessions);
+      newSessions.set(sessionId, updatedSession);
+
+      return {
+        ...prev,
+        sessions: newSessions,
+      };
+    });
+  }
+
   /**
    * Update session relationship metadata (parent/child grouping, kind, etc.).
    * This is UI-only and does not affect backend behavior directly.

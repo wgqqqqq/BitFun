@@ -11,10 +11,12 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Cpu, ChevronDown, Check, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { configManager } from '@/infrastructure/config/services/ConfigManager';
+import { agentAPI } from '@/infrastructure/api/service-api/AgentAPI';
 import { getProviderDisplayName } from '@/infrastructure/config/services/modelConfigs';
 import { globalEventBus } from '@/infrastructure/event-bus';
 import type { AIModelConfig } from '@/infrastructure/config/types';
 import { Tooltip } from '@/component-library';
+import { FlowChatStore } from '../store/FlowChatStore';
 import { createLogger } from '@/shared/utils/logger';
 import './ModelSelector.scss';
 
@@ -111,6 +113,7 @@ const buildAutoModelInfo = (
 export const ModelSelector: React.FC<ModelSelectorProps> = ({
   currentMode,
   className = '',
+  sessionId,
 }) => {
   const { t } = useTranslation('flow-chat');
   const [allModels, setAllModels] = useState<AIModelConfig[]>([]);
@@ -268,6 +271,15 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
       await configManager.setConfig('ai.agent_models', updatedAgentModels);
       setAgentModels(updatedAgentModels);
+
+      if (sessionId) {
+        FlowChatStore.getInstance().updateSessionModelName(sessionId, modelId);
+        await agentAPI.updateSessionModel({
+          sessionId,
+          modelName: modelId,
+        });
+      }
+
       log.info('Mode model updated', { mode: currentMode, modelId });
 
       globalEventBus.emit('mode:config:updated');

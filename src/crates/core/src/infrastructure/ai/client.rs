@@ -60,6 +60,9 @@ impl AIClient {
     const TEST_IMAGE_EXPECTED_CODE: &'static str = "BYGR";
     const TEST_IMAGE_PNG_BASE64: &'static str =
         "iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAACBklEQVR42u3ZsREAIAwDMYf9dw4txwJupI7Wua+YZEPBfO91h4ZjAgQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABIAAQAAgABAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAAAAAAAEDRZI3QGf7jDvEPAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACAAEAAIAAYAAQAAgABAACAABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAACAAEAAIAAQAAgABgABAAAjABAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQAAgABAACAAGAAEAAIAAQALwuLkoG8OSfau4AAAAASUVORK5CYII=";
+    const STREAM_CONNECT_TIMEOUT_SECS: u64 = 10;
+    const HTTP_POOL_IDLE_TIMEOUT_SECS: u64 = 30;
+    const HTTP_TCP_KEEPALIVE_SECS: u64 = 60;
 
     fn image_test_response_matches_expected(response: &str) -> bool {
         let upper = response.to_ascii_uppercase();
@@ -280,12 +283,20 @@ impl AIClient {
     /// Create an HTTP client (supports proxy config and SSL verification control)
     fn create_http_client(proxy_config: Option<ProxyConfig>, skip_ssl_verify: bool) -> Client {
         let mut builder = Client::builder()
-            .timeout(std::time::Duration::from_secs(600))
-            .connect_timeout(std::time::Duration::from_secs(10))
+            // SSE requests can legitimately stay open for a long time while the model
+            // thinks or executes tools. Keep only connect timeout here and let the
+            // stream handlers enforce idle timeouts between chunks.
+            .connect_timeout(std::time::Duration::from_secs(
+                Self::STREAM_CONNECT_TIMEOUT_SECS,
+            ))
             .user_agent("BitFun/1.0")
-            .pool_idle_timeout(std::time::Duration::from_secs(30))
+            .pool_idle_timeout(std::time::Duration::from_secs(
+                Self::HTTP_POOL_IDLE_TIMEOUT_SECS,
+            ))
             .pool_max_idle_per_host(4)
-            .tcp_keepalive(Some(std::time::Duration::from_secs(60)))
+            .tcp_keepalive(Some(std::time::Duration::from_secs(
+                Self::HTTP_TCP_KEEPALIVE_SECS,
+            )))
             .danger_accept_invalid_certs(skip_ssl_verify);
 
         if skip_ssl_verify {
@@ -2252,5 +2263,17 @@ mod tests {
 
         assert_eq!(request_body["tools"][0]["googleSearch"], json!({}));
         assert!(request_body.get("toolConfig").is_none());
+    }
+
+    #[test]
+    fn streaming_http_client_does_not_apply_global_request_timeout() {
+        let client = make_test_client("openai", None);
+        let request = client
+            .client
+            .get("https://example.com/stream")
+            .build()
+            .expect("request should build");
+
+        assert_eq!(request.timeout(), None);
     }
 }

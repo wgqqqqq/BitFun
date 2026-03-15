@@ -248,6 +248,13 @@ impl StreamContext {
         }
     }
 
+    fn can_recover_as_partial_text_result(&self) -> bool {
+        self.has_effective_output
+            && !self.full_text.is_empty()
+            && self.tool_calls.is_empty()
+            && self.tool_call_buffer.tool_id.is_empty()
+    }
+
     /// Force finish tool_call_buffer, used to handle cases where toolcall parameters are not fully closed
     /// E.g., when new toolcall arrives and before returning results
     fn force_finish_tool_call_buffer(&mut self) {
@@ -707,6 +714,12 @@ impl StreamProcessor {
                         Ok(Some(Err(e))) => {
                             let error_msg = format!("Stream processing error: {}", e);
                             error!("{}", error_msg);
+                            if ctx.can_recover_as_partial_text_result() {
+                                flush_sse_on_error(&sse_collector, &error_msg).await;
+                                self.send_thinking_end_if_needed(&mut ctx).await;
+                                self.log_stream_result(&ctx);
+                                break;
+                            }
                             // log SSE for network errors
                             flush_sse_on_error(&sse_collector, &error_msg).await;
                             self.graceful_shutdown_from_ctx(&mut ctx, error_msg.clone()).await;

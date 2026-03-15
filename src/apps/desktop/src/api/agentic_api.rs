@@ -48,6 +48,13 @@ pub struct CreateSessionResponse {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct UpdateSessionModelRequest {
+    pub session_id: String,
+    pub model_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartDialogTurnRequest {
     pub session_id: String,
     pub user_input: String,
@@ -213,6 +220,17 @@ pub async fn create_session(
         session_name: session.session_name,
         agent_type: session.agent_type,
     })
+}
+
+#[tauri::command]
+pub async fn update_session_model(
+    coordinator: State<'_, Arc<ConversationCoordinator>>,
+    request: UpdateSessionModelRequest,
+) -> Result<(), String> {
+    coordinator
+        .update_session_model(&request.session_id, &request.model_name)
+        .await
+        .map_err(|e| format!("Failed to update session model: {}", e))
 }
 
 #[tauri::command]

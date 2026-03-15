@@ -145,19 +145,6 @@ impl ExecutionEngine {
             .unwrap_or_else(|| "auto".to_string())
     }
 
-    fn resolve_locked_auto_model_id(
-        ai_config: &crate::service::config::types::AIConfig,
-        model_id: Option<&String>,
-    ) -> Option<String> {
-        let model_id = model_id?;
-        let trimmed = model_id.trim();
-        if trimmed.is_empty() || trimmed == "auto" || trimmed == "default" {
-            return None;
-        }
-
-        ai_config.resolve_model_selection(trimmed)
-    }
-
     fn should_use_fast_auto_model(turn_index: usize, original_user_input: &str) -> bool {
         turn_index == 0 && original_user_input.chars().count() <= 10
     }
@@ -192,55 +179,32 @@ impl ExecutionEngine {
             .map(|model_id| model_id.trim())
             .filter(|model_id| !model_id.is_empty())
             .map(str::to_string)
-            .unwrap_or(fallback_model_id);
+            .unwrap_or(fallback_model_id.clone());
         let resolved_configured_model_id =
             Self::resolve_configured_model_id(&ai_config, &configured_model_id);
 
         let model_id = if configured_model_id == "auto" || resolved_configured_model_id == "auto" {
-            let locked_model_id =
-                Self::resolve_locked_auto_model_id(&ai_config, session.config.model_id.as_ref());
-            let raw_locked_model_id = session.config.model_id.clone();
+            let use_fast_model = Self::should_use_fast_auto_model(turn_index, original_user_input);
+            let fallback_model = if use_fast_model { "fast" } else { "primary" };
+            let resolved_model_id = ai_config.resolve_model_selection(fallback_model);
 
-            if let Some(locked_model_id) = locked_model_id {
-                locked_model_id
-            } else {
-                if let Some(raw_locked_model_id) = raw_locked_model_id.as_ref() {
-                    let trimmed = raw_locked_model_id.trim();
-                    if !trimmed.is_empty() && trimmed != "auto" && trimmed != "default" {
-                        warn!(
-                            "Ignoring invalid locked auto model for session: session_id={}, model_id={}",
-                            session.session_id, trimmed
-                        );
-                    }
-                }
-
-                let use_fast_model =
-                    Self::should_use_fast_auto_model(turn_index, original_user_input);
-                let fallback_model = if use_fast_model { "fast" } else { "primary" };
-                let resolved_model_id = ai_config.resolve_model_selection(fallback_model);
-
-                if let Some(resolved_model_id) = resolved_model_id {
-                    self.session_manager
-                        .update_session_model_id(&session.session_id, &resolved_model_id)
-                        .await?;
-
-                    info!(
-                        "Auto model resolved: session_id={}, turn_index={}, user_input_chars={}, strategy={}, resolved_model_id={}",
-                        session.session_id,
-                        turn_index,
-                        original_user_input.chars().count(),
-                        fallback_model,
-                        resolved_model_id
-                    );
-
+            if let Some(resolved_model_id) = resolved_model_id {
+                info!(
+                    "Auto model resolved without locking session: session_id={}, turn_index={}, user_input_chars={}, strategy={}, resolved_model_id={}",
+                    session.session_id,
+                    turn_index,
+                    original_user_input.chars().count(),
+                    fallback_model,
                     resolved_model_id
-                } else {
-                    warn!(
-                        "Auto model strategy unresolved, keeping symbolic selector: session_id={}, strategy={}",
-                        session.session_id, fallback_model
-                    );
-                    fallback_model.to_string()
-                }
+                );
+
+                resolved_model_id
+            } else {
+                warn!(
+                    "Auto model strategy unresolved, keeping symbolic selector: session_id={}, strategy={}",
+                    session.session_id, fallback_model
+                );
+                fallback_model.to_string()
             }
         } else {
             resolved_configured_model_id
