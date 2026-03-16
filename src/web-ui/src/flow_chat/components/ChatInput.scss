@@ -58,7 +58,7 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: none;
   
   &--collapsed {
     cursor: text;
@@ -73,6 +73,7 @@
       cursor: text;
       background: rgba(18, 18, 28, 0.22);
       border: 1px solid rgba(255, 255, 255, 0.08);
+      animation: bitfun-box-fade-in 0.45s ease-out both;
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
       box-shadow: 
@@ -143,6 +144,7 @@
       justify-content: center;
       transform: translate(-50%, -50%);
       pointer-events: none;
+      transition: none;
       
       .rich-text-input {
         min-height: 24px !important;
@@ -399,17 +401,11 @@
     background: var(--color-bg-tertiary);
     backdrop-filter: blur(16px) saturate(1.2);
     -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    animation: bitfun-box-fade-in 0.45s ease-out both;
     transition:
-      border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-      padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-      min-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-      max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-      box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-      border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-      background 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-      backdrop-filter 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-      -webkit-backdrop-filter 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-      transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow 0.2s ease,
+      border-color 0.2s ease,
+      background 0.2s ease;
     box-shadow: 
       0 8px 24px rgba(0, 0, 0, 0.35),
       inset 0 1px 0 rgba(255, 255, 255, 0.08),
@@ -490,7 +486,7 @@
     padding-bottom: 7px;
     margin-bottom: 1px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    animation: bitfun-chat-input-fade-in 0.18s ease-out;
+    animation: bitfun-chat-input-fade-in 0.1s ease-out;
   }
 
   &__target-switcher-label {
@@ -581,7 +577,6 @@
     align-items: flex-start;
     width: 100%;
     min-height: 40px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: visible;
   }
   
@@ -1432,6 +1427,21 @@
   100% {
     opacity: 0.62;
     transform: scale(1);
+  }
+}
+
+@keyframes bitfun-box-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.012);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
