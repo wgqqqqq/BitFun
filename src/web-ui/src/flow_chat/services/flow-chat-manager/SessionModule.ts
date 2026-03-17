@@ -222,30 +222,10 @@ export async function switchChatSession(
             return { ...prev, sessions: newSessions };
           });
         } catch (restoreError: any) {
-          log.warn('Historical session restore failed, creating new session', { sessionId, error: restoreError });
-          const currentSession = context.flowChatStore.getState().sessions.get(sessionId);
-          if (currentSession) {
-            await agentAPI.createSession({
-              sessionId: sessionId,
-              sessionName: currentSession.title || `Session ${sessionId.slice(0, 8)}`,
-              agentType: currentSession.mode || 'agentic',
-              workspacePath,
-              config: {
-                modelName: currentSession.config.modelName || 'auto',
-                enableTools: true,
-                safeMode: true
-              }
-            });
-            
-            context.flowChatStore.setState(prev => {
-              const newSessions = new Map(prev.sessions);
-              const sess = newSessions.get(sessionId);
-              if (sess) {
-                newSessions.set(sessionId, { ...sess, isHistorical: false });
-              }
-              return { ...prev, sessions: newSessions };
-            });
-          }
+          log.error('Historical session restore failed', { sessionId, error: restoreError });
+          notificationService.warning('Failed to restore session context', {
+            duration: 3000
+          });
         }
       } catch (error) {
         log.error('Failed to load session history', { sessionId, error });
@@ -325,18 +305,8 @@ export async function ensureBackendSession(
         });
       }
     } catch (restoreError: any) {
-      log.debug('Session restore failed, creating new session', { sessionId, error: restoreError });
-      await agentAPI.createSession({
-        sessionId: sessionId,
-        sessionName: session.title || `Session ${sessionId.slice(0, 8)}`,
-        agentType: session.mode || 'agentic',
-        workspacePath,
-        config: {
-          modelName: session.config.modelName || 'auto',
-          enableTools: true,
-          safeMode: true
-        }
-      });
+      log.error('Session restore failed', { sessionId, error: restoreError });
+      throw restoreError;
     }
   }
 }
