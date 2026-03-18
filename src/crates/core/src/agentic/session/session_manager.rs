@@ -988,8 +988,32 @@ impl SessionManager {
 
         drop(session);
 
+        // Persist the turn to disk
         self.persistence_manager
             .save_dialog_turn(workspace_path, &turn)
+            .await?;
+
+        // Sync messages to in-memory caches so subsequent对话 can access context
+        let user_message = Message::user(question.to_string())
+            .with_turn_id(turn_id.clone())
+            .with_semantic_kind(MessageSemanticKind::ActualUserInput);
+        let assistant_message = Message::assistant(full_text.to_string())
+            .with_turn_id(turn_id.clone());
+
+        // Add to MessageHistoryManager
+        self.history_manager
+            .add_message(child_session_id, user_message.clone())
+            .await?;
+        self.history_manager
+            .add_message(child_session_id, assistant_message.clone())
+            .await?;
+
+        // Add to CompressionManager
+        self.compression_manager
+            .add_message(child_session_id, user_message)
+            .await?;
+        self.compression_manager
+            .add_message(child_session_id, assistant_message)
             .await?;
 
         if let Some(mut session) = self.sessions.get_mut(child_session_id) {
