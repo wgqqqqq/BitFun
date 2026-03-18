@@ -114,7 +114,8 @@ pub async fn run() {
 
     setup_panic_hook();
 
-    let run_result = tauri::Builder::default()
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Trace)
@@ -132,7 +133,19 @@ pub async fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_fs::init());
+
+    #[cfg(all(debug_assertions, feature = "webdriver-e2e", target_os = "macos"))]
+    {
+        builder = builder.plugin(tauri_plugin_webdriver_automation::init());
+    }
+
+    #[cfg(all(debug_assertions, feature = "webdriver-e2e-way2"))]
+    {
+        builder = builder.plugin(tauri_plugin_webdriver::init());
+    }
+
+    let run_result = builder
         .on_menu_event(|app, event| {
             #[cfg(target_os = "macos")]
             {

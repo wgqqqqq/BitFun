@@ -28,6 +28,8 @@
     "desktop:dev:raw": "cross-env-shell CI=true \"cd src/apps/desktop && tauri dev\"",
     "desktop:build": "cross-env-shell CI=true \"cd src/apps/desktop && tauri build\"",
     "desktop:build:fast": "cross-env-shell CI=true \"cd src/apps/desktop && tauri build --debug --no-bundle\"",
+    "desktop:build:e2e:mac": "cross-env-shell CI=true \"cd src/apps/desktop && tauri build --debug --no-bundle --features webdriver-e2e\"",
+    "desktop:build:e2e:way2": "cross-env-shell CI=true \"cd src/apps/desktop && tauri build --debug --no-bundle --features webdriver-e2e-way2\"",
     "desktop:build:release-fast": "cross-env-shell CI=true \"cd src/apps/desktop && tauri build --no-bundle -- --profile release-fast\"",
     "desktop:build:exe": "cross-env-shell CI=true \"cd src/apps/desktop && tauri build --no-bundle\"",
     "desktop:build:nsis": "cross-env-shell CI=true \"cd src/apps/desktop && tauri build --bundles nsis\"",
@@ -55,6 +57,9 @@
     "e2e:test:l0": "pnpm --dir tests/e2e run test:l0",
     "e2e:test:l0:all": "pnpm --dir tests/e2e run test:l0:all",
     "e2e:test:l1": "pnpm --dir tests/e2e run test:l1",
+    "e2e:test:mac": "pnpm run desktop:build:e2e:mac && pnpm --dir tests/e2e test",
+    "e2e:build:way2-driver": "cargo build --release --manifest-path webdriver_runtime/tauri-webdriver/Cargo.toml",
+    "e2e:test:way2": "pnpm run e2e:build:way2-driver && pnpm run desktop:build:e2e:way2 && cross-env BITFUN_E2E_DRIVER_IMPL=way2 node scripts/run-e2e-way2-sequential.cjs",
     "e2e:test:smoke": "pnpm --dir tests/e2e run test:smoke",
     "e2e:test:chat": "pnpm --dir tests/e2e run test:chat"
   },
