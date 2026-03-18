@@ -39,8 +39,18 @@ export function useMonacoLsp(
       return;
     }
 
-    const monacoBuiltinLanguages = ['typescript', 'javascript', 'typescriptreact', 'javascriptreact'];
-    if (monacoBuiltinLanguages.includes(language)) {
+    const monacoBuiltinLanguages = [
+      'typescript',
+      'javascript',
+      'typescriptreact',
+      'javascriptreact',
+      'json',
+      'html',
+      'css',
+      'scss',
+      'less',
+    ];
+    if (monacoBuiltinLanguages.includes(language.toLowerCase())) {
       return;
     }
 

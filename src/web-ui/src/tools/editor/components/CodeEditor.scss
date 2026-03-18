@@ -170,6 +170,16 @@ $_editor-padding-desktop: 32px;
     z-index: 50;
     animation: code-editor-fade-in 0.2s ease-out;
   }
+
+  &.is-large-file-mode {
+    :global {
+      .monaco-editor .view-line .mtkoverflow {
+        pointer-events: none !important;
+        cursor: default !important;
+        text-decoration: none !important;
+      }
+    }
+  }
   
   // Ctrl+Hover Underline Styles
   :global {
