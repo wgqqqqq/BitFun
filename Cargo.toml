@@ -12,6 +12,8 @@ members = [
 
 exclude = [
     "BitFun-Installer/src-tauri",
+    "webdriver_runtime/tauri-plugin-webdriver",
+    "webdriver_runtime/tauri-webdriver",
 ]
 
 resolver = "2"
