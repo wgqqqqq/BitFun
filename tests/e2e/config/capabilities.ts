@@ -12,15 +12,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
- * Get the application path based on the current platform
+ * Get the application path based on the current platform.
+ * Defaults to debug for faster dev iteration.
  */
-export function getApplicationPath(buildType: 'debug' | 'release' = 'release'): string {
+export function getApplicationPath(buildType: 'debug' | 'release' = 'debug'): string {
   const isWindows = process.platform === 'win32';
   const isMac = process.platform === 'darwin';
-  const isLinux = process.platform === 'linux';
-  
+
   let appName: string;
-  
+
   if (isWindows) {
     appName = 'bitfun-desktop.exe';
   } else if (isMac) {
@@ -28,7 +28,7 @@ export function getApplicationPath(buildType: 'debug' | 'release' = 'release'): 
   } else {
     appName = 'bitfun-desktop';
   }
-  
+
   return path.resolve(__dirname, '..', '..', '..', 'target', buildType, appName);
 }
 
@@ -38,12 +38,9 @@ export function getApplicationPath(buildType: 'debug' | 'release' = 'release'): 
 export const windowsCapabilities = {
   browserName: 'wry',
   'tauri:options': {
-    application: getApplicationPath('release'),
+    application: getApplicationPath(),
   },
-  // Edge WebDriver specific options if needed
-  'ms:edgeOptions': {
-    // Edge options for WebView2
-  },
+  'ms:edgeOptions': {},
 };
 
 /**
@@ -52,12 +49,9 @@ export const windowsCapabilities = {
 export const linuxCapabilities = {
   browserName: 'wry',
   'tauri:options': {
-    application: getApplicationPath('release'),
+    application: getApplicationPath(),
   },
-  // WebKitWebDriver specific options if needed
-  'webkit:browserOptions': {
-    // WebKit options
-  },
+  'webkit:browserOptions': {},
 };
 
 /**
@@ -67,7 +61,7 @@ export const linuxCapabilities = {
 export const macOSCapabilities = {
   browserName: 'wry',
   'tauri:options': {
-    application: getApplicationPath('release'),
+    application: getApplicationPath(),
   },
 };
 

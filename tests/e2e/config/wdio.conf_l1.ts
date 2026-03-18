@@ -42,16 +42,40 @@ function getTauriDriverPath(): string {
   return path.join(homeDir, '.cargo', 'bin', driverName);
 }
 
-/** Get the path to the built Tauri application. Prefer release build; fall back to debug (requires dev server). */
+/**
+ * Get the path to the built Tauri application.
+ *
+ * Resolution order:
+ *   1. BITFUN_E2E_APP_PATH  – explicit full path
+ *   2. BITFUN_E2E_APP_MODE  – "debug" | "release"
+ *   3. Auto-detect: debug first (fast build), then release
+ */
 function getApplicationPath(): string {
   const isWindows = process.platform === 'win32';
   const appName = isWindows ? 'bitfun-desktop.exe' : 'bitfun-desktop';
   const projectRoot = path.resolve(__dirname, '..', '..', '..');
+  const debugPath = path.join(projectRoot, 'target', 'debug', appName);
   const releasePath = path.join(projectRoot, 'target', 'release', appName);
-  if (fs.existsSync(releasePath)) {
+  const forcedPath = process.env.BITFUN_E2E_APP_PATH;
+  const forcedMode = process.env.BITFUN_E2E_APP_MODE?.toLowerCase();
+
+  if (forcedPath) {
+    return forcedPath;
+  }
+
+  if (forcedMode === 'debug') {
+    return debugPath;
+  }
+
+  if (forcedMode === 'release') {
     return releasePath;
   }
-  return path.join(projectRoot, 'target', 'debug', appName);
+
+  if (fs.existsSync(debugPath)) {
+    return debugPath;
+  }
+
+  return releasePath;
 }
 
 /**
@@ -142,7 +166,8 @@ export const config: Options.Testrunner = {
     if (!fs.existsSync(appPath)) {
       console.error(`Application not found at: ${appPath}`);
       console.error('Please build the application first with:');
-      console.error('pnpm run desktop:build');
+      console.error('  pnpm run desktop:build:fast   (debug, fast compile, recommended for dev)');
+      console.error('  pnpm run desktop:build        (release, slow compile)');
       throw new Error('Application not built');
     }
     console.log(`application: ${appPath}`);
