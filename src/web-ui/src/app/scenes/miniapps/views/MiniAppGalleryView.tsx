@@ -29,12 +29,14 @@ import {
 import type { SceneTabId } from '@/app/components/SceneBar/types';
 import { getMiniAppIconGradient, renderMiniAppIcon } from '../utils/miniAppIcons';
 import { useCurrentWorkspace } from '@/infrastructure/contexts/WorkspaceContext';
+import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 import { useMiniAppStore } from '../miniAppStore';
 import './MiniAppGalleryView.scss';
 
 const log = createLogger('MiniAppGalleryView');
 
 const MiniAppGalleryView: React.FC = () => {
+  const { t } = useI18n('common');
   const apps = useMiniAppStore((state) => state.apps);
   const loading = useMiniAppStore((state) => state.loading);
   const runningWorkerIds = useMiniAppStore((state) => state.runningWorkerIds);
@@ -147,7 +149,7 @@ const MiniAppGalleryView: React.FC = () => {
       const selected = await open({
         directory: true,
         multiple: false,
-        title: '选择小应用目录（需包含 meta.json 与 source/）',
+        title: t('miniApps.importFolderTitle'),
       });
       const path = Array.isArray(selected) ? selected[0] : selected;
       if (!path) return;
@@ -177,8 +179,8 @@ const MiniAppGalleryView: React.FC = () => {
               : <LayoutGrid size={36} strokeWidth={1.2} />
           }
           message={apps.length === 0
-            ? '边聊边生成，马上可用。和 AI 对话生成第一个小应用吧。'
-            : '没有匹配的应用。'}
+            ? t('miniApps.emptyFirstApp')
+            : t('miniApps.emptyNoMatch')}
         />
       );
     }
@@ -203,17 +205,17 @@ const MiniAppGalleryView: React.FC = () => {
   return (
     <GalleryLayout className="miniapp-gallery">
       <GalleryPageHeader
-        title="小应用"
-        subtitle="即时生成的小应用，打开就能用，也能继续迭代。"
+        title={t('scenes.miniApps')}
+        subtitle={t('miniApps.subtitle')}
         actions={(
           <>
-            <Search value={search} onChange={setSearch} placeholder="搜索小应用..." size="small" />
+            <Search value={search} onChange={setSearch} placeholder={t('miniApps.searchPlaceholder')} size="small" />
             <button
               type="button"
               className="gallery-action-btn gallery-action-btn--primary"
               onClick={handleAddFromFolder}
               disabled={loading}
-              title="从文件夹导入"
+              title={t('miniApps.importFromFolder')}
             >
               <FolderPlus size={15} />
             </button>
@@ -222,7 +224,7 @@ const MiniAppGalleryView: React.FC = () => {
               className="gallery-action-btn"
               onClick={handleRefresh}
               disabled={loading}
-              title="刷新列表"
+              title={t('miniApps.refreshList')}
             >
               <RefreshCw
                 size={15}
@@ -235,7 +237,7 @@ const MiniAppGalleryView: React.FC = () => {
 
       <div className="gallery-zones">
         <GalleryZone
-          title="已启动"
+          title={t('miniApps.runningTitle')}
           tools={runningApps.length > 0 ? <span className="gallery-zone-badge">{runningApps.length}</span> : null}
         >
           {runningApps.length > 0 ? (
@@ -255,13 +257,13 @@ const MiniAppGalleryView: React.FC = () => {
             </GalleryGrid>
           ) : (
             <div className="gallery-run-empty">
-              暂无运行中的应用
+              {t('miniApps.noRunningApps')}
             </div>
           )}
         </GalleryZone>
 
         <GalleryZone
-          title="全部应用"
+          title={t('miniApps.allAppsTitle')}
           tools={(
             <>
               {categories.length > 1 ? (
@@ -278,12 +280,12 @@ const MiniAppGalleryView: React.FC = () => {
                         .join(' ')}
                       onClick={() => setCategoryFilter(category)}
                     >
-                      {category === 'all' ? '全部' : category}
+                      {category === 'all' ? t('miniApps.categories.all') : category}
                     </button>
                   ))}
                 </div>
               ) : null}
-              <span className="gallery-zone-count">{filtered.length} 个</span>
+              <span className="gallery-zone-count">{t('miniApps.count', { count: filtered.length })}</span>
             </>
           )}
         >
@@ -305,16 +307,16 @@ const MiniAppGalleryView: React.FC = () => {
             {runningIdSet.has(selectedApp.id) ? (
               <Button variant="secondary" size="small" onClick={() => void handleStopRunning(selectedApp.id)}>
                 <Square size={14} />
-                停止
+                {t('actions.stop')}
               </Button>
             ) : null}
             <Button variant="danger" size="small" onClick={() => setPendingDeleteId(selectedApp.id)}>
               <Trash2 size={14} />
-              删除
+              {t('actions.delete')}
             </Button>
             <Button variant="primary" size="small" onClick={() => handleOpenApp(selectedApp.id)}>
               <Play size={14} />
-              打开
+              {t('actions.open')}
             </Button>
           </>
         ) : null}
@@ -335,12 +337,12 @@ const MiniAppGalleryView: React.FC = () => {
         isOpen={pendingDeleteId !== null}
         onClose={() => setPendingDeleteId(null)}
         onConfirm={handleDeleteConfirm}
-        title={`删除 "${apps.find((app) => app.id === pendingDeleteId)?.name ?? ''}"？`}
-        message="此操作不可撤销，应用及其所有数据将被永久删除。"
+        title={t('miniApps.deleteDialog.title', { name: apps.find((app) => app.id === pendingDeleteId)?.name ?? '' })}
+        message={t('miniApps.deleteDialog.message')}
         type="warning"
         confirmDanger
-        confirmText="删除"
-        cancelText="取消"
+        confirmText={t('actions.delete')}
+        cancelText={t('actions.cancel')}
       />
     </GalleryLayout>
   );

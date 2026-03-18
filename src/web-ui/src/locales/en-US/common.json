@@ -780,5 +780,25 @@
     "timeOfDay": "Messages by Time of Day",
     "lines": "Lines",
     "files": "Files"
+  },
+  "miniApps": {
+    "subtitle": "Instant mini apps you can open and use right away, then keep iterating.",
+    "searchPlaceholder": "Search mini apps...",
+    "importFolderTitle": "Select a mini app folder (must contain meta.json and source/)",
+    "importFromFolder": "Import from folder",
+    "refreshList": "Refresh list",
+    "runningTitle": "Running",
+    "noRunningApps": "No running apps",
+    "allAppsTitle": "All Apps",
+    "emptyFirstApp": "Create your first mini app by chatting with AI and use it right away.",
+    "emptyNoMatch": "No matching apps.",
+    "count": "{{count}} items",
+    "categories": {
+      "all": "All"
+    },
+    "deleteDialog": {
+      "title": "Delete \"{{name}}\"?",
+      "message": "This action cannot be undone. The app and all its data will be permanently deleted."
+    }
   }
 }

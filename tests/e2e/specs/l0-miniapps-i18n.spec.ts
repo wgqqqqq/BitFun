@@ -4,7 +4,7 @@
  */
 
 import { browser, expect, $, $$ } from '@wdio/globals';
-import { saveStepScreenshot } from '../helpers/screenshot-utils';
+import { saveStepScreenshot, saveElementScreenshot } from '../helpers/screenshot-utils';
 
 const CHINESE_TEXT_RE = /[\u4e00-\u9fff]/;
 
@@ -213,7 +213,9 @@ describe('L0 Mini Apps i18n', () => {
     const copy = await getMiniAppsCopy();
     console.log('[L0] Mini Apps copy snapshot:', copy);
 
+    await saveStepScreenshot('miniapps-english-mode-full-page');
     await saveStepScreenshot('miniapps-english-mode-bug');
+    await saveElementScreenshot('.miniapp-gallery', 'miniapps-english-mode-gallery');
 
     expect(copy.lang).toBe('en-US');
     expect(copy.title).not.toMatch(CHINESE_TEXT_RE);

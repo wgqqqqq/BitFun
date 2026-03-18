@@ -780,5 +780,25 @@
     "timeOfDay": "按时段分布",
     "lines": "行",
     "files": "文件"
+  },
+  "miniApps": {
+    "subtitle": "即时生成的小应用，打开就能用，也能继续迭代。",
+    "searchPlaceholder": "搜索小应用...",
+    "importFolderTitle": "选择小应用目录（需包含 meta.json 与 source/）",
+    "importFromFolder": "从文件夹导入",
+    "refreshList": "刷新列表",
+    "runningTitle": "已启动",
+    "noRunningApps": "暂无运行中的应用",
+    "allAppsTitle": "全部应用",
+    "emptyFirstApp": "边聊边生成，马上可用。和 AI 对话生成第一个小应用吧。",
+    "emptyNoMatch": "没有匹配的应用。",
+    "count": "{{count}} 个",
+    "categories": {
+      "all": "全部"
+    },
+    "deleteDialog": {
+      "title": "删除 \"{{name}}\"？",
+      "message": "此操作不可撤销，应用及其所有数据将被永久删除。"
+    }
   }
 }
