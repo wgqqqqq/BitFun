@@ -124,126 +124,128 @@ const PersistentFooterActions: React.FC = () => {
   }, []);
 
   return (
-    <div className="bitfun-nav-panel__footer">
-      <div className="bitfun-nav-panel__footer-left">
-        <div className="bitfun-nav-panel__footer-more-wrap">
-          <Tooltip content={t('nav.moreOptions')} placement="right" followCursor disabled={menuOpen}>
+    <>
+      <div className="bitfun-nav-panel__footer">
+        <div className="bitfun-nav-panel__footer-left">
+          <div className="bitfun-nav-panel__footer-more-wrap">
+            <Tooltip content={t('nav.moreOptions')} placement="right" followCursor disabled={menuOpen}>
+              <button
+                type="button"
+                className={`bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon${menuOpen ? ' is-active' : ''}`}
+                aria-label={t('nav.moreOptions')}
+                aria-expanded={menuOpen}
+                onClick={toggleMenu}
+              >
+                <MoreVertical size={15} />
+              </button>
+            </Tooltip>
+
+            {menuOpen && (
+              <>
+                <div
+                  className="bitfun-nav-panel__footer-backdrop"
+                  onClick={closeMenu}
+                />
+                <div
+                  className={`bitfun-nav-panel__footer-menu${menuClosing ? ' is-closing' : ''}`}
+                  role="menu"
+                >
+                  <Tooltip
+                    content={t('header.remoteConnectRequiresWorkspace')}
+                    placement="right"
+                    disabled={hasWorkspace}
+                  >
+                    <button
+                      type="button"
+                      className={`bitfun-nav-panel__footer-menu-item${!hasWorkspace ? ' is-disabled' : ''}`}
+                      role="menuitem"
+                      aria-disabled={!hasWorkspace}
+                      onClick={handleRemoteConnect}
+                    >
+                      <Wifi size={14} />
+                      <span>{t('header.remoteConnect')}</span>
+                    </button>
+                  </Tooltip>
+                  <div className="bitfun-nav-panel__footer-menu-divider" />
+                  <button
+                    type="button"
+                    className="bitfun-nav-panel__footer-menu-item"
+                    role="menuitem"
+                    onClick={handleFloatingMode}
+                  >
+                    <PictureInPicture2 size={14} />
+                    <span>{t('header.switchToToolbar')}</span>
+                  </button>
+                  <div className="bitfun-nav-panel__footer-menu-divider" />
+                  <button
+                    type="button"
+                    className="bitfun-nav-panel__footer-menu-item"
+                    role="menuitem"
+                    onClick={handleOpenSettings}
+                  >
+                    <Settings size={14} />
+                    <span>{t('tabs.settings')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="bitfun-nav-panel__footer-menu-item"
+                    role="menuitem"
+                    onClick={handleShowAbout}
+                  >
+                    <Info size={14} />
+                    <span>{t('header.about')}</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          <Tooltip content={t('scenes.shell')} placement="right">
             <button
               type="button"
-              className={`bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon${menuOpen ? ' is-active' : ''}`}
-              aria-label={t('nav.moreOptions')}
-              aria-expanded={menuOpen}
-              onClick={toggleMenu}
+              className={`bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon${showSceneNav && navSceneId === 'shell' ? ' is-active' : ''}`}
+              aria-label={t('scenes.shell')}
+              aria-pressed={showSceneNav && navSceneId === 'shell'}
+              onClick={handleOpenShell}
             >
-              <MoreVertical size={15} />
+              <SquareTerminal size={15} />
             </button>
           </Tooltip>
 
-          {menuOpen && (
-            <>
-              <div
-                className="bitfun-nav-panel__footer-backdrop"
-                onClick={closeMenu}
-              />
-              <div
-                className={`bitfun-nav-panel__footer-menu${menuClosing ? ' is-closing' : ''}`}
-                role="menu"
-              >
-                <Tooltip
-                  content={t('header.remoteConnectRequiresWorkspace')}
-                  placement="right"
-                  disabled={hasWorkspace}
-                >
-                  <button
-                    type="button"
-                    className={`bitfun-nav-panel__footer-menu-item${!hasWorkspace ? ' is-disabled' : ''}`}
-                    role="menuitem"
-                    aria-disabled={!hasWorkspace}
-                    onClick={handleRemoteConnect}
-                  >
-                    <Wifi size={14} />
-                    <span>{t('header.remoteConnect')}</span>
-                  </button>
-                </Tooltip>
-                <div className="bitfun-nav-panel__footer-menu-divider" />
-                <button
-                  type="button"
-                  className="bitfun-nav-panel__footer-menu-item"
-                  role="menuitem"
-                  onClick={handleFloatingMode}
-                >
-                  <PictureInPicture2 size={14} />
-                  <span>{t('header.switchToToolbar')}</span>
-                </button>
-                <div className="bitfun-nav-panel__footer-menu-divider" />
-                <button
-                  type="button"
-                  className="bitfun-nav-panel__footer-menu-item"
-                  role="menuitem"
-                  onClick={handleOpenSettings}
-                >
-                  <Settings size={14} />
-                  <span>{t('tabs.settings')}</span>
-                </button>
-                <button
-                  type="button"
-                  className="bitfun-nav-panel__footer-menu-item"
-                  role="menuitem"
-                  onClick={handleShowAbout}
-                >
-                  <Info size={14} />
-                  <span>{t('header.about')}</span>
-                </button>
-              </div>
-            </>
-          )}
+          <Tooltip content={t('scenes.browser')} placement="right">
+            <button
+              type="button"
+              className={`bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon${(activeTabId === 'browser' || (activeTabId === 'session' && isBrowserPanelActiveInCanvas)) ? ' is-active' : ''}`}
+              aria-label={t('scenes.browser')}
+              aria-pressed={activeTabId === 'browser' || (activeTabId === 'session' && isBrowserPanelActiveInCanvas)}
+              onClick={handleOpenBrowser}
+            >
+              <Globe size={15} />
+            </button>
+          </Tooltip>
         </div>
 
-        <Tooltip content={t('scenes.shell')} placement="right">
-          <button
-            type="button"
-            className={`bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon${showSceneNav && navSceneId === 'shell' ? ' is-active' : ''}`}
-            aria-label={t('scenes.shell')}
-            aria-pressed={showSceneNav && navSceneId === 'shell'}
-            onClick={handleOpenShell}
-          >
-            <SquareTerminal size={15} />
-          </button>
-        </Tooltip>
-
-        <Tooltip content={t('scenes.browser')} placement="right">
-          <button
-            type="button"
-            className={`bitfun-nav-panel__footer-btn bitfun-nav-panel__footer-btn--icon${(activeTabId === 'browser' || (activeTabId === 'session' && isBrowserPanelActiveInCanvas)) ? ' is-active' : ''}`}
-            aria-label={t('scenes.browser')}
-            aria-pressed={activeTabId === 'browser' || (activeTabId === 'session' && isBrowserPanelActiveInCanvas)}
-            onClick={handleOpenBrowser}
-          >
-            <Globe size={15} />
-          </button>
-        </Tooltip>
+        <div className="bitfun-nav-panel__footer-right">
+          <NotificationButton className="bitfun-nav-panel__footer-btn" />
+        </div>
       </div>
-
-      <div className="bitfun-nav-panel__footer-right">
-        <NotificationButton className="bitfun-nav-panel__footer-btn" />
-      </div>
-    </div>
-    <AboutDialog isOpen={showAbout} onClose={() => setShowAbout(false)} />
-    <RemoteConnectDialog isOpen={showRemoteConnect} onClose={() => setShowRemoteConnect(false)} />
-    <Modal
-      isOpen={showRemoteDisclaimer}
-      onClose={() => setShowRemoteDisclaimer(false)}
-      title={t('remoteConnect.disclaimerTitle')}
-      showCloseButton
-      size="large"
-      contentInset
-    >
-      <RemoteConnectDisclaimerContent
-        agreed={hasAgreedRemoteDisclaimer}
+      <AboutDialog isOpen={showAbout} onClose={() => setShowAbout(false)} />
+      <RemoteConnectDialog isOpen={showRemoteConnect} onClose={() => setShowRemoteConnect(false)} />
+      <Modal
+        isOpen={showRemoteDisclaimer}
         onClose={() => setShowRemoteDisclaimer(false)}
-        onAgree={handleAgreeDisclaimer}
-      />
-    </Modal>
+        title={t('remoteConnect.disclaimerTitle')}
+        showCloseButton
+        size="large"
+        contentInset
+      >
+        <RemoteConnectDisclaimerContent
+          agreed={hasAgreedRemoteDisclaimer}
+          onClose={() => setShowRemoteDisclaimer(false)}
+          onAgree={handleAgreeDisclaimer}
+        />
+      </Modal>
+    </>
   );
 };
 

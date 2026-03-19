@@ -45,6 +45,7 @@ pub struct AppState {
     pub miniapp_manager: Arc<MiniAppManager>,
     pub js_worker_pool: Option<Arc<JsWorkerPool>>,
     pub statistics: Arc<RwLock<AppStatistics>>,
+    pub macos_edit_menu_mode: Arc<RwLock<crate::macos_menubar::EditMenuMode>>,
     pub start_time: std::time::Instant,
 }
 
@@ -160,6 +161,9 @@ impl AppState {
             miniapp_manager,
             js_worker_pool,
             statistics,
+            macos_edit_menu_mode: Arc::new(RwLock::new(
+                crate::macos_menubar::EditMenuMode::System,
+            )),
             start_time,
         };
 
