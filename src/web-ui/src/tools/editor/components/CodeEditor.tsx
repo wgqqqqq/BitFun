@@ -10,7 +10,7 @@ import { AlertCircle } from 'lucide-react';
 import * as monaco from 'monaco-editor';
 import { monacoInitManager } from '../services/MonacoInitManager';
 import { monacoModelManager } from '../services/MonacoModelManager';
-import { activeMonacoEditorService } from '../services/ActiveMonacoEditorService';
+import { activeEditTargetService, createMonacoEditTarget } from '../services/ActiveEditTargetService';
 import { 
   forceRegisterTheme,
   BitFunDarkTheme,
@@ -616,7 +616,25 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         editor = monaco.editor.create(containerRef.current, editorOptions);
         editorRef.current = editor;
         setEditorInstance(editor);
-        macosEditorBindingCleanupRef.current = activeMonacoEditorService.bindEditor(editor);
+        const editTarget = createMonacoEditTarget(editor);
+        const unbindEditTarget = activeEditTargetService.bindTarget(editTarget);
+        const focusDisposable = editor.onDidFocusEditorText(() => {
+          activeEditTargetService.setActiveTarget(editTarget.id);
+        });
+        const blurDisposable = editor.onDidBlurEditorText(() => {
+          window.setTimeout(() => {
+            if (editor?.hasTextFocus()) {
+              return;
+            }
+
+            activeEditTargetService.clearActiveTarget(editTarget.id);
+          }, 0);
+        });
+        macosEditorBindingCleanupRef.current = () => {
+          focusDisposable.dispose();
+          blurDisposable.dispose();
+          unbindEditTarget();
+        };
         // #endregion
         
         (containerRef.current as any).__monacoEditor = editor;
@@ -1247,9 +1265,9 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       event.stopPropagation();
 
       if (event.shiftKey) {
-        editorRef.current?.trigger('keyboard', 'redo', null);
+        activeEditTargetService.executeAction('redo');
       } else {
-        editorRef.current?.trigger('keyboard', 'undo', null);
+        activeEditTargetService.executeAction('undo');
       }
       return;
     }
@@ -1257,7 +1275,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     if (!event.metaKey && event.ctrlKey && lowerKey === 'y') {
       event.preventDefault();
       event.stopPropagation();
-      editorRef.current?.trigger('keyboard', 'redo', null);
+      activeEditTargetService.executeAction('redo');
     }
   }, []);
 

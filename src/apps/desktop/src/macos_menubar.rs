@@ -13,7 +13,7 @@ pub enum MenubarMode {
 #[serde(rename_all = "camelCase")]
 pub enum EditMenuMode {
     System,
-    Monaco,
+    Renderer,
 }
 
 pub const MENU_ID_EDIT_UNDO: &str = "bitfun.edit.undo";
@@ -112,7 +112,7 @@ pub fn set_macos_menubar_with_mode(
             .paste()
             .select_all()
             .build()?,
-        EditMenuMode::Monaco => {
+        EditMenuMode::Renderer => {
             let undo = MenuItemBuilder::with_id(MENU_ID_EDIT_UNDO, labels.undo)
                 .accelerator("Cmd+Z")
                 .build(app)?;

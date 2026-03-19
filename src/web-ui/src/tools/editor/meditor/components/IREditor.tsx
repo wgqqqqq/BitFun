@@ -3,6 +3,7 @@ import { createLogger } from '@/shared/utils/logger'
 import { useI18n } from '@/infrastructure/i18n'
 import { useMarkdown } from '../hooks/useMarkdown'
 import { useEditorHistory } from '../hooks/useEditorHistory'
+import { activeEditTargetService } from '@/tools/editor/services/ActiveEditTargetService'
 import { MermaidService } from '@/tools/mermaid-editor/services/MermaidService'
 import { loadLocalImages } from '../utils/loadLocalImages'
 import { 
@@ -16,6 +17,16 @@ import {
 import './IREditor.scss'
 
 const log = createLogger('IREditor')
+let irEditTargetCounter = 0
+
+function isMacOSDesktop(): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const isTauri = '__TAURI__' in window
+  return isTauri && typeof navigator.platform === 'string' && navigator.platform.toUpperCase().includes('MAC')
+}
 
 function escapeHtml(text: string): string {
   return text
@@ -76,6 +87,11 @@ export interface IREditorHandle {
   setInitialContent: (content: string) => void
   /** Whether there are unsaved changes */
   isDirty: boolean
+}
+
+interface SelectionSnapshot {
+  start: number
+  end: number
 }
 
 const generateStableBlockId = (startLine: number, type: string) => `block-${startLine}-${type}`
@@ -202,6 +218,11 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
     const editorRef = useRef<HTMLDivElement>(null)
     const blockRefsMap = useRef<Map<string, HTMLDivElement>>(new Map())
     const lastValueRef = useRef<string>(value)
+    const editTargetIdRef = useRef(`markdown-ir-${++irEditTargetCounter}`)
+    const undoRef = useRef<() => boolean>(() => false)
+    const redoRef = useRef<() => boolean>(() => false)
+    const lastRestoredVersionRef = useRef<number | null>(null)
+    const nextBlockChangeTransactionRef = useRef<'typing' | 'format'>('typing')
     
     const i18nCssVars = useMemo(() => {
       return {
@@ -237,16 +258,57 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
     }, [value, history])
 
     const currentContent = history.content
+    undoRef.current = history.undo
+    redoRef.current = history.redo
+
     useEffect(() => {
-      if (editingBlockId && lastValueRef.current === currentContent) {
-        return
-      }
-      
-      lastValueRef.current = currentContent
       const rawBlocks = parseMarkdownToBlocksRaw(currentContent)
       const newBlocks = updateBlocksSmartly(blocks, rawBlocks)
+
+      if (editingBlockId && editingBlockId !== 'empty-block') {
+        const matchingBlock = newBlocks.find(block => block.id === editingBlockId)
+        if (matchingBlock) {
+          setEditingContent(matchingBlock.content)
+        } else {
+          setEditingBlockId(null)
+          setEditingContent('')
+        }
+      }
+
+      if (editingBlockId === 'empty-block') {
+        setEditingContent(currentContent)
+      }
+
+      lastValueRef.current = currentContent
       setBlocks(newBlocks)
     }, [currentContent, editingBlockId]) // blocks intentionally excluded to avoid loops
+
+    useEffect(() => {
+      const selection = history.selection
+      if (!selection || !editingBlockId) {
+        return
+      }
+
+      if (lastRestoredVersionRef.current === history.currentVersionId) {
+        return
+      }
+
+      const textarea = editorRef.current?.querySelector<HTMLTextAreaElement>('textarea')
+      if (!textarea) {
+        return
+      }
+
+      lastRestoredVersionRef.current = history.currentVersionId
+
+      requestAnimationFrame(() => {
+        if (!editorRef.current?.contains(textarea)) {
+          return
+        }
+
+        textarea.focus()
+        textarea.setSelectionRange(selection.start, selection.end)
+      })
+    }, [history.currentVersionId, history.selection, editingBlockId])
 
     const scrollToLine = useCallback((line: number, highlight: boolean = true) => {
       const targetBlock = blocks.find(
@@ -303,6 +365,35 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
       isDirty: history.isDirty
     }), [scrollToLine, history])
 
+    useEffect(() => {
+      const targetId = editTargetIdRef.current
+
+      return activeEditTargetService.bindTarget({
+        id: targetId,
+        kind: 'markdown-ir',
+        focus: () => {
+          const activeTextarea = editorRef.current?.querySelector<HTMLTextAreaElement>('textarea')
+          if (activeTextarea) {
+            activeTextarea.focus()
+            return
+          }
+
+          editorRef.current?.focus()
+        },
+        hasTextFocus: () => {
+          const root = editorRef.current
+          const activeElement = typeof document !== 'undefined' ? document.activeElement : null
+          return !!root && !!activeElement && root.contains(activeElement)
+        },
+        undo: () => undoRef.current(),
+        redo: () => redoRef.current(),
+        containsElement: (element) => {
+          const root = editorRef.current
+          return !!root && !!element && root.contains(element)
+        },
+      })
+    }, [])
+
     const handleBlockClick = useCallback((blockId: string) => {
       if (readonly) return
       
@@ -313,8 +404,10 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
       }
     }, [readonly, blocks])
 
-    const handleBlockContentChange = useCallback((newContent: string) => {
+    const handleBlockContentChange = useCallback((newContent: string, selection?: SelectionSnapshot) => {
       setEditingContent(newContent)
+      const transactionType = nextBlockChangeTransactionRef.current
+      nextBlockChangeTransactionRef.current = 'typing'
       
       if (editingBlockId && editingBlockId !== 'empty-block') {
         const block = blocks.find(b => b.id === editingBlockId)
@@ -324,7 +417,11 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
           const after = lines.slice(block.endLine + 1).join('\n')
           const newValue = [before, newContent, after].filter(s => s !== '').join('\n')
           lastValueRef.current = newValue
-          history.pushChange(newValue)
+          history.pushChange(newValue, {
+            selectionStart: selection?.start,
+            selectionEnd: selection?.end,
+            transactionType
+          })
         }
       }
     }, [editingBlockId, blocks, currentContent, history])
@@ -363,25 +460,43 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
       }
       
       if (modKey && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault()
-        if (editingBlockId) {
-          setEditingBlockId(null)
-          setEditingContent('')
+        if (isMacOSDesktop()) {
+          e.preventDefault()
+          return
         }
+
+        e.preventDefault()
         history.undo()
         return
       }
       
       if ((modKey && e.key === 'z' && e.shiftKey) || (e.ctrlKey && e.key === 'y')) {
-        e.preventDefault()
-        if (editingBlockId) {
-          setEditingBlockId(null)
-          setEditingContent('')
+        if (isMacOSDesktop()) {
+          e.preventDefault()
+          return
         }
+
+        e.preventDefault()
         history.redo()
         return
       }
     }, [currentContent, blocks, editingBlockId, history])
+
+    const handleFocusCapture = useCallback(() => {
+      activeEditTargetService.setActiveTarget(editTargetIdRef.current)
+    }, [])
+
+    const handleBlurCapture = useCallback(() => {
+      window.setTimeout(() => {
+        const root = editorRef.current
+        const activeElement = typeof document !== 'undefined' ? document.activeElement : null
+        if (root && activeElement && root.contains(activeElement)) {
+          return
+        }
+
+        activeEditTargetService.clearActiveTarget(editTargetIdRef.current)
+      }, 0)
+    }, [])
     
     const handleBlockKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       const modKey = isModKey(e)
@@ -408,7 +523,7 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
             
             setEditingBlockId(null)
             setEditingContent('')
-            history.pushChange(newValue)
+            history.pushChange(newValue, { transactionType: 'structure' })
           }
           return
         } else if (currentBlockIndex > 0 && value.length > 0) {
@@ -424,7 +539,11 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
           
           setEditingBlockId(null)
           setEditingContent('')
-          history.pushChange(newValue)
+          history.pushChange(newValue, {
+            selectionStart: prevBlock.content.length,
+            selectionEnd: prevBlock.content.length,
+            transactionType: 'structure'
+          })
           
           setTimeout(() => {
             const newBlocks = parseMarkdownToBlocksRaw(newValue)
@@ -450,7 +569,7 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
           
           setEditingBlockId(null)
           setEditingContent('')
-          history.pushChange(newValue)
+          history.pushChange(newValue, { transactionType: 'structure' })
         }
         return
       }
@@ -461,6 +580,7 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
           ? outdentLines(value, selectionStart, selectionEnd)
           : indentLines(value, selectionStart, selectionEnd)
         
+        nextBlockChangeTransactionRef.current = 'format'
         textarea.value = result.text
         textarea.setSelectionRange(result.selectionStart, result.selectionEnd)
         const event = new Event('input', { bubbles: true })
@@ -471,6 +591,7 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
       if (modKey && e.key === 'b') {
         e.preventDefault()
         const result = toggleBold(value, selectionStart, selectionEnd)
+        nextBlockChangeTransactionRef.current = 'format'
         textarea.value = result.text
         textarea.setSelectionRange(result.selectionStart, result.selectionEnd)
         const event = new Event('input', { bubbles: true })
@@ -481,6 +602,7 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
       if (modKey && e.key === 'i') {
         e.preventDefault()
         const result = toggleItalic(value, selectionStart, selectionEnd)
+        nextBlockChangeTransactionRef.current = 'format'
         textarea.value = result.text
         textarea.setSelectionRange(result.selectionStart, result.selectionEnd)
         const event = new Event('input', { bubbles: true })
@@ -491,6 +613,7 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
       if (modKey && e.key === 'k') {
         e.preventDefault()
         const result = insertLink(value, selectionStart, selectionEnd)
+        nextBlockChangeTransactionRef.current = 'format'
         textarea.value = result.text
         textarea.setSelectionRange(result.selectionStart, result.selectionEnd)
         const event = new Event('input', { bubbles: true })
@@ -500,7 +623,11 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
     }, [handleKeyDown, editingBlockId, blocks, currentContent, history])
 
     const handleEmptyBlockChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      history.pushChange(e.target.value)
+      history.pushChange(e.target.value, {
+        selectionStart: e.target.selectionStart,
+        selectionEnd: e.target.selectionEnd,
+        transactionType: 'typing'
+      })
     }, [history])
     
     const handleEmptyBlockKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -517,7 +644,11 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
           ? outdentLines(value, selectionStart, selectionEnd)
           : indentLines(value, selectionStart, selectionEnd)
         
-        history.pushChange(result.text)
+        history.pushChange(result.text, {
+          selectionStart: result.selectionStart,
+          selectionEnd: result.selectionEnd,
+          transactionType: 'format'
+        })
         setTimeout(() => {
           textarea.setSelectionRange(result.selectionStart, result.selectionEnd)
         }, 0)
@@ -527,7 +658,11 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
       if (modKey && e.key === 'b') {
         e.preventDefault()
         const result = toggleBold(value, selectionStart, selectionEnd)
-        history.pushChange(result.text)
+        history.pushChange(result.text, {
+          selectionStart: result.selectionStart,
+          selectionEnd: result.selectionEnd,
+          transactionType: 'format'
+        })
         setTimeout(() => {
           textarea.setSelectionRange(result.selectionStart, result.selectionEnd)
         }, 0)
@@ -537,7 +672,11 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
       if (modKey && e.key === 'i') {
         e.preventDefault()
         const result = toggleItalic(value, selectionStart, selectionEnd)
-        history.pushChange(result.text)
+        history.pushChange(result.text, {
+          selectionStart: result.selectionStart,
+          selectionEnd: result.selectionEnd,
+          transactionType: 'format'
+        })
         setTimeout(() => {
           textarea.setSelectionRange(result.selectionStart, result.selectionEnd)
         }, 0)
@@ -547,7 +686,11 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
       if (modKey && e.key === 'k') {
         e.preventDefault()
         const result = insertLink(value, selectionStart, selectionEnd)
-        history.pushChange(result.text)
+        history.pushChange(result.text, {
+          selectionStart: result.selectionStart,
+          selectionEnd: result.selectionEnd,
+          transactionType: 'format'
+        })
         setTimeout(() => {
           textarea.setSelectionRange(result.selectionStart, result.selectionEnd)
         }, 0)
@@ -567,7 +710,15 @@ export const IREditor = React.forwardRef<IREditorHandle, IREditorProps>(
     }, [onBlur])
 
     return (
-      <div className="m-editor-ir" ref={editorRef} tabIndex={-1} onKeyDown={handleKeyDown} style={i18nCssVars}>
+      <div
+        className="m-editor-ir"
+        ref={editorRef}
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
+        onFocusCapture={handleFocusCapture}
+        onBlurCapture={handleBlurCapture}
+        style={i18nCssVars}
+      >
         {editingBlockId === 'empty-block' ? (
           <div className="m-editor-ir-block m-editor-ir-block-paragraph editing">
             <textarea
@@ -629,7 +780,7 @@ interface IRBlockProps {
   isHighlighted: boolean
   editingContent: string // Content used in edit mode
   onClick: () => void
-  onChange: (content: string) => void
+  onChange: (content: string, selection?: SelectionSnapshot) => void
   onBlur: () => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   readonly?: boolean
@@ -751,7 +902,10 @@ const IRBlock: React.FC<IRBlockProps> = memo(({
       }, [isEditing, html])
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onChange(e.target.value)
+    onChange(e.target.value, {
+      start: e.target.selectionStart,
+      end: e.target.selectionEnd
+    })
   }, [onChange])
 
   const highlightClass = isHighlighted ? 'highlighted' : ''

@@ -15,7 +15,7 @@ import { monacoModelManager } from '../services/MonacoModelManager';
 import { themeManager } from '../services/ThemeManager';
 import { editorExtensionManager } from '../services/EditorExtensionManager';
 import { buildEditorOptions } from '../services/EditorOptionsBuilder';
-import { activeMonacoEditorService } from '../services/ActiveMonacoEditorService';
+import { activeEditTargetService, createMonacoEditTarget } from '../services/ActiveEditTargetService';
 import type { MonacoEditorCoreProps } from './types';
 import type { EditorExtensionContext } from '../services/EditorExtensionManager';
 import type { EditorOptionsOverrides } from '../services/EditorOptionsBuilder';
@@ -148,7 +148,25 @@ export const MonacoEditorCore = forwardRef<MonacoEditorCoreRef, MonacoEditorCore
             model,
           });
           editorRef.current = editor;
-          macosEditorBindingCleanupRef.current = activeMonacoEditorService.bindEditor(editor);
+          const editTarget = createMonacoEditTarget(editor);
+          const unbindEditTarget = activeEditTargetService.bindTarget(editTarget);
+          const focusDisposable = editor.onDidFocusEditorText(() => {
+            activeEditTargetService.setActiveTarget(editTarget.id);
+          });
+          const blurDisposable = editor.onDidBlurEditorText(() => {
+            window.setTimeout(() => {
+              if (editor.hasTextFocus()) {
+                return;
+              }
+
+              activeEditTargetService.clearActiveTarget(editTarget.id);
+            }, 0);
+          });
+          macosEditorBindingCleanupRef.current = () => {
+            focusDisposable.dispose();
+            blurDisposable.dispose();
+            unbindEditTarget();
+          };
           
           registerEventListeners(editor, model);
           

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useImperativeHandle, forwardRef, useRef } from 'react'
 import { createLogger } from '@/shared/utils/logger'
+import { activeEditTargetService } from '@/tools/editor/services/ActiveEditTargetService'
 import { useEditor } from '../hooks/useEditor'
 import { EditArea } from './EditArea'
 import { IREditor, IREditorHandle } from './IREditor'
@@ -9,8 +10,31 @@ import { useI18n } from '@/infrastructure/i18n'
 import './MEditor.scss'
 
 void createLogger('MEditor')
+let markdownTextareaTargetCounter = 0
 
 export interface MEditorProps extends EditorOptions {}
+
+function executeTextareaAction(
+  textarea: HTMLTextAreaElement | null,
+  action: 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll',
+): boolean {
+  if (!textarea || textarea.disabled) {
+    return false
+  }
+
+  textarea.focus()
+
+  if (textarea.readOnly && action !== 'copy' && action !== 'selectAll') {
+    return false
+  }
+
+  if (action === 'selectAll') {
+    textarea.select()
+    return true
+  }
+
+  return document.execCommand(action)
+}
 
 export const MEditor = forwardRef<EditorInstance, MEditorProps>((props, ref) => {
   const {
@@ -36,6 +60,8 @@ export const MEditor = forwardRef<EditorInstance, MEditorProps>((props, ref) => 
 
   const { t } = useI18n('tools')
   const placeholder = placeholderProp ?? t('editor.meditor.placeholder')
+  const containerRef = useRef<HTMLDivElement>(null)
+  const textareaTargetIdRef = useRef(`markdown-textarea-${++markdownTextareaTargetCounter}`)
 
   const {
     value,
@@ -49,6 +75,37 @@ export const MEditor = forwardRef<EditorInstance, MEditorProps>((props, ref) => 
   } = useEditor(controlledValue ?? defaultValue, onChange)
   
   const irEditorRef = useRef<IREditorHandle>(null)
+
+  useEffect(() => {
+    if (mode === 'ir' || mode === 'preview') {
+      return
+    }
+
+    const targetId = textareaTargetIdRef.current
+
+    return activeEditTargetService.bindTarget({
+      id: targetId,
+      kind: 'markdown-textarea',
+      focus: () => {
+        textareaRef.current?.focus()
+      },
+      hasTextFocus: () => {
+        const textarea = textareaRef.current
+        const activeElement = typeof document !== 'undefined' ? document.activeElement : null
+        return !!textarea && activeElement === textarea
+      },
+      undo: () => executeTextareaAction(textareaRef.current, 'undo'),
+      redo: () => executeTextareaAction(textareaRef.current, 'redo'),
+      cut: () => executeTextareaAction(textareaRef.current, 'cut'),
+      copy: () => executeTextareaAction(textareaRef.current, 'copy'),
+      paste: () => executeTextareaAction(textareaRef.current, 'paste'),
+      selectAll: () => executeTextareaAction(textareaRef.current, 'selectAll'),
+      containsElement: (element) => {
+        const root = containerRef.current
+        return !!root && !!element && root.contains(element)
+      }
+    })
+  }, [mode, textareaRef])
 
   useEffect(() => {
     if (controlledValue !== undefined && controlledValue !== value) {
@@ -79,11 +136,17 @@ export const MEditor = forwardRef<EditorInstance, MEditorProps>((props, ref) => 
       if (mode === 'ir' && irEditorRef.current) {
         return irEditorRef.current.undo()
       }
+      if (mode === 'edit' || mode === 'split') {
+        return executeTextareaAction(textareaRef.current, 'undo')
+      }
       return false
     },
     redo: () => {
       if (mode === 'ir' && irEditorRef.current) {
         return irEditorRef.current.redo()
+      }
+      if (mode === 'edit' || mode === 'split') {
+        return executeTextareaAction(textareaRef.current, 'redo')
       }
       return false
     },
@@ -125,6 +188,30 @@ export const MEditor = forwardRef<EditorInstance, MEditorProps>((props, ref) => 
     }
   }, [value, onSave])
 
+  const handleFocusCapture = useCallback(() => {
+    if (mode === 'ir' || mode === 'preview') {
+      return
+    }
+
+    activeEditTargetService.setActiveTarget(textareaTargetIdRef.current)
+  }, [mode])
+
+  const handleBlurCapture = useCallback(() => {
+    if (mode === 'ir' || mode === 'preview') {
+      return
+    }
+
+    window.setTimeout(() => {
+      const root = containerRef.current
+      const activeElement = typeof document !== 'undefined' ? document.activeElement : null
+      if (root && activeElement && root.contains(activeElement)) {
+        return
+      }
+
+      activeEditTargetService.clearActiveTarget(textareaTargetIdRef.current)
+    }, 0)
+  }, [mode])
+
   const containerStyle: React.CSSProperties = {
     ...style,
     height: typeof height === 'number' ? `${height}px` : height,
@@ -136,9 +223,12 @@ export const MEditor = forwardRef<EditorInstance, MEditorProps>((props, ref) => 
 
   return (
     <div
+      ref={containerRef}
       className={`m-editor ${themeClass} ${modeClass} ${className}`}
       style={containerStyle}
       onKeyDown={handleKeyDown}
+      onFocusCapture={handleFocusCapture}
+      onBlurCapture={handleBlurCapture}
       tabIndex={-1}
     >
       {toolbar && <div className="m-editor-toolbar">{t('editor.meditor.toolbarPlaceholder')}</div>}
@@ -205,4 +295,3 @@ export const MEditor = forwardRef<EditorInstance, MEditorProps>((props, ref) => 
 })
 
 MEditor.displayName = 'MEditor'
-

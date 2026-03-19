@@ -114,7 +114,7 @@ export class SystemAPI {
     }
   }
 
-  async setMacosEditMenuMode(mode: 'system' | 'monaco'): Promise<void> {
+  async setMacosEditMenuMode(mode: 'system' | 'renderer'): Promise<void> {
     try {
       await api.invoke('set_macos_edit_menu_mode', {
         request: { mode }
