@@ -80,8 +80,8 @@
   }
 }
 
-// Markdown content styles
-.markdown-body {
+// Markdown preview inside m-editor only (align with flow-chat markdown chrome via shared CSS vars)
+.m-editor .markdown-body {
   --m-editor-list-indent: 1.75rem;
   --m-editor-list-marker-width: 1.25rem;
   --m-editor-list-gap: 0.25rem;
@@ -108,7 +108,7 @@
   h1 {
     font-size: $font-size-3xl;
     color: var(--color-text-primary);
-    border-bottom: 1px solid $border-base;
+    border-bottom: 1px solid var(--border-subtle, #{$border-subtle});
     padding-bottom: $size-gap-3;
     text-align: center;
     letter-spacing: 0.5px;
@@ -116,7 +116,7 @@
 
   h2 {
     font-size: $font-size-2xl;
-    border-bottom: 1px solid $border-base;
+    border-bottom: 1px solid var(--border-subtle, #{$border-subtle});
     padding-bottom: $size-gap-2;
   }
 
@@ -142,44 +142,84 @@
   }
 
   code {
-    padding: 0.2em 0.4em;
-    margin: 0;
-    font-size: 100%;
-    background-color: $element-bg-subtle;
-    border-radius: $size-radius-sm;
-    font-family: $font-family-mono;
-    color: var(--color-accent-500);
+    padding: 0.1em 0.4em;
+    margin: 0 0.05em;
+    font-size: 0.9em;
+    font-weight: 500;
+    line-height: 1.4;
+    vertical-align: baseline;
+    white-space: nowrap;
+    font-family: var(--flowchat-md-code-font-mono);
+    color: var(--flowchat-md-inline-code-fg);
+    background: var(--flowchat-md-inline-code-bg);
+    border: 1px solid var(--flowchat-md-inline-code-border);
+    border-radius: 4px;
+    transition: all 0.15s ease;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+
+    &:hover {
+      background: var(--flowchat-md-inline-code-hover-bg);
+      border-color: var(--flowchat-md-inline-code-hover-border);
+      color: var(--flowchat-md-inline-code-hover-fg);
+    }
   }
 
   pre {
-    padding: $size-gap-4;
+    margin: 0.25rem 0.3rem $size-gap-4;
+    padding: var(--flowchat-md-pre-padding);
     overflow: auto;
-    font-size: 100%;
-    line-height: 1.45;
-    background-color: $element-bg-subtle;
-    border: 1px solid $border-base;
-    border-radius: $size-radius-base;
-    margin-bottom: $size-gap-4;
+    font-size: var(--flowchat-md-pre-font-size);
+    line-height: 1.5;
+    position: relative;
+    font-family: var(--flowchat-md-code-font-mono);
+    color: var(--flowchat-md-pre-code-fg);
+    background: var(--flowchat-md-pre-bg);
+    border: 1px var(--flowchat-md-pre-border-style) var(--flowchat-md-pre-border);
+    border-radius: var(--flowchat-md-pre-radius);
+    box-shadow: var(--flowchat-md-pre-shadow);
+    transition: all 0.3s ease;
+
+    &:hover {
+      border-style: solid;
+      border-color: var(--flowchat-md-pre-hover-border);
+      box-shadow: var(--flowchat-md-pre-hover-shadow);
+    }
 
     code {
+      display: block;
       padding: 0;
       margin: 0;
-      background: transparent;
-      border: 0;
-      display: inline;
+      overflow: visible;
+      white-space: pre;
+      font-family: var(--flowchat-md-code-font-mono);
+      font-size: var(--flowchat-md-pre-font-size);
+      font-weight: inherit;
       line-height: inherit;
       word-wrap: normal;
+      color: inherit;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+
+      &:hover {
+        background: transparent !important;
+        border: none !important;
+        color: inherit !important;
+      }
     }
   }
 
   blockquote {
-    padding: $size-gap-3 $size-gap-4;
-    color: var(--color-text-muted);
-    border-left: 3px solid $border-base;
-    margin: 0 0 $size-gap-4 0;
-    background: $element-bg-subtle;
-    border-radius: 0 $size-radius-base $size-radius-base 0;
+    margin: var(--flowchat-md-bq-margin);
+    padding: var(--flowchat-md-bq-padding);
     font-style: italic;
+    position: relative;
+    color: var(--flowchat-md-bq-fg);
+    background: var(--flowchat-md-bq-bg);
+    border-left: 3px solid var(--flowchat-md-bq-border);
+    border-radius: var(--flowchat-md-bq-radius);
 
     > :first-child {
       margin-top: 0;
@@ -187,6 +227,10 @@
 
     > :last-child {
       margin-bottom: 0;
+    }
+
+    p {
+      margin: 0.5rem 0;
     }
   }
 
@@ -253,44 +297,118 @@
     }
   }
 
+  /* Same palette as flow chat `.table-wrapper` (flowchat-markdown-table-vars.scss) */
   table {
     border-spacing: 0;
     border-collapse: collapse;
-    display: block;
     width: max-content;
     max-width: 100%;
-    overflow: auto;
     margin-bottom: $size-gap-4;
-    border-radius: $size-radius-base;
+    font-size: 0.85rem;
+    border: 1px solid var(--flowchat-md-table-border);
+    border-radius: var(--flowchat-md-table-radius);
+    background: var(--flowchat-md-table-surface);
+    box-shadow: var(--flowchat-md-table-shadow);
     overflow: hidden;
-    border: 1px solid $border-base;
+  }
 
-    th {
-      font-weight: $font-weight-semibold;
-      padding: $size-gap-2 $size-gap-3;
-      border: 1px solid $border-base;
-      background: $element-bg-soft;
-      color: var(--color-text-primary);
-    }
+  table th,
+  table td {
+    padding: $size-gap-3 $size-gap-4;
+    border: none;
+    border-bottom: 1px solid var(--flowchat-md-table-cell-border);
+    text-align: left;
+    vertical-align: top;
+    background: transparent;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    transition: background-color $motion-fast $easing-standard;
+  }
 
-    td {
-      padding: $size-gap-2 $size-gap-3;
-      border: 1px solid $border-base;
-    }
+  table th {
+    font-weight: $font-weight-semibold;
+    background: var(--flowchat-md-table-th-bg);
+    color: var(--flowchat-md-table-th-fg);
+  }
 
-    tr {
-      background-color: transparent;
-      border-top: 1px solid $border-base;
-      transition: background-color $motion-fast $easing-standard;
+  table td {
+    color: var(--flowchat-md-table-td-fg);
+  }
 
-      &:nth-child(2n) {
-        background-color: color-mix(in srgb, var(--color-text-primary) 2%, transparent);
-      }
+  table th + th,
+  table td + td,
+  table th + td {
+    border-left: 1px solid var(--flowchat-md-table-col-divider);
+  }
 
-      &:hover {
-        background-color: $element-bg-subtle;
-      }
-    }
+  table tbody tr:last-child td,
+  table tbody tr:last-child th {
+    border-bottom: none;
+  }
+
+  table tbody tr {
+    background: var(--flowchat-md-table-row-base);
+  }
+
+  table tbody tr:nth-child(2n) {
+    background: var(--flowchat-md-table-row-stripe);
+  }
+
+  table tbody tr:hover {
+    background: var(--flowchat-md-table-hover);
+  }
+
+  table thead tr:hover {
+    background: var(--flowchat-md-table-hover);
+  }
+
+  table thead tr:hover th,
+  table tbody tr:hover th,
+  table tbody tr:hover td {
+    background: transparent;
+  }
+
+  table tbody tr:first-child th:first-child,
+  table thead th:first-child {
+    border-top-left-radius: var(--flowchat-md-table-radius);
+  }
+
+  table tbody tr:first-child th:last-child,
+  table thead th:last-child {
+    border-top-right-radius: var(--flowchat-md-table-radius);
+  }
+
+  table tbody tr:last-child td:first-child,
+  table tbody tr:last-child th:first-child {
+    border-bottom-left-radius: var(--flowchat-md-table-radius);
+  }
+
+  table tbody tr:last-child td:last-child,
+  table tbody tr:last-child th:last-child {
+    border-bottom-right-radius: var(--flowchat-md-table-radius);
+  }
+
+  table tbody tr:first-child th:only-child {
+    border-radius: var(--flowchat-md-table-radius) var(--flowchat-md-table-radius) 0 0;
+  }
+
+  table tbody tr:last-child td:only-child {
+    border-radius: 0 0 var(--flowchat-md-table-radius) var(--flowchat-md-table-radius);
+  }
+
+  table th code,
+  table td code {
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+  }
+
+  table th pre code,
+  table td pre code {
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-width: 100%;
   }
 
   img {
@@ -301,16 +419,13 @@
   }
 
   hr {
-    height: 1px;
+    height: 0;
     padding: 0;
-    margin: $size-gap-6 0;
-    background: linear-gradient(90deg, 
-      transparent 0%, 
-      color-mix(in srgb, var(--color-text-muted) 30%, transparent) 20%, 
-      color-mix(in srgb, var(--color-text-muted) 30%, transparent) 80%, 
-      transparent 100%);
+    margin: $size-gap-5 0;
     border: 0;
-    border-radius: 1px;
+    border-top: 1px solid var(--border-subtle, #{$border-subtle});
+    background: none;
+    overflow: visible;
   }
 
   // Task list

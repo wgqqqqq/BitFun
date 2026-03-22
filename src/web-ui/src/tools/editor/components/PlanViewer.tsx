@@ -8,6 +8,7 @@ import type { EditorInstance } from '../meditor';
 import { createLogger } from '@/shared/utils/logger';
 import { CubeLoading, Button, Tooltip } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n';
+import { useTheme } from '@/infrastructure/theme/hooks/useTheme';
 import { workspaceAPI } from '@/infrastructure/api/service-api/WorkspaceAPI';
 import { flowChatManager } from '@/flow_chat/services/FlowChatManager';
 import { fileSystemService } from '@/tools/file-system/services/FileSystemService';
@@ -56,6 +57,8 @@ const PlanViewer: React.FC<PlanViewerProps> = ({
   jumpToColumn: _jumpToColumn,
 }) => {
   const { t } = useI18n('tools');
+  const { isLight } = useTheme();
+  const mEditorTheme = isLight ? 'light' : 'dark';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [planData, setPlanData] = useState<PlanData | null>(null);
@@ -593,7 +596,7 @@ const PlanViewer: React.FC<PlanViewerProps> = ({
                 onChange={handleYamlChange}
                 onSave={handleSave}
                 mode="edit"
-                theme="dark"
+                theme={mEditorTheme}
                 height="200px"
                 width="100%"
                 placeholder={t('editor.planViewer.yamlPlaceholder')}
@@ -807,7 +810,7 @@ ${JSON.stringify(simpleTodos, null, 2)}
             onChange={handleContentChange}
             onSave={handleSave}
             mode="ir"
-            theme="dark"
+            theme={mEditorTheme}
             height="auto"
             width="100%"
             placeholder={t('editor.planViewer.contentPlaceholder')}

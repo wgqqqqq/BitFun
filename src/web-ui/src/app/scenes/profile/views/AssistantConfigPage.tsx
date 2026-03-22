@@ -19,6 +19,7 @@ import { createLogger } from '@/shared/utils/logger';
 import { useWorkspaceContext } from '@/infrastructure/contexts/WorkspaceContext';
 import { useAgentIdentityDocument } from '@/app/scenes/my-agent/useAgentIdentityDocument';
 import { MEditor } from '@/tools/editor/meditor';
+import { useTheme } from '@/infrastructure/theme/hooks/useTheme';
 import { PersonaRadar } from './PersonaRadar';
 import { useNurseryStore } from '../nurseryStore';
 import { useTokenEstimate, formatTokenCount } from './useTokenEstimate';
@@ -62,6 +63,7 @@ function computeRadarDims(
 
 const AssistantConfigPage: React.FC = () => {
   const { t } = useTranslation('scenes/profile');
+  const { isLight } = useTheme();
   const { openGallery, activeWorkspaceId } = useNurseryStore();
   const { assistantWorkspacesList } = useWorkspaceContext();
 
@@ -337,6 +339,7 @@ const AssistantConfigPage: React.FC = () => {
                     value={identityDocument.body}
                     onChange={handleBodyChange}
                     mode="ir"
+                    theme={isLight ? 'light' : 'dark'}
                   />
                 </div>
               </>

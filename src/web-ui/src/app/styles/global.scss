@@ -5,6 +5,8 @@
 
 /* ========== Import design tokens ========== */
 @use '../../component-library/styles/tokens.scss' as *;
+@use '../../component-library/styles/flowchat-markdown-table-vars.scss';
+@use '../../component-library/styles/flowchat-markdown-code-vars.scss';
 
 /* ========== Global CSS variables ========== */
 :root {
@@ -137,8 +139,8 @@ blockquote {
   font-style: italic;
 }
 
-/* Divider */
-hr {
+/* Divider (skip m-editor: ProseMirror uses border-top hairline; global height+background stacks visually) */
+hr:not(:is(.m-editor hr)) {
   border: none;
   height: 1px;
   background: var(--border-base);

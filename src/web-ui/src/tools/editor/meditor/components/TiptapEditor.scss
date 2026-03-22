@@ -19,14 +19,15 @@
     font-size: $font-size-sm;
     line-height: $line-height-relaxed;
 
-    > [data-block-id] {
+    /* blockId lives on <hr> itself — do not use paragraph chrome (padding + radius + hover fill) on hr */
+    > [data-block-id]:not(hr) {
       margin-bottom: $size-gap-2;
       padding: $size-gap-2;
       border-radius: $size-radius-base;
       transition: background $motion-base $easing-standard;
 
       &:hover {
-        background: $element-bg-subtle;
+        background: var(--element-bg-subtle, #{$element-bg-subtle});
       }
 
       &.m-editor-tiptap-block-highlighted {
@@ -112,51 +113,216 @@
     }
 
     blockquote {
-      margin: 0;
-      padding-left: $size-gap-3;
-      border-left: 3px solid $border-base;
+      margin: var(--flowchat-md-bq-margin);
+      padding: var(--flowchat-md-bq-padding);
+      font-style: italic;
+      color: var(--flowchat-md-bq-fg);
+      background: var(--flowchat-md-bq-bg);
+      border-left: 3px solid var(--flowchat-md-bq-border);
+      border-radius: var(--flowchat-md-bq-radius);
     }
 
     pre {
-      margin: 0;
-      padding: $size-gap-3;
-      background: $element-bg-subtle;
-      border-radius: $size-radius-base;
+      margin: 0.25rem 0.3rem;
+      padding: var(--flowchat-md-pre-padding);
       overflow-x: auto;
-      font-family: $font-family-mono;
+      font-size: var(--flowchat-md-pre-font-size);
+      line-height: 1.5;
+      font-family: var(--flowchat-md-code-font-mono);
+      color: var(--flowchat-md-pre-code-fg);
+      background: var(--flowchat-md-pre-bg);
+      border: 1px var(--flowchat-md-pre-border-style) var(--flowchat-md-pre-border);
+      border-radius: var(--flowchat-md-pre-radius);
+      box-shadow: var(--flowchat-md-pre-shadow);
+      transition: all 0.3s ease;
+
+      &:hover {
+        border-style: solid;
+        border-color: var(--flowchat-md-pre-hover-border);
+        box-shadow: var(--flowchat-md-pre-hover-shadow);
+      }
     }
 
     code {
-      font-family: $font-family-mono;
+      padding: 0.1em 0.4em;
+      margin: 0 0.05em;
+      font-size: 0.9em;
+      font-weight: 500;
+      line-height: 1.4;
+      vertical-align: baseline;
+      white-space: nowrap;
+      font-family: var(--flowchat-md-code-font-mono);
+      color: var(--flowchat-md-inline-code-fg);
+      background: var(--flowchat-md-inline-code-bg);
+      border: 1px solid var(--flowchat-md-inline-code-border);
+      border-radius: 4px;
+      transition: all 0.15s ease;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+
+      &:hover {
+        background: var(--flowchat-md-inline-code-hover-bg);
+        border-color: var(--flowchat-md-inline-code-hover-border);
+        color: var(--flowchat-md-inline-code-hover-fg);
+      }
+    }
+
+    pre code {
+      display: block;
+      padding: 0;
+      margin: 0;
+      font-size: var(--flowchat-md-pre-font-size);
+      font-weight: inherit;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: inherit;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+
+      &:hover {
+        background: transparent !important;
+        border: none !important;
+        color: inherit !important;
+      }
     }
 
     hr {
-      border: none;
-      border-top: 1px solid $border-base;
-      margin: $size-gap-3 0;
+      display: block;
+      height: 0;
+      margin: $size-gap-4 0;
+      padding: 0;
+      border: 0;
+      border-top: 1px solid var(--border-subtle, #{$border-subtle});
+      background: none;
+      background-color: transparent;
+      overflow: visible;
+      box-shadow: none;
+      border-radius: 0;
+
+      &[data-block-id] {
+        margin-bottom: $size-gap-2;
+      }
+
+      &[data-block-id].m-editor-tiptap-block-highlighted {
+        border-top-color: rgba(255, 193, 7, 0.55);
+      }
     }
 
+    /* Same palette as flow chat `.markdown-renderer .table-wrapper` (see flowchat-markdown-table-vars.scss) */
     table {
       width: 100%;
       border-collapse: collapse;
-      margin: $size-gap-2 0;
+      border-spacing: 0;
+      margin: $size-gap-4 0;
       table-layout: fixed;
+      font-size: 0.85rem;
+      border: 1px solid var(--flowchat-md-table-border);
+      border-radius: var(--flowchat-md-table-radius);
+      background: var(--flowchat-md-table-surface);
+      box-shadow: var(--flowchat-md-table-shadow);
+      overflow: hidden;
     }
 
     th,
     td {
-      border: 1px solid $border-base;
-      padding: $size-gap-2;
+      padding: $size-gap-3 $size-gap-4;
+      border: none;
+      border-bottom: 1px solid var(--flowchat-md-table-cell-border);
       vertical-align: top;
       min-width: 5rem;
       word-break: break-word;
+      overflow-wrap: anywhere;
+      text-align: left;
+      background: transparent;
+      transition: background-color $motion-fast $easing-standard;
     }
 
     th {
-      background: $element-bg-subtle;
-      color: var(--color-text-primary);
       font-weight: $font-weight-semibold;
-      text-align: left;
+      background: var(--flowchat-md-table-th-bg);
+      color: var(--flowchat-md-table-th-fg);
+    }
+
+    td {
+      color: var(--flowchat-md-table-td-fg);
+    }
+
+    th + th,
+    td + td,
+    th + td {
+      border-left: 1px solid var(--flowchat-md-table-col-divider);
+    }
+
+    tbody tr:last-child td,
+    tbody tr:last-child th {
+      border-bottom: none;
+    }
+
+    tbody tr {
+      background: var(--flowchat-md-table-row-base);
+    }
+
+    tbody tr:nth-child(2n) {
+      background: var(--flowchat-md-table-row-stripe);
+    }
+
+    tbody tr:hover {
+      background: var(--flowchat-md-table-hover);
+    }
+
+    thead tr:hover {
+      background: var(--flowchat-md-table-hover);
+    }
+
+    thead tr:hover th,
+    tbody tr:hover th,
+    tbody tr:hover td {
+      background: transparent;
+    }
+
+    tbody tr:first-child th:first-child,
+    thead th:first-child {
+      border-top-left-radius: var(--flowchat-md-table-radius);
+    }
+
+    tbody tr:first-child th:last-child,
+    thead th:last-child {
+      border-top-right-radius: var(--flowchat-md-table-radius);
+    }
+
+    tbody tr:last-child td:first-child,
+    tbody tr:last-child th:first-child {
+      border-bottom-left-radius: var(--flowchat-md-table-radius);
+    }
+
+    tbody tr:last-child td:last-child,
+    tbody tr:last-child th:last-child {
+      border-bottom-right-radius: var(--flowchat-md-table-radius);
+    }
+
+    tbody tr:first-child th:only-child {
+      border-radius: var(--flowchat-md-table-radius) var(--flowchat-md-table-radius) 0 0;
+    }
+
+    tbody tr:last-child td:only-child {
+      border-radius: 0 0 var(--flowchat-md-table-radius) var(--flowchat-md-table-radius);
+    }
+
+    th code,
+    td code {
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      max-width: 100%;
+    }
+
+    th pre code,
+    td pre code {
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-width: 100%;
     }
 
     > ul:not([data-type='taskList']),
@@ -652,11 +818,14 @@
 
   .m-editor-inline-ai-rendered__content.markdown-body blockquote {
     margin: 0 0 6px;
-    padding: 4px 8px;
-    border-left: 2px solid currentColor;
-    border-radius: 0 6px 6px 0;
-    opacity: 0.92;
+    padding: var(--flowchat-md-bq-padding);
+    font-style: italic;
     font-size: $font-size-2xs;
+    color: var(--flowchat-md-bq-fg);
+    background: var(--flowchat-md-bq-bg);
+    border-left: 3px solid var(--flowchat-md-bq-border);
+    border-radius: var(--flowchat-md-bq-radius);
+    opacity: 1;
   }
 
   .m-editor-inline-ai-rendered__content.markdown-body pre {
@@ -664,15 +833,48 @@
     padding: 8px 10px;
     font-size: $font-size-2xs;
     line-height: 1.45;
-    background: color-mix(in srgb, currentColor 8%, transparent);
-    border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
-    border-radius: 8px;
+    font-family: var(--flowchat-md-code-font-mono);
+    color: var(--flowchat-md-pre-code-fg);
+    background: var(--flowchat-md-pre-bg);
+    border: 1px var(--flowchat-md-pre-border-style) var(--flowchat-md-pre-border);
+    border-radius: var(--flowchat-md-pre-radius);
+    box-shadow: var(--flowchat-md-pre-shadow);
     overflow-x: auto;
+    transition: all 0.3s ease;
+
+    &:hover {
+      border-style: solid;
+      border-color: var(--flowchat-md-pre-hover-border);
+      box-shadow: var(--flowchat-md-pre-hover-shadow);
+    }
   }
 
-  .m-editor-inline-ai-rendered__content.markdown-body code {
-    font-family: $font-family-mono;
-    font-size: 0.95em;
+  .m-editor-inline-ai-rendered__content.markdown-body pre code {
+    display: block;
+    padding: 0;
+    margin: 0;
+    font-size: inherit;
+    font-weight: inherit;
+    white-space: pre-wrap;
+    color: inherit;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+  }
+
+  .m-editor-inline-ai-rendered__content.markdown-body :not(pre) > code,
+  .m-editor-inline-ai-rendered__content.markdown-body p code,
+  .m-editor-inline-ai-rendered__content.markdown-body li code,
+  .m-editor-inline-ai-rendered__content.markdown-body td code,
+  .m-editor-inline-ai-rendered__content.markdown-body th code {
+    padding: 0.1em 0.35em;
+    font-size: 0.9em;
+    font-weight: 500;
+    font-family: var(--flowchat-md-code-font-mono);
+    color: var(--flowchat-md-inline-code-fg);
+    background: var(--flowchat-md-inline-code-bg);
+    border: 1px solid var(--flowchat-md-inline-code-border);
+    border-radius: 4px;
   }
 
   .m-editor-inline-ai-rendered__content.markdown-body hr {

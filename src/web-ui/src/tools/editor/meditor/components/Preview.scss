@@ -22,7 +22,8 @@
   
   &-content {
     padding: $size-gap-4;
-    
+    overflow-x: auto;
+
     &.markdown-body {
     }
   }

@@ -12,6 +12,7 @@ import { AlertCircle } from 'lucide-react';
 import { createLogger } from '@/shared/utils/logger';
 import { CubeLoading, Button } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n';
+import { useTheme } from '@/infrastructure/theme/hooks/useTheme';
 import './MarkdownEditor.scss';
 
 const log = createLogger('MarkdownEditor');
@@ -53,6 +54,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   jumpToColumn,
 }) => {
   const { t } = useI18n('tools');
+  const { isLight } = useTheme();
   const [content, setContent] = useState<string>(initialContent);
   const [hasChanges, setHasChanges] = useState(false);
   const [loading, setLoading] = useState(!!filePath);
@@ -291,7 +293,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         onSave={handleSave}
         onDirtyChange={handleDirtyChange}
         mode="ir"
-        theme="dark"
+        theme={isLight ? 'light' : 'dark'}
         height="100%"
         width="100%"
         placeholder={t('editor.markdownEditor.placeholder')}

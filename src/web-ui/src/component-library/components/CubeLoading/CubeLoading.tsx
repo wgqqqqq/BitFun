@@ -29,23 +29,16 @@ export const CubeLoading: React.FC<CubeLoadingProps> = ({
       style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}
     >
       <div
-        className="spiral-container"
+        className="panda-breath-container"
         style={{
           '--uib-size': sizeMap[size],
           '--uib-color': 'currentColor',
           '--uib-speed': '0.9s',
         } as React.CSSProperties}
       >
-        <div className="spiral-inner">
-          <div className="spiral-dot" />
-          <div className="spiral-dot" />
-          <div className="spiral-dot" />
-          <div className="spiral-dot" />
-          <div className="spiral-dot" />
-          <div className="spiral-dot" />
-          <div className="spiral-dot" />
-          <div className="spiral-dot" />
-        </div>
+        <div className="panda-face" />
+        <div className="panda-eye panda-eye--left" />
+        <div className="panda-eye panda-eye--right" />
       </div>
       {text && <div className="cube-loading__text">{text}</div>}
     </div>
