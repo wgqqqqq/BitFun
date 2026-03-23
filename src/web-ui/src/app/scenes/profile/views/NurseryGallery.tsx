@@ -122,7 +122,6 @@ const NurseryGallery: React.FC = () => {
           aria-label={t('nursery.template.title')}
         >
           <div className="nursery-template-card__content">
-            <span className="nursery-template-card__tag">{t('nursery.template.tag')}</span>
             <h3 className="nursery-template-card__title">{t('nursery.template.title')}</h3>
             <p className="nursery-template-card__subtitle">{t('nursery.template.subtitle')}</p>
 
@@ -174,7 +173,7 @@ const NurseryGallery: React.FC = () => {
             <span className="gallery-zone-count">{assistantWorkspacesList.length}</span>
           )}
         >
-          <GalleryGrid minCardWidth={260}>
+          <GalleryGrid minCardWidth={360}>
             {assistantWorkspacesList.map((workspace, i) => (
               <AssistantCard
                 key={workspace.id}

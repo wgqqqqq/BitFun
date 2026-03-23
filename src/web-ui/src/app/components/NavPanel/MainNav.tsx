@@ -471,7 +471,7 @@ const MainNav: React.FC<MainNavProps> = ({
   }, [resolvedAssistantWorkspace, setSelectedAssistantWorkspaceId]);
 
   const handleOpenProModeSession = useCallback(async () => {
-    // 找到项目工作区（非 assistant 类型）
+    // Pick a project workspace (non-assistant)
     const projectWorkspaces = openedWorkspacesList.filter(
       w => w.workspaceKind !== WorkspaceKind.Assistant
     );
@@ -481,7 +481,7 @@ const MainNav: React.FC<MainNavProps> = ({
         ? currentWorkspace
         : projectWorkspaces[0] ?? null;
 
-    // 若当前激活的是 assistant workspace，先切回项目工作区
+    // If assistant workspace is active, switch to a project workspace first
     if (targetWorkspace && currentWorkspace?.id !== targetWorkspace.id) {
       await setActiveWorkspace(targetWorkspace.id).catch(() => {});
     }
@@ -509,7 +509,7 @@ const MainNav: React.FC<MainNavProps> = ({
       }
     }
 
-    // 没有已有会话，显式传入 workspacePath 创建 Code 会话，避免被 assistant workspace 覆盖
+    // No session yet: pass workspacePath so Code session creation is not overridden by assistant workspace
     openScene('session');
     switchLeftPanelTab('sessions');
     await flowChatManager.createChatSession({ workspacePath: workspacePath || undefined }, 'agentic');
@@ -548,20 +548,20 @@ const MainNav: React.FC<MainNavProps> = ({
       }
     }
 
-    // 没有已有会话，新建 Claw 会话
+    // No session yet: create a Claw session
     await handleCreateSession('Claw');
   }, [currentWorkspace, defaultAssistantWorkspace, handleCreateSession, isAssistantWorkspaceActive, openScene, setActiveWorkspace, switchLeftPanelTab]);
 
   const handleToggleNavDisplayMode = useCallback(() => {
-    // 防止动画进行中重复触发
+    // Ignore repeat clicks while the transition runs
     if (modeSwitchTimerRef.current !== null) return;
 
     setIsModeSwitching(true);
 
-    // 点击时同步计算目标模式，避免 timeout 闭包中读取到过期值
+    // Resolve target mode synchronously on click so timeouts do not close over a stale value
     const nextMode: NavDisplayMode = navDisplayMode === 'pro' ? 'assistant' : 'pro';
 
-    // 200ms（clip-path 收缩到最小圆点）：只切换 nav 显示状态，不触发任何场景/会话操作
+    // 200ms (clip-path at smallest dot): only flip nav display; no scene/session changes yet
     if (modeSwitchSwapTimerRef.current !== null) {
       window.clearTimeout(modeSwitchSwapTimerRef.current);
     }
@@ -571,7 +571,7 @@ const MainNav: React.FC<MainNavProps> = ({
       modeSwitchSwapTimerRef.current = null;
     }, 200);
 
-    // 480ms（动画完全结束）：再切场景和会话，避免 tab 文字在动画期间闪动
+    // 480ms (animation finished): then switch scene/session so tab labels do not flicker mid-animation
     modeSwitchTimerRef.current = window.setTimeout(() => {
       setIsModeSwitching(false);
       modeSwitchTimerRef.current = null;

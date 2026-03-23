@@ -102,7 +102,7 @@
 
     &.is-active {
       color: var(--color-text-primary);
-      background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+      background: var(--element-bg-soft);
       font-weight: 500;
 
       &::before {
@@ -172,8 +172,8 @@
 
   // ── Category group ─────────────────────────────────────
 
-  &__category {
-    margin-bottom: $size-gap-1;
+  &__category:not(:last-child) {
+    margin-bottom: $size-gap-6;
   }
 
   &__category-header {
@@ -231,7 +231,7 @@
 
     &.is-active {
       color: var(--color-text-primary);
-      background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+      background: var(--element-bg-soft);
       font-weight: 500;
 
       &::before {

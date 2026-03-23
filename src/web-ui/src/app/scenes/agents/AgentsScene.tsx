@@ -1,13 +1,11 @@
 import React, { useCallback, useMemo } from 'react';
 import {
-  ArrowLeft,
   Bot,
   Cpu,
   Plus,
   Puzzle,
   RefreshCw,
   Search as SearchIcon,
-  Users,
   Wrench,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -23,67 +21,25 @@ import {
 } from '@/app/components';
 import AgentCard from './components/AgentCard';
 import CoreAgentCard, { type CoreAgentMeta } from './components/CoreAgentCard';
-import AgentTeamCard from './components/AgentTeamCard';
-import AgentTeamTabBar from './components/AgentTeamTabBar';
-import AgentGallery from './components/AgentGallery';
-import AgentTeamComposer from './components/AgentTeamComposer';
-import CapabilityBar from './components/CapabilityBar';
 import CreateAgentPage from './components/CreateAgentPage';
 import {
-  CAPABILITY_CATEGORIES,
-  MOCK_AGENT_TEAMS,
-  computeAgentTeamCapabilities,
   type AgentWithCapabilities,
   useAgentsStore,
 } from './agentsStore';
 import { useAgentsList } from './hooks/useAgentsList';
-import { AGENT_ICON_MAP, CAPABILITY_ACCENT, AGENT_TEAM_ICON_MAP, getAgentTeamAccent } from './agentsIcons';
+import { AGENT_ICON_MAP, CAPABILITY_ACCENT } from './agentsIcons';
 import { getCardGradient } from '@/shared/utils/cardGradients';
 import { getAgentBadge } from './utils';
 import './AgentsView.scss';
 import './AgentsScene.scss';
 
-const EXAMPLE_TEAM_IDS = new Set(MOCK_AGENT_TEAMS.map((team) => team.id));
-
 const HIDDEN_AGENT_IDS = new Set(['Claw']);
 
 const CORE_AGENT_IDS = new Set(['agentic', 'Cowork']);
 
-const AgentTeamEditorView: React.FC = () => {
-  const { t } = useTranslation('scenes/agents');
-  const { openHome } = useAgentsStore();
-
-  return (
-    <div className="tv tv--editor">
-      <div className="tv__editor-bar">
-        <button className="tv__back-btn" onClick={openHome}>
-          <ArrowLeft size={14} />
-          <span>{t('home.backToOverview')}</span>
-        </button>
-      </div>
-
-      <AgentTeamTabBar />
-
-      <div className="tv__body">
-        <aside className="tv__gallery">
-          <div className="tv__panel-label">{t('gallery.title')}</div>
-          <AgentGallery />
-        </aside>
-
-        <main className="tv__composer">
-          <AgentTeamComposer />
-        </main>
-      </div>
-
-      <CapabilityBar />
-    </div>
-  );
-};
-
 const AgentsHomeView: React.FC = () => {
   const { t } = useTranslation('scenes/agents');
   const {
-    agentTeams,
     agentSoloEnabled,
     searchQuery,
     agentFilterLevel,
@@ -92,12 +48,9 @@ const AgentsHomeView: React.FC = () => {
     setAgentFilterLevel,
     setAgentFilterType,
     setAgentSoloEnabled,
-    openAgentTeamEditor,
     openCreateAgent,
-    addAgentTeam,
   } = useAgentsStore();
   const [selectedAgentId, setSelectedAgentId] = React.useState<string | null>(null);
-  const [selectedTeamId, setSelectedTeamId] = React.useState<string | null>(null);
   const [toolsEditing, setToolsEditing] = React.useState(false);
   const [skillsEditing, setSkillsEditing] = React.useState(false);
   const [pendingTools, setPendingTools] = React.useState<string[] | null>(null);
@@ -137,31 +90,12 @@ const AgentsHomeView: React.FC = () => {
     },
   }), [t]);
 
-  const filteredTeams = useMemo(() => agentTeams.filter((team) => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return team.name.toLowerCase().includes(query) || team.description.toLowerCase().includes(query);
-  }), [agentTeams, searchQuery]);
-
   const coreAgents = useMemo(() => allAgents.filter((agent) => CORE_AGENT_IDS.has(agent.id)), [allAgents]);
 
   const visibleAgents = useMemo(
     () => filteredAgents.filter((agent) => !HIDDEN_AGENT_IDS.has(agent.id) && !CORE_AGENT_IDS.has(agent.id)),
     [filteredAgents],
   );
-
-  const handleCreateTeam = useCallback(() => {
-    const id = `agent-team-${Date.now()}`;
-    addAgentTeam({
-      id,
-      name: t('teamsZone.newTeamName'),
-      icon: 'users',
-      description: '',
-      strategy: 'collaborative',
-      shareContext: true,
-    });
-    openAgentTeamEditor(id);
-  }, [addAgentTeam, openAgentTeamEditor, t]);
 
   const scrollToZone = useCallback((targetId: string) => {
     document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -195,27 +129,6 @@ const AgentsHomeView: React.FC = () => {
     : (selectedAgent?.defaultTools ?? []);
   const selectedAgentSkills = selectedAgentModeConfig?.available_skills ?? [];
   const selectedAgentSkillItems = availableSkills.filter((skill) => selectedAgentSkills.includes(skill.name));
-  const selectedTeam = useMemo(
-    () => agentTeams.find((team) => team.id === selectedTeamId) ?? null,
-    [agentTeams, selectedTeamId],
-  );
-  const selectedAgentTeamMembers = useMemo(
-    () => selectedTeam
-      ? selectedTeam.members
-        .map((member) => allAgents.find((agent) => agent.id === member.agentId))
-        .filter((agent): agent is AgentWithCapabilities => Boolean(agent))
-      : [],
-    [allAgents, selectedTeam],
-  );
-  const selectedTeamTopCaps = useMemo(() => {
-    if (!selectedTeam) return [];
-    const caps = computeAgentTeamCapabilities(selectedTeam, allAgents);
-    return CAPABILITY_CATEGORIES
-      .filter((category) => caps[category] > 0)
-      .sort((a, b) => caps[b] - caps[a])
-      .slice(0, 3);
-  }, [allAgents, selectedTeam]);
-
   const resetEditState = useCallback(() => {
     setToolsEditing(false);
     setSkillsEditing(false);
@@ -226,7 +139,6 @@ const AgentsHomeView: React.FC = () => {
   }, []);
 
   const openAgentDetails = useCallback((agent: AgentWithCapabilities) => {
-    setSelectedTeamId(null);
     setSelectedAgentId(agent.id);
     resetEditState();
   }, [resetEditState]);
@@ -234,12 +146,6 @@ const AgentsHomeView: React.FC = () => {
   const closeAgentDetails = useCallback(() => {
     setSelectedAgentId(null);
     resetEditState();
-  }, [resetEditState]);
-
-  const openTeamDetails = useCallback((teamId: string) => {
-    setSelectedAgentId(null);
-    resetEditState();
-    setSelectedTeamId(teamId);
   }, [resetEditState]);
 
   return (
@@ -262,13 +168,6 @@ const AgentsHomeView: React.FC = () => {
               onClick={() => scrollToZone('agents-zone')}
             >
               {t('nav.agents')}
-            </button>
-            <button
-              type="button"
-              className="gallery-anchor-btn"
-              onClick={() => scrollToZone('agent-teams-zone')}
-            >
-              {t('nav.teams')}
             </button>
           </div>
         )}
@@ -422,55 +321,6 @@ const AgentsHomeView: React.FC = () => {
               ))}
             </GalleryGrid>
           ) : null}
-        </GalleryZone>
-
-        <GalleryZone
-          id="agent-teams-zone"
-          title={t('teamsZone.title')}
-          subtitle={t('teamsZone.subtitle')}
-          tools={(
-            <>
-              <button
-                type="button"
-                className="gallery-action-btn gallery-action-btn--primary"
-                onClick={handleCreateTeam}
-              >
-                <Users size={15} />
-                <span>{t('teamsZone.create')}</span>
-              </button>
-              <span className="gallery-zone-count">{filteredTeams.length}</span>
-            </>
-          )}
-        >
-          {filteredTeams.length === 0 ? (
-            <GalleryEmpty
-              icon={<Users size={32} strokeWidth={1.5} />}
-              message={agentTeams.length === 0 ? t('teamsZone.empty.noTeams') : t('teamsZone.empty.noMatch')}
-            />
-          ) : (
-            <GalleryGrid minCardWidth={360}>
-              {filteredTeams.map((team, index) => {
-                const caps = computeAgentTeamCapabilities(team, allAgents);
-                const topCaps = CAPABILITY_CATEGORIES
-                  .filter((category) => caps[category] > 0)
-                  .sort((a, b) => caps[b] - caps[a])
-                  .slice(0, 3);
-
-                return (
-                  <AgentTeamCard
-                    key={team.id}
-                    team={team}
-                    allAgents={allAgents}
-                    index={index}
-                    isExample={EXAMPLE_TEAM_IDS.has(team.id)}
-                    onEdit={openAgentTeamEditor}
-                    onOpenDetails={(currentTeam) => openTeamDetails(currentTeam.id)}
-                    topCapabilities={topCaps}
-                  />
-                );
-              })}
-            </GalleryGrid>
-          )}
         </GalleryZone>
       </div>
 
@@ -780,106 +630,12 @@ const AgentsHomeView: React.FC = () => {
           </>
         ) : null}
       </GalleryDetailModal>
-
-      <GalleryDetailModal
-        isOpen={Boolean(selectedTeam)}
-        onClose={() => setSelectedTeamId(null)}
-        icon={selectedTeam ? React.createElement(
-          AGENT_TEAM_ICON_MAP[(selectedTeam.icon ?? 'users') as keyof typeof AGENT_TEAM_ICON_MAP] ?? Users,
-          { size: 24, strokeWidth: 1.7 },
-        ) : <Users size={24} />}
-        iconGradient={selectedTeam ? `linear-gradient(135deg, ${getAgentTeamAccent(selectedTeam.id)}33 0%, ${getAgentTeamAccent(selectedTeam.id)}14 100%)` : undefined}
-        title={selectedTeam?.name ?? ''}
-        badges={selectedTeam ? (
-          <>
-            {EXAMPLE_TEAM_IDS.has(selectedTeam.id) ? <Badge variant="neutral">{t('teamCard.badges.example')}</Badge> : null}
-            <Badge variant="neutral">
-              {selectedTeam.strategy === 'collaborative'
-                ? t('composer.strategy.collaborative')
-                : selectedTeam.strategy === 'sequential'
-                  ? t('composer.strategy.sequential')
-                  : t('composer.strategy.free')}
-            </Badge>
-            {selectedTeam.shareContext ? (
-              <Badge variant="success">{t('teamCard.badges.sharedContext')}</Badge>
-            ) : null}
-          </>
-        ) : null}
-        description={selectedTeam?.description}
-        meta={selectedTeam ? <span>{t('home.members', { count: selectedTeam.members.length })}</span> : null}
-        actions={selectedTeam ? (
-          <Button
-            variant="primary"
-            size="small"
-            onClick={() => {
-              setSelectedTeamId(null);
-              openAgentTeamEditor(selectedTeam.id);
-            }}
-          >
-            {t('home.edit')}
-          </Button>
-        ) : null}
-      >
-        {selectedAgentTeamMembers.length > 0 ? (
-          <div className="agent-team-card__section">
-            <div className="agent-team-card__section-title">{t('teamCard.sections.members')}</div>
-            <div className="agent-team-card__member-list">
-              {selectedAgentTeamMembers.map((agent) => {
-                const member = selectedTeam?.members.find((item) => item.agentId === agent.id);
-                const roleLabel =
-                  member?.role === 'leader'
-                    ? t('composer.role.leader')
-                    : member?.role === 'reviewer'
-                      ? t('composer.role.reviewer')
-                      : t('composer.role.member');
-                const AgentIcon = AGENT_ICON_MAP[(agent.iconKey ?? 'bot') as keyof typeof AGENT_ICON_MAP] ?? Bot;
-
-                return (
-                  <span key={agent.id} className="agent-team-card__member-chip">
-                    <AgentIcon size={11} />
-                    <span className="agent-team-card__member-name">{agent.name}</span>
-                    <span className="agent-team-card__member-role">{roleLabel}</span>
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-
-        {selectedTeamTopCaps.length > 0 ? (
-          <div className="agent-team-card__section">
-            <div className="agent-team-card__section-title">{t('teamCard.sections.capabilities')}</div>
-            <div className="agent-team-card__cap-chips">
-              {selectedTeamTopCaps.map((cap) => (
-                <span
-                  key={cap}
-                  className="agent-team-card__cap-chip"
-                  style={{
-                    color: CAPABILITY_ACCENT[cap],
-                    borderColor: `${CAPABILITY_ACCENT[cap]}44`,
-                  }}
-                >
-                  {cap}
-                </span>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </GalleryDetailModal>
     </GalleryLayout>
   );
 };
 
 const AgentsScene: React.FC = () => {
   const { page } = useAgentsStore();
-
-  if (page === 'editor') {
-    return (
-      <div className="bitfun-agents-scene">
-        <AgentTeamEditorView />
-      </div>
-    );
-  }
 
   if (page === 'createAgent') {
     return (

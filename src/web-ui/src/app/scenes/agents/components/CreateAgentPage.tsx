@@ -86,7 +86,7 @@ const CreateAgentPage: React.FC = () => {
 
   return (
     <div className="tv">
-      {/* 顶部导航栏 */}
+      {/* Top bar */}
       <div className="tv__editor-bar">
         <button className="tv__back-btn" onClick={openHome}>
           <ArrowLeft size={14} />
@@ -94,7 +94,7 @@ const CreateAgentPage: React.FC = () => {
         </button>
       </div>
 
-      {/* 页面内容 */}
+      {/* Page body */}
       <div className="th__list-body">
         <div className="th__list-inner">
           <div className="th-create-page__head">
@@ -103,7 +103,7 @@ const CreateAgentPage: React.FC = () => {
           </div>
 
           <div className="th-create-page__form">
-            {/* 名称 */}
+            {/* Name */}
             <div className="th-create-panel__field">
               <label className="th-create-panel__label">{t('agentsOverview.form.name', '名称')}</label>
               <Input
@@ -117,7 +117,7 @@ const CreateAgentPage: React.FC = () => {
               {nameError && <span className="th-create-panel__error">{nameError}</span>}
             </div>
 
-            {/* 描述 */}
+            {/* Description */}
             <div className="th-create-panel__field">
               <label className="th-create-panel__label">{t('agentsOverview.form.description', '描述')}</label>
               <Input
@@ -128,7 +128,7 @@ const CreateAgentPage: React.FC = () => {
               />
             </div>
 
-            {/* 级别 + 只读模式 同行 */}
+            {/* Level + read-only on one row */}
             <div className="th-create-panel__field th-create-panel__field--row">
               <div className="th-create-panel__level-group">
                 {(['user', 'project'] as SubagentLevel[]).map((lv) => {
@@ -153,7 +153,7 @@ const CreateAgentPage: React.FC = () => {
               </div>
             </div>
 
-            {/* 工具 */}
+            {/* Tools */}
             {toolNames.length > 0 && (
               <div className="th-create-panel__field">
                 <label className="th-create-panel__label">
@@ -177,7 +177,7 @@ const CreateAgentPage: React.FC = () => {
               </div>
             )}
 
-            {/* 系统提示词 */}
+            {/* System prompt */}
             <div className="th-create-panel__field">
               <label className="th-create-panel__label">{t('agentsOverview.form.prompt', '系统提示词')}</label>
               <Textarea
@@ -188,7 +188,7 @@ const CreateAgentPage: React.FC = () => {
               />
             </div>
 
-            {/* 操作按钮 */}
+            {/* Actions */}
             <div className="th-create-page__actions">
               <Button variant="secondary" size="small" onClick={openHome} disabled={submitting}>
                 {t('agentsOverview.form.cancel', '取消')}

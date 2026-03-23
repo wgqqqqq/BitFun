@@ -76,7 +76,7 @@ $ins-label:   12px;
 // ============================================================
 
 .insights-scene:not(.insights-scene--report) {
-  max-width: 680px;
+  max-width: 840px;
   margin: 0 auto;
   width: 100%;
 }
@@ -110,32 +110,30 @@ $ins-label:   12px;
 .insights-scene__header-actions {
   display: flex;
   align-items: center;
-  gap: $ins-sm;
+  gap: $size-gap-3;
   flex-wrap: wrap;
 }
 
-// Day selector
-.insights-scene__day-selector {
+// Day range — same row layout as Agents zone tools (`bitfun-agents-scene__agent-filters`)
+.insights-scene__day-filters {
   display: flex;
-  background: $ins-surface;
-  border-radius: $ins-r-sm;
-  padding: 2px;
-  gap: 2px;
+  align-items: center;
+  gap: $size-gap-3;
+  flex-wrap: wrap;
 }
 
-.insights-scene__day-btn {
-  padding: 3px 10px;
-  border: none;
-  background: transparent;
-  color: var(--color-text-muted);
-  font-size: $ins-small;
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: 3px;
-  transition: background 0.12s, color 0.12s;
+.insights-scene__day-filter-group {
+  display: flex;
+  align-items: center;
+  gap: $size-gap-2;
+  flex-wrap: wrap;
+}
 
-  &:hover { background: $ins-surface-hover; color: var(--color-text-primary); }
-  &.is-active { background: $ins-blue-bg; color: $ins-blue; font-weight: 600; }
+.insights-scene__day-filter-label {
+  font-size: 11px;
+  font-weight: $font-weight-medium;
+  color: var(--color-text-muted);
+  white-space: nowrap;
 }
 
 // Shared button base
@@ -475,7 +473,7 @@ $ins-label:   12px;
 }
 
 .insights-report-body-inner {
-  max-width: 680px;
+  max-width: 840px;
   margin: 0 auto;
   // Bottom space must live on the inner wrapper so scroll height includes it
   // (flex-stretched body alone can make bottom padding feel “eaten”).

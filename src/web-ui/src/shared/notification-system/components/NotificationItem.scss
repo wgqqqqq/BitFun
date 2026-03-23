@@ -40,10 +40,9 @@
   }
 
   &--info {
-    
     .notification-item__icon {
-      color: var(--color-info);
-      background: var(--color-info-bg);
+      color: #ca8a04;
+      background: rgba(234, 179, 8, 0.18);
     }
   }
 

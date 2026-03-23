@@ -88,7 +88,7 @@
     },
     "tooltips": {
       "persona": "Nursery — create and manage all assistant instances",
-      "agents": "Which Agents and Agent Teams it can call",
+      "agents": "Which agents it can call",
       "skills": "What it knows — specialized knowledge files",
       "tools": "What it can use — built-in tools & MCP services"
     },
@@ -302,8 +302,7 @@
     "agents": {
       "allAgents": "All Agents",
       "newAgent": "New Agent",
-      "agentsOverview": "Agents",
-      "expertTeams": "Expert Teams"
+      "agentsOverview": "Agents"
     },
     "skills": {
       "allSkills": "All Skills",
@@ -778,7 +777,7 @@
     "quickStart": "Start",
     "heroBadge": "BitFun Workspace",
     "heroTitle": "A real workspace, not just a chat box",
-    "heroDescription": "An AI assistant with personality, memory, and real execution power. Sessions, agent teams, and mini apps all work around the same workflow, so AI is doing work, not just replying.",
+    "heroDescription": "An AI assistant with personality, memory, and real execution power. Sessions and mini apps all work around the same workflow, so AI is doing work, not just replying.",
     "newCodeSession": "New Code Session",
     "newCodeSessionDesc": "Start coding, debug issues, or open a project and jump straight into building",
     "newCoworkSession": "New Cowork Session",
@@ -837,6 +836,7 @@
     "generating": "Generating insights...",
     "generateNew": "Generate New Report",
     "generateBtn": "Generate",
+    "rangeLabel": "Range",
     "history": "Report History",
     "noReports": "No reports yet. Generate your first insights report above.",
     "backToList": "Back to list",

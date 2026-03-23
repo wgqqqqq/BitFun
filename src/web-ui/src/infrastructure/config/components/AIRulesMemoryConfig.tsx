@@ -299,7 +299,7 @@ function RulesPanel() {
   const levelForScope: Record<ScopeTab, RuleLevel> = { user: RuleLevel.User, project: RuleLevel.Project };
   const currentLevel = levelForScope[scopeTab];
   const addButton = (
-    <IconButton variant="primary" size="small" onClick={() => handleAdd(currentLevel)} tooltip={t('toolbar.addTooltip')}>
+    <IconButton variant="ghost" size="small" onClick={() => handleAdd(currentLevel)} tooltip={t('toolbar.addTooltip')}>
       <Plus size={16} />
     </IconButton>
   );
@@ -462,7 +462,7 @@ function MemoryPanel() {
   );
 
   const addButtonUser = (
-    <IconButton variant="primary" size="small" onClick={handleAdd} tooltip={t('toolbar.addTooltip')}>
+    <IconButton variant="ghost" size="small" onClick={handleAdd} tooltip={t('toolbar.addTooltip')}>
       <Plus size={16} />
     </IconButton>
   );

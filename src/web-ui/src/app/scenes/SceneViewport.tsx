@@ -42,28 +42,32 @@ const SceneViewport: React.FC<SceneViewportProps> = ({ workspacePath, isEntering
   // All tabs closed — show empty state
   if (openTabs.length === 0) {
     return (
-      <div className="bitfun-scene-viewport bitfun-scene-viewport--empty">
-        <p className="bitfun-scene-viewport__empty-hint">{t('welcomeScene.emptyHint')}</p>
+      <div className="bitfun-scene-viewport">
+        <div className="bitfun-scene-viewport__clip bitfun-scene-viewport__clip--empty">
+          <p className="bitfun-scene-viewport__empty-hint">{t('welcomeScene.emptyHint')}</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="bitfun-scene-viewport">
-      <Suspense fallback={null}>
-        {openTabs.map(tab => (
-          <div
-            key={tab.id}
-            className={[
-              'bitfun-scene-viewport__scene',
-              tab.id === activeTabId && 'bitfun-scene-viewport__scene--active',
-            ].filter(Boolean).join(' ')}
-            aria-hidden={tab.id !== activeTabId}
-          >
-            {renderScene(tab.id, workspacePath, isEntering)}
-          </div>
-        ))}
-      </Suspense>
+      <div className="bitfun-scene-viewport__clip">
+        <Suspense fallback={null}>
+          {openTabs.map(tab => (
+            <div
+              key={tab.id}
+              className={[
+                'bitfun-scene-viewport__scene',
+                tab.id === activeTabId && 'bitfun-scene-viewport__scene--active',
+              ].filter(Boolean).join(' ')}
+              aria-hidden={tab.id !== activeTabId}
+            >
+              {renderScene(tab.id, workspacePath, isEntering)}
+            </div>
+          ))}
+        </Suspense>
+      </div>
     </div>
   );
 };

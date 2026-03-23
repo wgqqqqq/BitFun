@@ -1678,7 +1678,7 @@ const AIModelConfig: React.FC = () => {
           description={t('subtitle')}
           extra={(
             <IconButton
-              variant="primary"
+              variant="ghost"
               size="small"
               onClick={handleCreateNew}
               tooltip={t('actions.addProvider')}

@@ -9,18 +9,16 @@
   "loading": "Loading…",
   "page": {
     "title": "Agents",
-    "subtitle": "View agents and agent teams, then jump into the editor to configure multi-agent collaboration.",
-    "searchPlaceholder": "Search agents, agent teams, names, or descriptions…",
+    "subtitle": "Review and manage core modes, agents, and sub-agents, including tools and skills.",
+    "searchPlaceholder": "Search agents by name or description…",
     "newAgent": "New Agent",
     "refresh": "Refresh"
   },
   "nav": {
     "coreAgents": "Core Agents",
-    "agents": "Agent",
-    "teams": "Agent Team"
+    "agents": "Agent"
   },
   "filters": {
-    "all": "All",
     "source": "Source",
     "kind": "Type",
     "builtin": "Built-in",
@@ -28,95 +26,6 @@
     "project": "Project",
     "mode": "Agent",
     "subagent": "Sub-Agent"
-  },
-  "gallery": {
-    "title": "Agent Gallery",
-    "search": "Search agents...",
-    "filter": {
-      "joined": "Joined",
-      "all": "All"
-    },
-    "empty": "No matching agents",
-    "footer": "{{shown}} / {{total}} · {{enabled}} enabled",
-    "removeFromTeam": "Remove from team",
-    "addToTeam": "Add to team",
-    "joinedTeam": "Already in team",
-    "addCurrentTeam": "Add to current team",
-    "toolCount": "{{count}} tools",
-    "modelLabel": "Model"
-  },
-  "composer": {
-    "emptyTeam": "Select or create an agent team",
-    "emptyMembers": "No members yet. Add them from the gallery on the left.",
-    "memberCount": "{{count}} members",
-    "viewMode": {
-      "formation": "Formation",
-      "list": "List"
-    },
-    "role": {
-      "leader": "Leader",
-      "member": "Member",
-      "reviewer": "Reviewer"
-    },
-    "strategy": {
-      "collaborative": "Collaborative",
-      "sequential": "Sequential",
-      "free": "Free"
-    },
-    "columns": {
-      "agent": "Agent",
-      "role": "Role",
-      "tools": "Tools",
-      "model": "Model"
-    },
-    "remove": "Remove",
-    "rename": "Click to rename"
-  },
-  "formation": {
-    "empty": "Select agents from the left panel",
-    "emptySub": "Click the + button on an agent card"
-  },
-  "capability": {
-    "warning": "Missing capabilities: {{cats}}",
-    "coverage": "Coverage",
-    "none": "None"
-  },
-  "onboard": {
-    "title": "Build Your AI Team",
-    "subtitle": "Combine agents with different capabilities into specialized task teams",
-    "useTemplate": "Start with a template",
-    "blank": "Or create from scratch"
-  },
-  "tabbar": {
-    "newTeam": "New Agent Team",
-    "fromTemplate": "From Template",
-    "templateTitle": "Choose Template",
-    "blankCreate": "Blank",
-    "cancel": "Cancel",
-    "create": "Create",
-    "form": {
-      "namePlaceholder": "Agent Team name",
-      "descriptionPlaceholder": "Description (optional)"
-    }
-  },
-  "home": {
-    "filterAll": "All",
-    "filterAgent": "Solo Agents",
-    "filterTeam": "Teams",
-    "search": "Search by name or description...",
-    "solo": "Solo",
-    "team": "Team",
-    "enabled": "Enabled",
-    "disabled": "Disabled",
-    "members": "{{count}} members",
-    "edit": "Edit",
-    "createTeam": "Create Agent Team",
-    "quickCreate": "Quick Create",
-    "globalCap": "Global Capabilities",
-    "backToOverview": "Back to Overview",
-    "strategyCollab": "Collaborative",
-    "strategySeq": "Sequential",
-    "strategyFree": "Free"
   },
   "coreAgentsZone": {
     "title": "Core Agents",
@@ -136,16 +45,6 @@
       "noMatch": "No matching agents"
     }
   },
-  "teamsZone": {
-    "title": "Agent Teams",
-    "subtitle": "Review agent team setups, capability coverage, and member structure, then jump into the editor.",
-    "create": "Create Agent Team",
-    "newTeamName": "New Agent Team",
-    "empty": {
-      "noTeams": "No teams have been created yet",
-      "noMatch": "No matching teams"
-    }
-  },
   "agentCard": {
     "badges": {
       "agent": "Agent",
@@ -162,28 +61,9 @@
       "skills": "{{count}} skills"
     }
   },
-  "teamCard": {
-    "badges": {
-      "example": "Example",
-      "sharedContext": "Shared context"
-    },
-    "actions": {
-      "expand": "Expand details"
-    },
-    "sections": {
-      "members": "Members",
-      "capabilities": "Capabilities"
-    }
-  },
   "agentsOverview": {
-    "title": "Agents Overview",
-    "subtitle": "All sub-agents",
-    "sectionTitle": "Agents",
-    "filterAll": "All",
-    "filterBuiltin": "Built-in",
     "filterUser": "User",
     "filterProject": "Project",
-    "newAgent": "New Agent",
     "backToOverview": "Back to Overview",
     "tools": "Tools",
     "toolsReset": "Reset default",
@@ -220,10 +100,5 @@
       "createSuccess": "Created agent \"{{name}}\"",
       "createFailed": "Create failed: "
     }
-  },
-  "expertTeams": {
-    "title": "Agent Teams",
-    "subtitle": "Team list and edit",
-    "sectionTitle": "Agent Teams"
   }
 }

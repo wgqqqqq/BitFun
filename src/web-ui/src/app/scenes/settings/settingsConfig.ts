@@ -138,7 +138,7 @@ export const SETTINGS_CATEGORIES: ConfigCategoryDef[] = [
   },
 ];
 
-export const DEFAULT_SETTINGS_TAB: ConfigTab = 'models';
+export const DEFAULT_SETTINGS_TAB: ConfigTab = 'basics';
 
 const KNOWN_TABS: ConfigTab[] = SETTINGS_CATEGORIES.flatMap((c) => c.tabs.map((t) => t.id));
 

@@ -113,7 +113,7 @@
 
     &.is-active {
       color: var(--color-text-primary);
-      background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+      background: var(--element-bg-soft);
       font-weight: 500;
 
       &::before {

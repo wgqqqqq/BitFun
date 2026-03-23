@@ -235,8 +235,8 @@
     }
 
     &--info {
-      background: var(--color-info-bg);
-      color: var(--color-info);
+      background: rgba(234, 179, 8, 0.18);
+      color: #ca8a04;
     }
 
     
@@ -256,8 +256,8 @@
     }
 
     &--active {
-      background: var(--color-info-bg);
-      color: var(--color-info);
+      background: rgba(234, 179, 8, 0.18);
+      color: #ca8a04;
     }
   }
 
@@ -290,7 +290,7 @@
   &__item-percentage {
     font-size: 11px;
     font-weight: $font-weight-semibold;
-    color: var(--color-info);
+    color: #ca8a04;
     font-variant-numeric: tabular-nums;
     font-family: $font-family-mono;
     flex-shrink: 0;

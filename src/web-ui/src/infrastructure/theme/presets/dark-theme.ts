@@ -86,12 +86,12 @@ export const bitfunDarkTheme: ThemeConfig = {
     },
     
     element: {
-      subtle: 'rgba(255, 255, 255, 0.06)',
-      soft: 'rgba(255, 255, 255, 0.10)',
-      base: 'rgba(255, 255, 255, 0.13)',
-      medium: 'rgba(255, 255, 255, 0.17)',
-      strong: 'rgba(255, 255, 255, 0.21)',
-      elevated: 'rgba(255, 255, 255, 0.25)',
+      subtle: 'rgba(255, 255, 255, 0.05)',
+      soft: 'rgba(255, 255, 255, 0.07)',
+      base: 'rgba(255, 255, 255, 0.095)',
+      medium: 'rgba(255, 255, 255, 0.125)',
+      strong: 'rgba(255, 255, 255, 0.155)',
+      elevated: 'rgba(255, 255, 255, 0.19)',
     },
     
     git: {

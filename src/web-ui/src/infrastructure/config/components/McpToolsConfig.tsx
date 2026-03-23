@@ -511,7 +511,7 @@ const McpToolsConfig: React.FC = () => {
   const mcpSectionExtra = (
     <>
       <IconButton
-        variant={showJsonEditor ? 'ghost' : 'primary'}
+        variant="ghost"
         size="small"
         onClick={() => setShowJsonEditor(!showJsonEditor)}
         tooltip={showJsonEditor ? tMcp('actions.backToList') : tMcp('actions.jsonConfig')}

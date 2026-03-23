@@ -3,24 +3,34 @@ import React, {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  ArrowLeft, RefreshCw, Zap, Star, Wrench, Puzzle, ListChecks, Smile, Radar,
+  ArrowLeft,
+  ChevronDown,
+  Cpu,
+  FileText,
+  Info,
+  Plug2,
+  RefreshCw,
+  Wrench,
+  X,
 } from 'lucide-react';
 import {
   ConfirmDialog, Input, Select, Switch, type SelectOption,
 } from '@/component-library';
-import { Tabs, TabPane } from '@/component-library';
+import { GalleryPageHeader, GalleryZone } from '@/app/components';
+import '@/app/components/GalleryLayout/GalleryLayout.scss';
 import { AIRulesAPI, RuleLevel, type AIRule } from '@/infrastructure/api/service-api/AIRulesAPI';
 import { getAllMemories, type AIMemory } from '@/infrastructure/api/aiMemoryApi';
 import { configAPI } from '@/infrastructure/api/service-api/ConfigAPI';
 import { configManager } from '@/infrastructure/config/services/ConfigManager';
 import type { AIModelConfig, ModeConfigItem, SkillInfo } from '@/infrastructure/config/types';
+import { MCPAPI, type MCPServerInfo } from '@/infrastructure/api/service-api/MCPAPI';
 import { notificationService } from '@/shared/notification-system';
 import { createLogger } from '@/shared/utils/logger';
 import { useWorkspaceContext } from '@/infrastructure/contexts/WorkspaceContext';
 import { useAgentIdentityDocument } from '@/app/scenes/my-agent/useAgentIdentityDocument';
-import { MEditor } from '@/tools/editor/meditor';
+import { workspaceAPI } from '@/infrastructure/api/service-api/WorkspaceAPI';
 import { useTheme } from '@/infrastructure/theme/hooks/useTheme';
-import { PersonaRadar } from './PersonaRadar';
+import { MEditor } from '@/tools/editor/meditor';
 import { useNurseryStore } from '../nurseryStore';
 import { useTokenEstimate, formatTokenCount } from './useTokenEstimate';
 
@@ -28,37 +38,64 @@ const log = createLogger('AssistantConfigPage');
 
 interface ToolInfo { name: string; description: string; is_readonly: boolean; }
 
+const PERSONA_DOC_FILES = ['IDENTITY.md', 'SOUL.md', 'USER.md'] as const;
+type PersonaDocFile = typeof PERSONA_DOC_FILES[number];
+
+type AssistantDetail =
+  | { type: 'tool'; tool: ToolInfo; isMcp: boolean }
+  | { type: 'mcpServer'; serverId: string }
+  | { type: 'skill'; skill: SkillInfo }
+  | { type: 'personaDoc'; fileName: PersonaDocFile };
+
+function personaDocFullPath(workspaceRoot: string, fileName: PersonaDocFile): string {
+  const root = workspaceRoot.replace(/\\/g, '/').replace(/\/+$/, '');
+  return `${root}/${fileName}`;
+}
+
+function isFileMissingError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /does not exist|no such file|not found/i.test(message);
+}
+
 const MODEL_SLOTS = ['primary', 'fast'] as const;
 type ModelSlot = typeof MODEL_SLOTS[number];
 
 const DEFAULT_AGENT_NAME = 'BitFun Agent';
 
-// ── Radar dim computation (same formula as original PersonaView L894-902) ──────
-function computeRadarDims(
-  rules: AIRule[],
-  memories: AIMemory[],
-  agenticConfig: ModeConfigItem | null,
-  skills: SkillInfo[],
-  t: (k: string) => string,
-) {
-  const skillEn  = skills.filter((s) => s.enabled);
-  const memEn    = memories.filter((m) => m.enabled).length;
-  const rulesEn  = rules.filter((r) => r.enabled);
-  const avgImp   = memEn > 0
-    ? memories.filter((m) => m.enabled).reduce((s, m) => s + m.importance, 0) / memEn
-    : 0;
-  const enabledTools = agenticConfig?.available_tools?.length ?? 0;
+function isMcpTool(name: string): boolean {
+  return name.startsWith('mcp_');
+}
 
-  return [
-    { label: t('radar.dims.creativity'),   value: Math.min(10, skillEn.length * 0.9) },
-    { label: t('radar.dims.rigor'),        value: Math.min(10, rulesEn.length * 1.5) },
-    { label: t('radar.dims.autonomy'),     value: agenticConfig?.enabled
-      ? Math.min(10, 4 + enabledTools * 0.25)
-      : Math.min(10, enabledTools * 0.3) },
-    { label: t('radar.dims.memory'),       value: Math.min(10, memEn * 0.7 + avgImp * 0.3) },
-    { label: t('radar.dims.expression'),   value: Math.min(10, skillEn.length * 0.8 + skillEn.length * 0.4) },
-    { label: t('radar.dims.adaptability'), value: Math.min(10, skillEn.length * 1.2) },
-  ];
+function getMcpServerName(toolName: string): string {
+  return toolName.split('_')[1] ?? toolName;
+}
+
+function getMcpShortName(toolName: string): string {
+  const parts = toolName.split('_');
+  return parts.slice(2).join('_') || toolName;
+}
+
+type CtxSegKey = 'systemPrompt' | 'toolInjection' | 'rules' | 'memories';
+
+const CTX_SEGMENT_ORDER: readonly CtxSegKey[] = ['systemPrompt', 'toolInjection', 'rules', 'memories'];
+
+const CTX_SEGMENT_COLORS: Record<CtxSegKey, string> = {
+  systemPrompt: '#34d399',
+  toolInjection: '#60a5fa',
+  rules: '#a78bfa',
+  memories: '#f472b6',
+};
+
+const CTX_LABEL_I18N_KEY: Record<CtxSegKey, string> = {
+  systemPrompt: 'nursery.template.tokenSystemPrompt',
+  toolInjection: 'nursery.template.tokenToolInjection',
+  rules: 'nursery.template.tokenRules',
+  memories: 'nursery.template.tokenMemories',
+};
+
+function fmtPct(val: number, total: number): string {
+  if (total === 0) return '0%';
+  return `${Math.round((val / total) * 100)}%`;
 }
 
 const AssistantConfigPage: React.FC = () => {
@@ -77,84 +114,171 @@ const AssistantConfigPage: React.FC = () => {
     document: identityDocument,
     updateField: updateIdentityField,
     resetPersonaFiles,
+    reload: reloadIdentityDocument,
     loading: identityLoading,
   } = useAgentIdentityDocument(workspacePath);
 
-  // ── Identity edit state ────────────────────────────────────────────────────
   const [editingField, setEditingField] = useState<'name' | 'emoji' | 'creature' | 'vibe' | null>(null);
   const [editValue, setEditValue] = useState('');
   const nameInputRef = useRef<HTMLInputElement>(null);
   const metaInputRef = useRef<HTMLInputElement>(null);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
 
-  // ── Capability state ───────────────────────────────────────────────────────
   const [models, setModels] = useState<AIModelConfig[]>([]);
   const [, setFuncAgentModels] = useState<Record<string, string>>({});
   const [agenticConfig, setAgenticConfig] = useState<ModeConfigItem | null>(null);
   const [availableTools, setAvailableTools] = useState<ToolInfo[]>([]);
+  const [mcpServers, setMcpServers] = useState<MCPServerInfo[]>([]);
   const [toolsLoading, setToolsLoading] = useState<Record<string, boolean>>({});
-
-  // ── Memory state ───────────────────────────────────────────────────────────
+  const [skillsLoading, setSkillsLoading] = useState<Record<string, boolean>>({});
   const [rules, setRules] = useState<AIRule[]>([]);
   const [memories, setMemories] = useState<AIMemory[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
-  const [capsLoaded, setCapsLoaded] = useState(false);
-  const [memLoaded, setMemLoaded] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
 
-  // ── Active tab ─────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState('identity');
+  const [detail, setDetail] = useState<AssistantDetail | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
-  // ── Body edit debounce ─────────────────────────────────────────────────────
-  const bodyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [personaDocContent, setPersonaDocContent] = useState('');
+  const [personaDocLoading, setPersonaDocLoading] = useState(false);
+  const [personaDocLoadError, setPersonaDocLoadError] = useState<string | null>(null);
+  const personaSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const personaPendingRef = useRef<{ file: PersonaDocFile; content: string } | null>(null);
 
-  const handleBodyChange = useCallback((newBody: string) => {
-    if (bodyTimerRef.current) clearTimeout(bodyTimerRef.current);
-    bodyTimerRef.current = setTimeout(() => updateIdentityField('body', newBody), 600);
-  }, [updateIdentityField]);
-
-  // Load models/tools/skills on first visit to personality or ability tab
-  useEffect(() => {
-    if ((activeTab === 'personality' || activeTab === 'ability') && !capsLoaded) {
-      (async () => {
-        try {
-          const { invoke } = await import('@tauri-apps/api/core');
-          const [allModels, funcModels, modeConf, tools, sks] = await Promise.all([
-            (configManager.getConfig<AIModelConfig[]>('ai.models')).catch(() => [] as AIModelConfig[]),
-            (configManager.getConfig<Record<string, string>>('ai.func_agent_models')).catch(() => ({} as Record<string, string>)),
-            configAPI.getModeConfig('agentic').catch(() => null as ModeConfigItem | null),
-            invoke<ToolInfo[]>('get_all_tools_info').catch(() => [] as ToolInfo[]),
-            configAPI.getSkillConfigs({ workspacePath: workspacePath || undefined }).catch(() => [] as SkillInfo[]),
-          ]);
-          setModels(allModels ?? []);
-          setFuncAgentModels(funcModels ?? {});
-          setAgenticConfig(modeConf);
-          setAvailableTools(tools);
-          setSkills(sks);
-          setCapsLoaded(true);
-        } catch (e) { log.error('caps load', e); }
-      })();
+  const flushPersonaWrite = useCallback(async (file: PersonaDocFile, content: string) => {
+    if (!workspacePath) return;
+    const fullPath = personaDocFullPath(workspacePath, file);
+    try {
+      await workspaceAPI.writeFileContent(workspacePath, fullPath, content);
+      if (file === 'IDENTITY.md') {
+        await reloadIdentityDocument();
+      }
+    } catch (e) {
+      log.error('persona doc save', e);
+      notificationService.error(t('nursery.assistant.personaDocSaveFailed'));
     }
-  }, [activeTab, capsLoaded, workspacePath]);
+  }, [workspacePath, reloadIdentityDocument, t]);
 
-  // Load rules and memories on first visit to personality or memory tab
+  const flushPersonaWriteRef = useRef(flushPersonaWrite);
+  flushPersonaWriteRef.current = flushPersonaWrite;
+
   useEffect(() => {
-    if ((activeTab === 'personality' || activeTab === 'memory') && !memLoaded) {
-      (async () => {
-        try {
-          const [u, p, m] = await Promise.all([
-            AIRulesAPI.getRules(RuleLevel.User),
-            AIRulesAPI.getRules(RuleLevel.Project, workspacePath || undefined),
-            getAllMemories(),
-          ]);
-          setRules([...u, ...p]);
-          setMemories(m);
-          setMemLoaded(true);
-        } catch (e) { log.error('memory/rules load', e); }
-      })();
+    if (detail?.type !== 'personaDoc' || !workspacePath) {
+      setPersonaDocContent('');
+      setPersonaDocLoading(false);
+      setPersonaDocLoadError(null);
+      personaPendingRef.current = null;
+      return;
     }
-  }, [activeTab, memLoaded, workspacePath]);
 
-  // ── Identity edit helpers ──────────────────────────────────────────────────
+    const fileName = detail.fileName;
+    const fullPath = personaDocFullPath(workspacePath, fileName);
+    let cancelled = false;
+    personaPendingRef.current = null;
+    setPersonaDocLoading(true);
+    setPersonaDocLoadError(null);
+
+    workspaceAPI.readFileContent(fullPath)
+      .then((content) => {
+        if (!cancelled) {
+          setPersonaDocContent(content);
+          personaPendingRef.current = { file: fileName, content };
+          setPersonaDocLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        if (isFileMissingError(err)) {
+          setPersonaDocContent('');
+          personaPendingRef.current = { file: fileName, content: '' };
+          setPersonaDocLoadError(null);
+        } else {
+          setPersonaDocContent('');
+          personaPendingRef.current = null;
+          setPersonaDocLoadError(err instanceof Error ? err.message : String(err));
+        }
+        setPersonaDocLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (personaSaveTimerRef.current) {
+        clearTimeout(personaSaveTimerRef.current);
+        personaSaveTimerRef.current = null;
+      }
+      const pending = personaPendingRef.current;
+      if (pending && pending.file === fileName && workspacePath) {
+        void flushPersonaWriteRef.current(pending.file, pending.content);
+      }
+    };
+  }, [detail, workspacePath]);
+
+  const handlePersonaDocChange = useCallback((value: string) => {
+    if (detail?.type !== 'personaDoc' || !workspacePath) return;
+    const fileName = detail.fileName;
+    setPersonaDocContent(value);
+    personaPendingRef.current = { file: fileName, content: value };
+    if (personaSaveTimerRef.current) {
+      clearTimeout(personaSaveTimerRef.current);
+      personaSaveTimerRef.current = null;
+    }
+    personaSaveTimerRef.current = setTimeout(() => {
+      personaSaveTimerRef.current = null;
+      const pending = personaPendingRef.current;
+      if (!pending || pending.file !== fileName || !workspacePath) return;
+      void flushPersonaWrite(pending.file, pending.content);
+    }, 600);
+  }, [detail, workspacePath, flushPersonaWrite]);
+
+  useEffect(() => {
+    setDetail(null);
+    setCollapsedGroups(new Set());
+    setPageLoading(true);
+  }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const [allModels, funcModels, modeConf, tools, sks, servers, u, p, m] = await Promise.all([
+          configManager.getConfig<AIModelConfig[]>('ai.models').catch(() => [] as AIModelConfig[]),
+          configManager.getConfig<Record<string, string>>('ai.func_agent_models').catch(() => ({} as Record<string, string>)),
+          configAPI.getModeConfig('agentic').catch(() => null as ModeConfigItem | null),
+          invoke<ToolInfo[]>('get_all_tools_info').catch(() => [] as ToolInfo[]),
+          configAPI.getSkillConfigs({ workspacePath: workspacePath || undefined }).catch(() => [] as SkillInfo[]),
+          MCPAPI.getServers().catch(() => [] as MCPServerInfo[]),
+          AIRulesAPI.getRules(RuleLevel.User),
+          AIRulesAPI.getRules(RuleLevel.Project, workspacePath || undefined),
+          getAllMemories(),
+        ]);
+        if (cancelled) return;
+        setModels(allModels ?? []);
+        setFuncAgentModels(funcModels ?? {});
+        setAgenticConfig(modeConf);
+        setAvailableTools(tools);
+        setSkills(sks ?? []);
+        setMcpServers(servers ?? []);
+        setRules([...u, ...p]);
+        setMemories(m);
+      } catch (e) {
+        log.error('assistant page load', e);
+      } finally {
+        if (!cancelled) setPageLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [workspacePath, activeWorkspaceId]);
+
+  useEffect(() => {
+    if (!detail) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDetail(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [detail]);
+
   const startEdit = useCallback((field: 'name' | 'emoji' | 'creature' | 'vibe') => {
     setEditingField(field);
     setEditValue(field === 'name' ? identityDocument.name : identityDocument[field as keyof typeof identityDocument] as string);
@@ -174,7 +298,6 @@ const AssistantConfigPage: React.FC = () => {
     if (e.key === 'Escape') setEditingField(null);
   }, [commitEdit]);
 
-  // ── Model helpers ──────────────────────────────────────────────────────────
   const INHERIT_VALUE = '__inherit__';
 
   const buildModelOptions = useCallback((slot: ModelSlot): SelectOption[] => {
@@ -199,7 +322,6 @@ const AssistantConfigPage: React.FC = () => {
     updateIdentityField(slot === 'primary' ? 'modelPrimary' : 'modelFast', val);
   }, [updateIdentityField]);
 
-  // ── Tool helpers ───────────────────────────────────────────────────────────
   const handleToolToggle = useCallback(async (toolName: string) => {
     if (!agenticConfig) return;
     setToolsLoading((p) => ({ ...p, [toolName]: true }));
@@ -221,16 +343,85 @@ const AssistantConfigPage: React.FC = () => {
     }
   }, [agenticConfig, t]);
 
-  // ── Radar ──────────────────────────────────────────────────────────────────
-  const radarDims = useMemo(
-    () => computeRadarDims(rules, memories, agenticConfig, skills, t),
-    [rules, memories, agenticConfig, skills, t],
+  const handleResetTools = useCallback(async () => {
+    try {
+      await configAPI.resetModeConfig('agentic');
+      const modeConf = await configAPI.getModeConfig('agentic');
+      setAgenticConfig(modeConf);
+      const { globalEventBus } = await import('@/infrastructure/event-bus');
+      globalEventBus.emit('mode:config:updated');
+      notificationService.success(t('notifications.resetSuccess'));
+    } catch (e) {
+      log.error('Failed to reset tools', e);
+      notificationService.error(t('notifications.resetFailed'));
+    }
+  }, [t]);
+
+  const handleGroupToggleAll = useCallback(async (toolNames: string[]) => {
+    if (!agenticConfig) return;
+    const current = agenticConfig.available_tools ?? [];
+    const allEnabled = toolNames.every((n) => current.includes(n));
+    const newTools = allEnabled
+      ? current.filter((n) => !toolNames.includes(n))
+      : [...new Set([...current, ...toolNames])];
+    const newConfig = { ...agenticConfig, available_tools: newTools };
+    setAgenticConfig(newConfig);
+    try {
+      await configAPI.setModeConfig('agentic', newConfig);
+      const { globalEventBus } = await import('@/infrastructure/event-bus');
+      globalEventBus.emit('mode:config:updated');
+    } catch (e) {
+      log.error('Failed to toggle group', e);
+      notificationService.error(t('notifications.toggleFailed'));
+      setAgenticConfig(agenticConfig);
+    }
+  }, [agenticConfig, t]);
+
+  const isSkillEnabled = useCallback(
+    (skillName: string): boolean => {
+      if (agenticConfig?.available_skills == null) {
+        return skills.find((s) => s.name === skillName)?.enabled ?? true;
+      }
+      return agenticConfig.available_skills.includes(skillName);
+    },
+    [agenticConfig, skills],
   );
 
-  // ── Token estimate ─────────────────────────────────────────────────────────
+  const handleSkillToggle = useCallback(async (skillName: string) => {
+    if (!agenticConfig) return;
+    setSkillsLoading((prev) => ({ ...prev, [skillName]: true }));
+    const current = agenticConfig.available_skills
+      ?? skills.filter((s) => s.enabled).map((s) => s.name);
+    const enabled = current.includes(skillName);
+    const next = enabled
+      ? current.filter((n) => n !== skillName)
+      : [...current, skillName];
+    const newConfig = { ...agenticConfig, available_skills: next };
+    setAgenticConfig(newConfig);
+    try {
+      await configAPI.setModeConfig('agentic', newConfig);
+      const { globalEventBus } = await import('@/infrastructure/event-bus');
+      globalEventBus.emit('mode:config:updated');
+    } catch (e) {
+      log.error('Failed to toggle skill', e);
+      notificationService.error(t('notifications.toggleFailed'));
+      setAgenticConfig(agenticConfig);
+    } finally {
+      setSkillsLoading((prev) => ({ ...prev, [skillName]: false }));
+    }
+  }, [agenticConfig, skills, t]);
+
+  const toggleCollapse = useCallback((id: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }, []);
+
   const enabledToolCount = agenticConfig?.available_tools?.length ?? 0;
   const enabledRulesCount = rules.filter((r) => r.enabled).length;
-  const enabledMemCount   = memories.filter((m) => m.enabled).length;
+  const enabledMemCount = memories.filter((m) => m.enabled).length;
   const tokenBreakdown = useTokenEstimate(
     identityDocument.body,
     enabledToolCount,
@@ -238,296 +429,818 @@ const AssistantConfigPage: React.FC = () => {
     enabledMemCount,
   );
 
+  const ctxSegments = useMemo(
+    () => CTX_SEGMENT_ORDER.map((key) => ({
+      key,
+      color: CTX_SEGMENT_COLORS[key],
+      label: t(CTX_LABEL_I18N_KEY[key]),
+    })),
+    [t],
+  );
+
+  const ctxTotal = tokenBreakdown.total;
+  const segmentWidths = useMemo(() => {
+    if (ctxTotal === 0) return CTX_SEGMENT_ORDER.map(() => 0);
+    return CTX_SEGMENT_ORDER.map((key) => {
+      const val = tokenBreakdown[key];
+      return typeof val === 'number' ? (val / ctxTotal) * 100 : 0;
+    });
+  }, [tokenBreakdown, ctxTotal]);
+
+  const contextZoneSubtitle = useMemo(
+    () => (
+      <>
+        <strong>{formatTokenCount(ctxTotal)}</strong>
+        {' tok · '}
+        <span>
+          {fmtPct(ctxTotal, tokenBreakdown.contextWindowSize)} of {formatTokenCount(tokenBreakdown.contextWindowSize)}
+        </span>
+      </>
+    ),
+    [ctxTotal, tokenBreakdown.contextWindowSize],
+  );
+
+  const builtinTools = useMemo(
+    () => availableTools.filter((tool) => !isMcpTool(tool.name)),
+    [availableTools],
+  );
+
+  const builtinToolsEnabled = useMemo(
+    () => builtinTools.filter((tool) => agenticConfig?.available_tools?.includes(tool.name)),
+    [builtinTools, agenticConfig],
+  );
+
+  const builtinToolsDisabled = useMemo(
+    () => builtinTools.filter((tool) => !agenticConfig?.available_tools?.includes(tool.name)),
+    [builtinTools, agenticConfig],
+  );
+
+  const mcpToolsByServer = useMemo(() => {
+    const map = new Map<string, ToolInfo[]>();
+    for (const tool of availableTools) {
+      if (!isMcpTool(tool.name)) continue;
+      const server = getMcpServerName(tool.name);
+      if (!map.has(server)) map.set(server, []);
+      map.get(server)!.push(tool);
+    }
+    return map;
+  }, [availableTools]);
+
+  const mcpServerIds = useMemo(() => {
+    const fromTools = new Set(mcpToolsByServer.keys());
+    const fromRegistry = new Set(mcpServers.map((s) => s.id));
+    return new Set([...fromTools, ...fromRegistry]);
+  }, [mcpToolsByServer, mcpServers]);
+
+  const skillsEnabled = useMemo(
+    () => skills.filter((s) => isSkillEnabled(s.name)),
+    [skills, isSkillEnabled],
+  );
+
+  const skillsDisabled = useMemo(
+    () => skills.filter((s) => !isSkillEnabled(s.name)),
+    [skills, isSkillEnabled],
+  );
+
   const identityName = identityDocument.name || DEFAULT_AGENT_NAME;
 
-  const metaItems = useMemo(() => [
-    { key: 'emoji'    as const, label: t('identity.emoji'),    value: identityDocument.emoji,   placeholder: t('identity.emojiPlaceholder') },
-    { key: 'creature' as const, label: t('identity.creature'), value: identityDocument.creature, placeholder: t('identity.creaturePlaceholderShort') },
-    { key: 'vibe'     as const, label: t('identity.vibe'),     value: identityDocument.vibe,    placeholder: t('identity.vibePlaceholderShort') },
-  ] as const, [identityDocument.emoji, identityDocument.creature, identityDocument.vibe, t]);
+  const openToolDetail = useCallback((tool: ToolInfo, isMcp: boolean) => {
+    setDetail((prev) => (
+      prev?.type === 'tool' && prev.tool.name === tool.name
+        ? null
+        : { type: 'tool', tool, isMcp }
+    ));
+  }, []);
+
+  const openSkillDetail = useCallback((skill: SkillInfo) => {
+    setDetail((prev) => (
+      prev?.type === 'skill' && prev.skill.name === skill.name
+        ? null
+        : { type: 'skill', skill }
+    ));
+  }, []);
+
+  const renderToolList = (tools: ToolInfo[], isMcp: boolean) => (
+    <div className="tc-tool-list">
+      {tools.map((tool) => {
+        const enabled = agenticConfig?.available_tools?.includes(tool.name) ?? false;
+        const displayName = isMcp ? getMcpShortName(tool.name) : tool.name;
+        const selected = detail?.type === 'tool' && detail.tool.name === tool.name;
+        return (
+          <div
+            key={tool.name}
+            className={`tc-tool-row${!enabled ? ' tc-tool-row--off' : ''}${selected ? ' tc-tool-row--selected' : ''}`}
+          >
+            <button
+              type="button"
+              className="tc-tool-row__hit"
+              onClick={() => openToolDetail(tool, isMcp)}
+            >
+              <span className={`tc-tool-row__icon${isMcp ? ' tc-tool-row__icon--mcp' : ''}`}>
+                {isMcp ? <Plug2 size={12} /> : <Wrench size={12} />}
+              </span>
+              <span className="tc-tool-row__name" title={tool.name}>{displayName}</span>
+            </button>
+            <Switch
+              size="small"
+              checked={enabled}
+              loading={toolsLoading[tool.name]}
+              onChange={() => handleToolToggle(tool.name)}
+              aria-label={tool.name}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const renderToolEnabledDisabledSplit = (
+    enabledList: ToolInfo[],
+    disabledList: ToolInfo[],
+    isMcp: boolean,
+  ) => (
+    <div className="tc-enabled-disabled-split">
+      <div className="tc-enabled-disabled-split__col">
+        <p className="tc-enabled-disabled-split__title">{t('nursery.template.colEnabled')}</p>
+        {enabledList.length > 0 ? (
+          renderToolList(enabledList, isMcp)
+        ) : (
+          <p className="tc-enabled-disabled-split__empty">{t('nursery.template.colEmpty')}</p>
+        )}
+      </div>
+      <div className="tc-enabled-disabled-split__col">
+        <p className="tc-enabled-disabled-split__title">{t('nursery.template.colDisabled')}</p>
+        {disabledList.length > 0 ? (
+          renderToolList(disabledList, isMcp)
+        ) : (
+          <p className="tc-enabled-disabled-split__empty">{t('nursery.template.colEmpty')}</p>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderSkillList = (list: SkillInfo[]) => (
+    <div className="tc-skill-list">
+      {list.map((skill) => {
+        const on = isSkillEnabled(skill.name);
+        const selected = detail?.type === 'skill' && detail.skill.name === skill.name;
+        return (
+          <div
+            key={skill.name}
+            className={`tc-skill-row${!on ? ' tc-skill-row--off' : ''}${selected ? ' tc-skill-row--selected' : ''}`}
+          >
+            <button
+              type="button"
+              className="tc-skill-row__hit"
+              onClick={() => openSkillDetail(skill)}
+            >
+              <span className="tc-skill-row__name">{skill.name}</span>
+              <span className="tc-skill-row__level">{skill.level}</span>
+            </button>
+            <Switch
+              checked={on}
+              onChange={() => handleSkillToggle(skill.name)}
+              disabled={skillsLoading[skill.name]}
+              size="small"
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const renderSkillEnabledDisabledSplit = () => (
+    <div className="tc-enabled-disabled-split">
+      <div className="tc-enabled-disabled-split__col">
+        <p className="tc-enabled-disabled-split__title">{t('nursery.template.colEnabled')}</p>
+        {skillsEnabled.length > 0 ? (
+          renderSkillList(skillsEnabled)
+        ) : (
+          <p className="tc-enabled-disabled-split__empty">{t('nursery.template.colEmpty')}</p>
+        )}
+      </div>
+      <div className="tc-enabled-disabled-split__col">
+        <p className="tc-enabled-disabled-split__title">{t('nursery.template.colDisabled')}</p>
+        {skillsDisabled.length > 0 ? (
+          renderSkillList(skillsDisabled)
+        ) : (
+          <p className="tc-enabled-disabled-split__empty">{t('nursery.template.colEmpty')}</p>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderGroupHeader = (
+    id: string,
+    label: string,
+    toolNames: string[],
+    isMcp: boolean,
+    serverStatus?: string,
+    mcpServerId?: string,
+  ) => {
+    const groupEnabled = toolNames.filter(
+      (n) => agenticConfig?.available_tools?.includes(n),
+    ).length;
+    const isCollapsed = collapsedGroups.has(id);
+    const allOn = toolNames.length > 0 && groupEnabled === toolNames.length;
+
+    return (
+      <div className="tc-group-header">
+        {toolNames.length > 0 && (
+          <button
+            type="button"
+            className="tc-group-header__toggle"
+            onClick={() => toggleCollapse(id)}
+          >
+            <ChevronDown
+              size={13}
+              className={`tc-group-header__chevron ${isCollapsed ? 'tc-group-header__chevron--collapsed' : ''}`}
+            />
+          </button>
+        )}
+        {isMcp
+          ? <Plug2 size={13} className="tc-group-header__icon tc-group-header__icon--mcp" />
+          : <Cpu size={13} className="tc-group-header__icon" />
+        }
+        <span className="tc-group-header__name">{label}</span>
+        {serverStatus && (
+          <span className={`tc-group-header__status tc-group-header__status--${serverStatus.toLowerCase()}`}>
+            {serverStatus}
+          </span>
+        )}
+        <span className="tc-group-header__count">
+          {toolNames.length > 0 ? `${groupEnabled}/${toolNames.length}` : t('nursery.template.groupCountEmpty')}
+        </span>
+        {isMcp && mcpServerId && (
+          <button
+            type="button"
+            className="tc-group-header__detail-btn"
+            title={t('nursery.template.openServerDetail')}
+            aria-label={t('nursery.template.openServerDetail')}
+            onClick={(e) => {
+              e.stopPropagation();
+              setDetail((prev) => (
+                prev?.type === 'mcpServer' && prev.serverId === mcpServerId
+                  ? null
+                  : { type: 'mcpServer', serverId: mcpServerId }
+              ));
+            }}
+          >
+            <Info size={14} />
+          </button>
+        )}
+        {toolNames.length > 0 && (
+          <Switch
+            size="small"
+            checked={allOn}
+            onChange={() => handleGroupToggleAll(toolNames)}
+            aria-label={`Toggle all in ${label}`}
+          />
+        )}
+      </div>
+    );
+  };
+
+  const renderDetailPanel = () => {
+    if (!detail) return null;
+
+    if (detail.type === 'personaDoc') {
+      const { fileName } = detail;
+      const docLabelKey = fileName.replace(/\.md$/i, '') as 'SOUL' | 'USER' | 'IDENTITY';
+      return (
+        <aside className="tc-template-detail" aria-label={t('nursery.template.detailPanel')}>
+          <div className="tc-template-detail__head tc-template-detail__head--center-line">
+            <span className="tc-template-detail__head-spacer" aria-hidden />
+            <div className="tc-template-detail__head-text">
+              <div className="tc-template-detail__head-line">
+                <h3 className="tc-template-detail__title">{t(`nursery.assistant.personaDocs.${docLabelKey}`)}</h3>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="tc-template-detail__close"
+              onClick={() => setDetail(null)}
+              aria-label={t('nursery.template.closeDetail')}
+            >
+              <X size={14} strokeWidth={2} />
+            </button>
+          </div>
+          <div className="tc-template-detail__body tc-template-detail__body--persona-editor">
+            {personaDocLoadError && (
+              <p className="tc-template-detail__error">{t('nursery.assistant.personaDocLoadFailed')}: {personaDocLoadError}</p>
+            )}
+            {personaDocLoading && !personaDocLoadError ? (
+              <div className="tc-persona-doc-editor__loading">
+                <RefreshCw size={16} className="nursery-spinning" />
+              </div>
+            ) : (
+              <div className="tc-persona-doc-editor">
+                <MEditor
+                  key={fileName}
+                  value={personaDocContent}
+                  onChange={handlePersonaDocChange}
+                  theme={isLight ? 'light' : 'dark'}
+                  toolbar={false}
+                  mode="ir"
+                  height="100%"
+                  className="tc-persona-doc-editor__meditor"
+                />
+              </div>
+            )}
+          </div>
+        </aside>
+      );
+    }
+
+    if (detail.type === 'tool') {
+      const { tool, isMcp } = detail;
+      const displayName = isMcp ? getMcpShortName(tool.name) : tool.name;
+      const enabled = agenticConfig?.available_tools?.includes(tool.name) ?? false;
+      return (
+        <aside className="tc-template-detail" aria-label={t('nursery.template.detailPanel')}>
+          <div className="tc-template-detail__head tc-template-detail__head--center-line">
+            <span className="tc-template-detail__head-spacer" aria-hidden />
+            <div className="tc-template-detail__head-text">
+              <div className="tc-template-detail__head-line">
+                <span className="tc-template-detail__kind">
+                  {isMcp ? t('nursery.template.toolTypeMcp') : t('nursery.template.toolTypeBuiltin')}
+                </span>
+                <h3 className="tc-template-detail__title">{displayName}</h3>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="tc-template-detail__close"
+              onClick={() => setDetail(null)}
+              aria-label={t('nursery.template.closeDetail')}
+            >
+              <X size={14} strokeWidth={2} />
+            </button>
+          </div>
+          <div className="tc-template-detail__body">
+            {tool.is_readonly && (
+              <span className="tc-template-detail__badge">{t('nursery.template.readonlyTool')}</span>
+            )}
+            <p className="tc-template-detail__desc">
+              {tool.description?.trim() ? tool.description : '—'}
+            </p>
+            <div className="tc-template-detail__actions">
+              <Switch
+                size="small"
+                checked={enabled}
+                loading={toolsLoading[tool.name]}
+                onChange={() => handleToolToggle(tool.name)}
+                aria-label={tool.name}
+              />
+            </div>
+          </div>
+        </aside>
+      );
+    }
+
+    if (detail.type === 'mcpServer') {
+      const { serverId } = detail;
+      const serverInfo = mcpServers.find((s) => s.id === serverId);
+      const serverTools = mcpToolsByServer.get(serverId) ?? [];
+      const status = serverInfo?.status ?? (serverTools.length > 0 ? 'Connected' : 'Unknown');
+      return (
+        <aside className="tc-template-detail" aria-label={t('nursery.template.detailPanel')}>
+          <div className="tc-template-detail__head tc-template-detail__head--center-line">
+            <span className="tc-template-detail__head-spacer" aria-hidden />
+            <div className="tc-template-detail__head-text">
+              <div className="tc-template-detail__head-line">
+                <span className="tc-template-detail__kind">MCP</span>
+                <h3 className="tc-template-detail__title">{serverInfo?.name ?? serverId}</h3>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="tc-template-detail__close"
+              onClick={() => setDetail(null)}
+              aria-label={t('nursery.template.closeDetail')}
+            >
+              <X size={14} strokeWidth={2} />
+            </button>
+          </div>
+          <div className="tc-template-detail__body">
+            <span className={`tc-template-detail__status tc-group-header__status tc-group-header__status--${status.toLowerCase()}`}>
+              {status}
+            </span>
+            <p className="tc-template-detail__subhead">{t('nursery.template.serverToolsHeading')}</p>
+            {serverTools.length === 0 ? (
+              <p className="nursery-empty">{t('nursery.template.mcpServerNoTools')}</p>
+            ) : (
+              <ul className="tc-template-detail__tool-names">
+                {serverTools.map((tool) => (
+                  <li key={tool.name}>{getMcpShortName(tool.name)}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </aside>
+      );
+    }
+
+    if (detail.type !== 'skill') return null;
+    const { skill } = detail;
+    const on = isSkillEnabled(skill.name);
+    return (
+      <aside className="tc-template-detail" aria-label={t('nursery.template.detailPanel')}>
+        <div className="tc-template-detail__head tc-template-detail__head--center-line">
+          <span className="tc-template-detail__head-spacer" aria-hidden />
+          <div className="tc-template-detail__head-text">
+            <div className="tc-template-detail__head-line">
+              <span className="tc-template-detail__kind">{t('cards.skills')}</span>
+              <h3 className="tc-template-detail__title">{skill.name}</h3>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="tc-template-detail__close"
+            onClick={() => setDetail(null)}
+            aria-label={t('nursery.template.closeDetail')}
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
+        </div>
+        <div className="tc-template-detail__body">
+          <p className="tc-template-detail__meta">{t('nursery.template.skillLevel', { level: skill.level })}</p>
+          <p className="tc-template-detail__desc">
+            {skill.description?.trim() ? skill.description : '—'}
+          </p>
+          <div className="tc-template-detail__actions">
+            <Switch
+              checked={on}
+              onChange={() => handleSkillToggle(skill.name)}
+              disabled={skillsLoading[skill.name]}
+              size="small"
+            />
+          </div>
+        </div>
+      </aside>
+    );
+  };
+
+  const renderHeaderEmoji = (editable: boolean) => {
+    if (editingField === 'emoji') return null;
+    if (!editable) {
+      return identityDocument.emoji ? <span>{`${identityDocument.emoji} `}</span> : null;
+    }
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        className="nursery-identity__emoji-hit--page-header"
+        onClick={() => startEdit('emoji')}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            startEdit('emoji');
+          }
+        }}
+        title={t('identity.emoji')}
+      >
+        {identityDocument.emoji ? (
+          identityDocument.emoji
+        ) : (
+          <span className="nursery-identity__emoji-placeholder--page-header">☺</span>
+        )}
+      </span>
+    );
+  };
+
+  const headerTitle = identityLoading ? (
+    <>
+      {identityDocument.emoji ? <span>{`${identityDocument.emoji} `}</span> : null}
+      {identityName}
+    </>
+  ) : editingField === 'name' ? (
+    <>
+      {renderHeaderEmoji(true)}
+      <Input
+        ref={nameInputRef}
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onBlur={commitEdit}
+        onKeyDown={onEditKey}
+        className="nursery-identity__name-input nursery-identity__name-input--page-header"
+      />
+    </>
+  ) : editingField === 'emoji' ? (
+    <>
+      <Input
+        ref={metaInputRef}
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onBlur={commitEdit}
+        onKeyDown={onEditKey}
+        size="small"
+        className="nursery-identity__name-input nursery-identity__name-input--page-header nursery-identity__name-input--emoji-inline"
+      />
+      <span
+        role="button"
+        tabIndex={0}
+        className="nursery-identity__name nursery-identity__name--page-header"
+        onClick={() => startEdit('name')}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            startEdit('name');
+          }
+        }}
+        title={t('hero.editNameTitle')}
+      >
+        {identityName}
+      </span>
+    </>
+  ) : (
+    <>
+      {renderHeaderEmoji(true)}
+      <span
+        role="button"
+        tabIndex={0}
+        className="nursery-identity__name nursery-identity__name--page-header"
+        onClick={() => startEdit('name')}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            startEdit('name');
+          }
+        }}
+        title={t('hero.editNameTitle')}
+      >
+        {identityName}
+      </span>
+    </>
+  );
+
+  const headerExtra = identityLoading ? null : (
+    <div className="nursery-identity__header-meta">
+      <div className="nursery-identity__header-meta-row">
+        <span className="nursery-identity__header-meta-label">{t('identity.creature')}</span>
+        {editingField === 'creature' ? (
+          <Input
+            ref={metaInputRef}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={onEditKey}
+            size="small"
+            className="nursery-identity__header-meta-input"
+          />
+        ) : (
+          <span
+            className={`nursery-identity__header-meta-value${!identityDocument.creature ? ' is-empty' : ''}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => startEdit('creature')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                startEdit('creature');
+              }
+            }}
+          >
+            {identityDocument.creature || t('identity.creaturePlaceholderShort')}
+          </span>
+        )}
+      </div>
+      <div className="nursery-identity__header-meta-row">
+        <span className="nursery-identity__header-meta-label">{t('identity.vibe')}</span>
+        {editingField === 'vibe' ? (
+          <Input
+            ref={metaInputRef}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={onEditKey}
+            size="small"
+            className="nursery-identity__header-meta-input"
+          />
+        ) : (
+          <span
+            className={`nursery-identity__header-meta-value${!identityDocument.vibe ? ' is-empty' : ''}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => startEdit('vibe')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                startEdit('vibe');
+              }
+            }}
+          >
+            {identityDocument.vibe || t('identity.vibePlaceholderShort')}
+          </span>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="nursery-page">
       <div className="nursery-page__bar">
-        <button type="button" className="nursery-page__back" onClick={openGallery}>
-          <ArrowLeft size={14} />
-          <span>{t('nursery.backToGallery')}</span>
-        </button>
-        <h2 className="nursery-page__title">
-          {identityDocument.emoji && <span>{identityDocument.emoji} </span>}
-          {identityName}
-        </h2>
-        {identityDocument.creature && (
-          <span className="nursery-page__subtitle">{identityDocument.creature}</span>
-        )}
         <button
           type="button"
-          className="nursery-page__reset"
-          title={t('identity.resetTooltip')}
-          onClick={() => setIsResetDialogOpen(true)}
+          className="nursery-page__back"
+          onClick={openGallery}
+          aria-label={t('nursery.backToGallery')}
         >
-          <RefreshCw size={13} />
+          <ArrowLeft size={13} />
         </button>
       </div>
 
-      <div className="nursery-page__body">
-      <Tabs
-        type="line"
-        size="small"
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        className="nursery-tabs"
-      >
-        {/* Identity tab */}
-        <TabPane tabKey="identity" label={t('nursery.tabs.identity')} icon={<Smile size={13} />}>
-          <div className="nursery-tab-content">
-            {identityLoading ? (
-              <div className="nursery-page__loading"><RefreshCw size={16} className="nursery-spinning" /></div>
-            ) : (
-              <>
-                {/* Name row */}
-                <div className="nursery-identity__name-row">
-                  {editingField === 'name' ? (
-                    <Input
-                      ref={nameInputRef}
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onBlur={commitEdit}
-                      onKeyDown={onEditKey}
-                      className="nursery-identity__name-input"
-                    />
-                  ) : (
-                    <h3
-                      className="nursery-identity__name"
-                      onClick={() => startEdit('name')}
-                      title={t('hero.editNameTitle')}
+      <div className="nursery-page__content">
+        {pageLoading ? (
+          <div className="nursery-page__loading">
+            <RefreshCw size={16} className="nursery-spinning" />
+          </div>
+        ) : (
+          <div className={`tc-template-shell${detail ? ' tc-template-shell--has-detail' : ''}`}>
+            <div className="tc-template-shell__main">
+              <div className="tc-template-main-column">
+                <GalleryPageHeader
+                  className="gallery-page-header tc-template-page-header"
+                  title={headerTitle}
+                  extraContent={headerExtra}
+                  actions={(
+                    <button
+                      type="button"
+                      className="gallery-plain-icon-btn"
+                      title={t('identity.resetTooltip')}
+                      aria-label={t('identity.resetTooltip')}
+                      onClick={() => setIsResetDialogOpen(true)}
                     >
-                      {identityName}
-                    </h3>
+                      <RefreshCw size={14} />
+                    </button>
                   )}
-                </div>
+                />
 
-                {/* Meta pills */}
-                <div className="nursery-identity__meta-row">
-                  {metaItems.map((item) => (
-                    <div key={item.key} className="nursery-identity__meta-pill">
-                      <span className="nursery-identity__meta-label">{item.label}</span>
-                      {editingField === item.key ? (
-                        <Input
-                          ref={metaInputRef}
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onBlur={commitEdit}
-                          onKeyDown={onEditKey}
-                          size="small"
-                        />
+                <div className="gallery-zones tc-template-shell__zones">
+                  <GalleryZone title={t('nursery.assistant.personaDocsTitle')}>
+                    <div className="tc-persona-doc-list" role="list">
+                      {PERSONA_DOC_FILES.map((fileName) => {
+                        const selected = detail?.type === 'personaDoc' && detail.fileName === fileName;
+                        const labelKey = fileName.replace(/\.md$/i, '') as 'SOUL' | 'USER' | 'IDENTITY';
+                        return (
+                          <button
+                            key={fileName}
+                            type="button"
+                            role="listitem"
+                            className={`tc-persona-doc-row${selected ? ' tc-persona-doc-row--selected' : ''}`}
+                            onClick={() => setDetail((prev) => (
+                              prev?.type === 'personaDoc' && prev.fileName === fileName
+                                ? null
+                                : { type: 'personaDoc', fileName }
+                            ))}
+                          >
+                            <span className="tc-persona-doc-row__icon" aria-hidden>
+                              <FileText size={12} />
+                            </span>
+                            <span className="tc-persona-doc-row__label">{t(`nursery.assistant.personaDocs.${labelKey}`)}</span>
+                            <span className="tc-persona-doc-row__file">{fileName}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </GalleryZone>
+
+                  <div id="nursery-assistant-capability" className="nursery-assistant-capability-stack">
+                    <div className="tc-template-model-context-row">
+                      <GalleryZone
+                        title={t('cards.model')}
+                        subtitle={t('nursery.template.sectionModelsSubtitle')}
+                      >
+                        <div className="tc-template-model-panel">
+                          <div className="tc-hero__models">
+                            {MODEL_SLOTS.map((slot) => (
+                              <div key={slot} className="tc-model-slot">
+                                <span className="tc-model-slot__label">{t(`modelSlots.${slot}.label`)}</span>
+                                <div className="tc-model-slot__select">
+                                  <Select
+                                    size="small"
+                                    options={buildModelOptions(slot)}
+                                    value={getModelValue(slot)}
+                                    onChange={(v) => handleModelChange(slot, v)}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </GalleryZone>
+
+                      <GalleryZone
+                        title={t('nursery.template.tokenTitle')}
+                        subtitle={contextZoneSubtitle}
+                      >
+                        <div className="tc-template-context-panel">
+                          <div className="tc-ctx__bar">
+                            {ctxTotal === 0 ? (
+                              <div className="tc-ctx__segment tc-ctx__segment--empty" />
+                            ) : ctxSegments.map(({ key, color, label }, i) => (
+                              segmentWidths[i] > 0 && (
+                                <div
+                                  key={key}
+                                  className="tc-ctx__segment"
+                                  style={{ width: `${segmentWidths[i]}%`, background: color }}
+                                  title={`${label}: ${formatTokenCount(tokenBreakdown[key as keyof typeof tokenBreakdown] as number)} (${fmtPct(tokenBreakdown[key as keyof typeof tokenBreakdown] as number, ctxTotal)})`}
+                                />
+                              )
+                            ))}
+                          </div>
+                          <div className="tc-ctx__legend tc-ctx__legend--template-split">
+                            {ctxSegments.map(({ key, color, label }) => {
+                              const val = tokenBreakdown[key as keyof typeof tokenBreakdown];
+                              const num = typeof val === 'number' ? val : 0;
+                              return (
+                                <div key={key} className="tc-ctx__legend-item">
+                                  <span className="tc-ctx__legend-dot" style={{ background: color }} />
+                                  <span className="tc-ctx__legend-name">{label}</span>
+                                  <span className="tc-ctx__legend-val">{formatTokenCount(num)}</span>
+                                  <span className="tc-ctx__legend-pct">{fmtPct(num, ctxTotal)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </GalleryZone>
+                    </div>
+
+                    <GalleryZone title={t('cards.skills')}>
+                      {skills.length === 0 ? (
+                        <p className="nursery-empty">{t('empty.skills')}</p>
                       ) : (
-                        <span
-                          className={`nursery-identity__meta-value${!item.value ? ' is-empty' : ''}`}
-                          onClick={() => startEdit(item.key)}
-                        >
-                          {item.value || item.placeholder}
-                        </span>
+                        renderSkillEnabledDisabledSplit()
                       )}
-                    </div>
-                  ))}
-                </div>
+                    </GalleryZone>
 
-                {/* Body editor */}
-                <div className="nursery-identity__body">
-                  <MEditor
-                    value={identityDocument.body}
-                    onChange={handleBodyChange}
-                    mode="ir"
-                    theme={isLight ? 'light' : 'dark'}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        </TabPane>
-
-        {/* Personality tab */}
-        <TabPane tabKey="personality" label={t('nursery.tabs.personality')} icon={<Radar size={13} />}>
-          <div className="nursery-tab-content nursery-tab-content--centered">
-            <PersonaRadar dims={radarDims} size={240} />
-            <div className="nursery-radar__dims">
-              {radarDims.map((d) => (
-                <div key={d.label} className="nursery-radar__dim-row">
-                  <span className="nursery-radar__dim-label">{d.label}</span>
-                  <div className="nursery-radar__dim-bar">
-                    <div
-                      className="nursery-radar__dim-fill"
-                      style={{ width: `${(d.value / 10) * 100}%` }}
-                    />
-                  </div>
-                  <span className="nursery-radar__dim-val">{d.value.toFixed(1)}</span>
-                </div>
-              ))}
-            </div>
-            <p className="nursery-radar__hint">{t('radar.subtitle')}</p>
-          </div>
-        </TabPane>
-
-        {/* Ability tab */}
-        <TabPane tabKey="ability" label={t('nursery.tabs.ability')} icon={<Wrench size={13} />}>
-          <div className="nursery-tab-content">
-            {/* Model overrides */}
-            <section className="nursery-section">
-              <div className="nursery-section__head">
-                <Star size={13} />
-                <span className="nursery-section__title">{t('cards.model')}</span>
-              </div>
-              <div className="nursery-model-grid">
-                {MODEL_SLOTS.map((slot) => {
-                  const Icon = slot === 'primary' ? Star : Zap;
-                  return (
-                    <div key={slot} className="nursery-model-cell">
-                      <div className="nursery-model-cell__meta">
-                        <Icon size={13} />
-                        <span className="nursery-model-cell__label">
-                          {t(`modelSlots.${slot}.label`)}
-                        </span>
-                      </div>
-                      <Select
-                        size="small"
-                        options={buildModelOptions(slot)}
-                        value={getModelValue(slot)}
-                        onChange={(v) => handleModelChange(slot, v)}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* Token breakdown */}
-            <section className="nursery-section">
-              <div className="nursery-section__head">
-                <span className="nursery-section__title">{t('nursery.template.tokenTitle')}</span>
-              </div>
-              <div className="nursery-token-breakdown">
-                <div className="nursery-token-row">
-                  <span>{t('nursery.template.tokenSystemPrompt')}</span>
-                  <span>~{formatTokenCount(tokenBreakdown.systemPrompt)} tok</span>
-                </div>
-                <div className="nursery-token-row">
-                  <span>{t('nursery.template.tokenToolInjection')}</span>
-                  <span>~{formatTokenCount(tokenBreakdown.toolInjection)} tok</span>
-                </div>
-                <div className="nursery-token-row">
-                  <span>{t('nursery.template.tokenRules')} ({enabledRulesCount})</span>
-                  <span>~{formatTokenCount(tokenBreakdown.rules)} tok</span>
-                </div>
-                <div className="nursery-token-row">
-                  <span>{t('nursery.template.tokenMemories')} ({enabledMemCount})</span>
-                  <span>~{formatTokenCount(tokenBreakdown.memories)} tok</span>
-                </div>
-                <div className="nursery-token-row nursery-token-row--total">
-                  <span>{t('nursery.template.tokenTotal')}</span>
-                  <span>~{formatTokenCount(tokenBreakdown.total)} tok ({tokenBreakdown.percentage})</span>
-                </div>
-                <div className="nursery-token-bar">
-                  <div
-                    className="nursery-token-bar__fill"
-                    style={{ width: `${Math.min(100, (tokenBreakdown.total / tokenBreakdown.contextWindowSize) * 100)}%` }}
-                  />
-                </div>
-              </div>
-            </section>
-
-            {/* Tools */}
-            <section className="nursery-section">
-              <div className="nursery-section__head">
-                <Wrench size={13} />
-                <span className="nursery-section__title">{t('cards.toolsMcp')}</span>
-                <span className="nursery-section__count">
-                  {enabledToolCount}/{availableTools.length}
-                </span>
-              </div>
-              <div className="nursery-tool-list">
-                {availableTools.map((tool) => {
-                  const enabled = agenticConfig?.available_tools?.includes(tool.name) ?? false;
-                  return (
-                    <div key={tool.name} className="nursery-tool-row">
-                      <div className="nursery-tool-row__meta">
-                        <span className="nursery-tool-row__name">{tool.name}</span>
-                        <span className="nursery-tool-row__desc">{tool.description}</span>
-                      </div>
-                      <Switch
-                        size="small"
-                        checked={enabled}
-                        loading={toolsLoading[tool.name]}
-                        onChange={() => handleToolToggle(tool.name)}
-                        aria-label={tool.name}
-                      />
-                    </div>
-                  );
-                })}
-                {availableTools.length === 0 && (
-                  <span className="nursery-empty">{t('empty.tools')}</span>
-                )}
-              </div>
-            </section>
-          </div>
-        </TabPane>
-
-        {/* Memory tab */}
-        <TabPane tabKey="memory" label={t('nursery.tabs.memory')} icon={<ListChecks size={13} />}>
-          <div className="nursery-tab-content">
-            {/* Rules */}
-            <section className="nursery-section">
-              <div className="nursery-section__head">
-                <ListChecks size={13} />
-                <span className="nursery-section__title">{t('cards.rules')}</span>
-                <span className="nursery-section__count">
-                  {rules.filter((r) => r.enabled).length}/{rules.length}
-                </span>
-              </div>
-              <div className="nursery-rule-list">
-                {rules.length === 0 ? (
-                  <span className="nursery-empty">{t('empty.rules')}</span>
-                ) : (
-                  rules.map((rule) => (
-                    <div key={`${rule.level}-${rule.name}`} className="nursery-rule-row">
-                      <span className="nursery-rule-row__name">{rule.name}</span>
-                      <span className="nursery-rule-row__level">
-                        {rule.level === RuleLevel.User ? 'user' : 'project'}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-
-            {/* Skills */}
-            <section className="nursery-section">
-              <div className="nursery-section__head">
-                <Puzzle size={13} />
-                <span className="nursery-section__title">{t('cards.skills')}</span>
-                <span className="nursery-section__count">
-                  {skills.filter((s) => s.enabled).length}/{skills.length}
-                </span>
-              </div>
-              <div className="nursery-skill-grid">
-                {skills.length === 0 ? (
-                  <span className="nursery-empty">{t('empty.skills')}</span>
-                ) : (
-                  skills.map((skill) => (
-                    <div
-                      key={skill.name}
-                      className={`nursery-skill-chip${skill.enabled ? ' is-on' : ''}`}
-                      title={skill.description}
+                    <GalleryZone
+                      title={t('nursery.template.builtinToolsSection')}
+                      tools={(
+                        <button
+                          type="button"
+                          className="gallery-plain-icon-btn"
+                          onClick={handleResetTools}
+                          title={t('actions.reset')}
+                          aria-label={t('actions.reset')}
+                        >
+                          <RefreshCw size={14} />
+                        </button>
+                      )}
                     >
-                      {skill.name}
-                    </div>
-                  ))
-                )}
+                      {builtinTools.length === 0 ? (
+                        <p className="nursery-empty">{t('empty.tools')}</p>
+                      ) : (
+                        renderToolEnabledDisabledSplit(builtinToolsEnabled, builtinToolsDisabled, false)
+                      )}
+                    </GalleryZone>
+
+                    <GalleryZone title={t('nursery.template.mcpToolsSection')}>
+                      {mcpServerIds.size === 0 ? (
+                        <div className="tc-mcp-empty">
+                          <Plug2 size={20} className="tc-mcp-empty__icon" />
+                          <span className="tc-mcp-empty__text">{t('nursery.template.mcpEmptyTitle')}</span>
+                          <span className="tc-mcp-empty__hint">{t('nursery.template.mcpEmptyHint')}</span>
+                        </div>
+                      ) : (
+                        <div className="tc-tool-groups">
+                          {[...mcpServerIds].map((serverId) => {
+                            const serverTools = mcpToolsByServer.get(serverId) ?? [];
+                            const serverInfo = mcpServers.find((s) => s.id === serverId);
+                            const status = serverInfo?.status ?? (serverTools.length > 0 ? 'Connected' : 'Unknown');
+                            const groupId = `mcp_${serverId}`;
+                            const mcpEnabled = serverTools.filter((tool) => agenticConfig?.available_tools?.includes(tool.name));
+                            const mcpDisabled = serverTools.filter((tool) => !agenticConfig?.available_tools?.includes(tool.name));
+
+                            return (
+                              <div key={serverId} className="tc-tool-block">
+                                {renderGroupHeader(
+                                  groupId,
+                                  serverInfo?.name ?? serverId,
+                                  serverTools.map((tool) => tool.name),
+                                  true,
+                                  status,
+                                  serverId,
+                                )}
+                                {!collapsedGroups.has(groupId) && serverTools.length > 0
+                                  && renderToolEnabledDisabledSplit(mcpEnabled, mcpDisabled, true)}
+                                {!collapsedGroups.has(groupId) && serverTools.length === 0 && (
+                                  <p className="tc-tool-block__empty">{t('nursery.template.mcpServerNoTools')}</p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </GalleryZone>
+                  </div>
+                </div>
               </div>
-            </section>
+            </div>
+            {renderDetailPanel()}
           </div>
-        </TabPane>
-      </Tabs>
+        )}
       </div>
 
       <ConfirmDialog

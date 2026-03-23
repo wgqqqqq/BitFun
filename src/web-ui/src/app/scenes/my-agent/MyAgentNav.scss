@@ -38,8 +38,8 @@
     }
   }
 
-  &__category {
-    margin-bottom: $size-gap-1;
+  &__category:not(:last-child) {
+    margin-bottom: $size-gap-6;
   }
 
   &__category-header {
