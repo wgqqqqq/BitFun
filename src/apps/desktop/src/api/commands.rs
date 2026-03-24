@@ -402,17 +402,12 @@ pub async fn test_ai_config_connection(
                             result.response_time_ms + image_result.response_time_ms;
 
                         if !image_result.success {
-                            let image_error = image_result
-                                .error_details
-                                .unwrap_or_else(|| "Unknown image input test error".to_string());
                             let merged = bitfun_core::util::types::ConnectionTestResult {
                                 success: false,
                                 response_time_ms,
                                 model_response: image_result.model_response.or(result.model_response),
-                                error_details: Some(format!(
-                                    "Basic connection passed, but multimodal image input test failed: {}",
-                                    image_error
-                                )),
+                                message_code: image_result.message_code,
+                                error_details: image_result.error_details,
                             };
                             info!(
                                 "AI config connection test completed: model={}, success={}, response_time={}ms",
@@ -425,7 +420,8 @@ pub async fn test_ai_config_connection(
                             success: true,
                             response_time_ms,
                             model_response: image_result.model_response.or(result.model_response),
-                            error_details: None,
+                            message_code: result.message_code,
+                            error_details: result.error_details,
                         };
                         info!(
                             "AI config connection test completed: model={}, success={}, response_time={}ms",
