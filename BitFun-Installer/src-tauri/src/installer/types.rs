@@ -93,7 +93,7 @@ impl Default for InstallOptions {
             add_to_path: true,
             launch_after_install: true,
             app_language: "zh-CN".to_string(),
-            theme_preference: "bitfun-dark".to_string(),
+            theme_preference: "bitfun-light".to_string(),
             model_config: None,
         }
     }

@@ -194,7 +194,7 @@ pub struct ThemesConfig {
 impl Default for ThemesConfig {
     fn default() -> Self {
         Self {
-            current: "bitfun-slate".to_string(),
+            current: "bitfun-light".to_string(),
             custom: None,
         }
     }
@@ -1067,7 +1067,7 @@ impl Default for EditorConfig {
                 side: "right".to_string(),
                 size: "proportional".to_string(),
             },
-            theme: "vs-dark".to_string(),
+            theme: "vs".to_string(),
             auto_save: "afterDelay".to_string(),
             auto_save_delay: 1000,
             format_on_save: true,

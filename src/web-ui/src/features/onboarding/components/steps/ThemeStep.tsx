@@ -16,14 +16,14 @@ interface ThemeStepProps {
 
 const THEME_OPTIONS = [
   { 
-    id: 'bitfun-dark', 
-    nameKey: 'theme.themes.bitfun-dark.name',
-    descKey: 'theme.themes.bitfun-dark.description'
-  },
-  { 
     id: 'bitfun-light', 
     nameKey: 'theme.themes.bitfun-light.name',
     descKey: 'theme.themes.bitfun-light.description'
+  },
+  { 
+    id: 'bitfun-dark', 
+    nameKey: 'theme.themes.bitfun-dark.name',
+    descKey: 'theme.themes.bitfun-dark.description'
   },
   { 
     id: 'bitfun-midnight', 

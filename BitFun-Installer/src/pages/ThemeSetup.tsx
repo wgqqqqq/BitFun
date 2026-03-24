@@ -155,9 +155,9 @@ const THEMES: InstallerTheme[] = [
 ];
 
 const THEME_DISPLAY_ORDER: ThemeId[] = [
+  'bitfun-light',
   'bitfun-slate',
   'bitfun-dark',
-  'bitfun-light',
   'bitfun-midnight',
   'bitfun-china-style',
   'bitfun-china-night',
@@ -223,7 +223,10 @@ export function ThemeSetup({ options, setOptions, onLaunch, onClose }: ThemeSetu
   };
 
   useEffect(() => {
-    const selectedTheme = THEMES.find((theme) => theme.id === options.themePreference) ?? THEMES[0];
+    const selectedTheme =
+      THEMES.find((theme) => theme.id === options.themePreference) ??
+      THEMES.find((theme) => theme.id === 'bitfun-light') ??
+      THEMES[0];
     const root = document.documentElement;
     const { colors } = selectedTheme;
 

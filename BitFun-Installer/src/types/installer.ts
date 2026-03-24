@@ -77,6 +77,6 @@ export const DEFAULT_OPTIONS: InstallOptions = {
   addToPath: true,
   launchAfterInstall: true,
   appLanguage: 'zh-CN',
-  themePreference: 'bitfun-slate',
+  themePreference: 'bitfun-light',
   modelConfig: null,
 };

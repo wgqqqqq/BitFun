@@ -19,15 +19,15 @@ pub struct ThemeConfig {
 
 impl Default for ThemeConfig {
     fn default() -> Self {
-        Self::get_builtin_theme("bitfun-slate").unwrap_or_else(|| Self {
-            id: "bitfun-slate".to_string(),
-            bg_primary: "#1a1c1e".to_string(),
-            bg_secondary: "#1a1c1e".to_string(),
-            bg_scene: "#1d2023".to_string(),
-            is_light: false,
-            text_primary: "#e4e6e8".to_string(),
-            text_muted: "#8a8d92".to_string(),
-            accent_color: "#6b9bd5".to_string(),
+        Self::get_builtin_theme("bitfun-light").unwrap_or_else(|| Self {
+            id: "bitfun-light".to_string(),
+            bg_primary: "#f4f4f4".to_string(),
+            bg_secondary: "#ffffff".to_string(),
+            bg_scene: "#ffffff".to_string(),
+            is_light: true,
+            text_primary: "#111827".to_string(),
+            text_muted: "rgba(0, 0, 0, 0.5)".to_string(),
+            accent_color: "#3b82f6".to_string(),
         })
     }
 }
@@ -145,7 +145,7 @@ impl ThemeConfig {
             .themes
             .as_ref()
             .map(|t| t.current.as_str())
-            .unwrap_or("bitfun-slate");
+            .unwrap_or("bitfun-light");
 
         match Self::get_builtin_theme(theme_id) {
             Some(config) => config,

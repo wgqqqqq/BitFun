@@ -94,7 +94,7 @@ export const useOnboardingStore = create<OnboardingState>()(
       skipped: false,
       
       selectedLanguage: 'zh-CN',
-      selectedTheme: 'bitfun-dark',
+      selectedTheme: 'bitfun-light',
       modelConfig: null,
       
       // Start onboarding

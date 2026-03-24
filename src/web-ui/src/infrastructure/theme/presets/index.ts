@@ -29,7 +29,7 @@ export const builtinThemes: ThemeConfig[] = [
 ];
 
  
-export const DEFAULT_THEME_ID = 'bitfun-slate';
+export const DEFAULT_THEME_ID = 'bitfun-light';
 
 
 
