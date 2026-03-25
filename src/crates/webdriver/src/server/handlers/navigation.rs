@@ -53,13 +53,7 @@ pub async fn navigate(
     }
 
     let executor = BridgeExecutor::from_session_id(state, &session_id).await?;
-    executor
-        .run_script(
-            "(url) => { window.location.href = url; return null; }",
-            vec![request.url.into()],
-            false,
-        )
-        .await?;
+    executor.navigate_to(&request.url).await?;
     executor.wait_for_page_load().await?;
     Ok(WebDriverResponse::null())
 }
@@ -77,13 +71,7 @@ pub async fn back(
     }
 
     let executor = BridgeExecutor::from_session_id(state, &session_id).await?;
-    executor
-        .run_script(
-            "() => { window.history.back(); return null; }",
-            Vec::new(),
-            false,
-        )
-        .await?;
+    executor.go_back().await?;
     executor.wait_for_page_load().await?;
     Ok(WebDriverResponse::null())
 }
@@ -101,13 +89,7 @@ pub async fn forward(
     }
 
     let executor = BridgeExecutor::from_session_id(state, &session_id).await?;
-    executor
-        .run_script(
-            "() => { window.history.forward(); return null; }",
-            Vec::new(),
-            false,
-        )
-        .await?;
+    executor.go_forward().await?;
     executor.wait_for_page_load().await?;
     Ok(WebDriverResponse::null())
 }
@@ -125,13 +107,7 @@ pub async fn refresh(
     }
 
     let executor = BridgeExecutor::from_session_id(state, &session_id).await?;
-    executor
-        .run_script(
-            "() => { window.location.reload(); return null; }",
-            Vec::new(),
-            false,
-        )
-        .await?;
+    executor.refresh_page().await?;
     executor.wait_for_page_load().await?;
     Ok(WebDriverResponse::null())
 }
@@ -143,7 +119,7 @@ pub async fn get_title(
     ensure_session(&state, &session_id).await?;
     let title = BridgeExecutor::from_session_id(state, &session_id)
         .await?
-        .run_script("() => document.title || ''", Vec::new(), false)
+        .get_title()
         .await?;
     Ok(WebDriverResponse::success(title))
 }
@@ -155,11 +131,7 @@ pub async fn get_source(
     ensure_session(&state, &session_id).await?;
     let source = BridgeExecutor::from_session_id(state, &session_id)
         .await?
-        .run_script(
-            "() => document.documentElement ? document.documentElement.outerHTML : ''",
-            Vec::new(),
-            false,
-        )
+        .get_source()
         .await?;
     Ok(WebDriverResponse::success(source))
 }

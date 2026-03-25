@@ -7,7 +7,7 @@ use tauri::AppHandle;
 use tauri::Manager;
 use tokio::sync::{oneshot, RwLock};
 
-use crate::bridge::BridgeResponse;
+use crate::runtime::BridgeResponse;
 use crate::webdriver::SessionManager;
 
 pub mod handlers;
@@ -19,7 +19,7 @@ pub struct AppState {
     pub preferred_label: String,
     port: u16,
     pub sessions: RwLock<SessionManager>,
-    pub pending_requests: Mutex<HashMap<String, oneshot::Sender<BridgeResponse>>>,
+    pub(crate) pending_requests: Mutex<HashMap<String, oneshot::Sender<BridgeResponse>>>,
     request_counter: AtomicU64,
 }
 

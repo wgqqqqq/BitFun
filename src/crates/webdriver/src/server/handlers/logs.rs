@@ -7,7 +7,8 @@ use axum::{
 use serde::Deserialize;
 use serde_json::json;
 
-use super::{ensure_session, run_script};
+use super::ensure_session;
+use crate::executor::BridgeExecutor;
 use crate::server::response::{WebDriverResponse, WebDriverResult};
 use crate::server::AppState;
 
@@ -35,13 +36,9 @@ pub async fn get(
         return Ok(WebDriverResponse::success(json!([])));
     }
 
-    let result = run_script(
-        state,
-        &session_id,
-        "() => window.__bitfunWd.takeLogs()",
-        Vec::new(),
-        false,
-    )
-    .await?;
+    let result = BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .take_logs()
+        .await?;
     Ok(WebDriverResponse::success(result))
 }

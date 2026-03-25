@@ -110,6 +110,53 @@ async function fetchDriverStatus(): Promise<boolean> {
   }
 }
 
+async function createProbeSession(): Promise<string> {
+  const response = await fetch(`http://${DRIVER_HOST}:${DRIVER_PORT}/session`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: '{}',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to create probe session: ${response.status} ${await response.text()}`);
+  }
+
+  const body = await response.json() as { value?: { sessionId?: string } };
+  const sessionId = body.value?.sessionId;
+  if (!sessionId) {
+    throw new Error('Probe session did not return a session id');
+  }
+  return sessionId;
+}
+
+async function deleteProbeSession(sessionId: string): Promise<void> {
+  await fetch(`http://${DRIVER_HOST}:${DRIVER_PORT}/session/${sessionId}`, {
+    method: 'DELETE',
+  }).catch(() => undefined);
+}
+
+async function probeDocumentReady(sessionId: string): Promise<boolean> {
+  const response = await fetch(`http://${DRIVER_HOST}:${DRIVER_PORT}/session/${sessionId}/execute/sync`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      script: '() => Boolean(document?.body)',
+      args: [],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Document ready probe failed: ${response.status} ${await response.text()}`);
+  }
+
+  const body = await response.json() as { value?: boolean };
+  return body.value === true;
+}
+
 async function waitForEmbeddedDriverReady(timeoutMs: number = 30000): Promise<void> {
   const startedAt = Date.now();
 
@@ -121,6 +168,35 @@ async function waitForEmbeddedDriverReady(timeoutMs: number = 30000): Promise<vo
   }
 
   throw new Error(`Embedded WebDriver did not become ready within ${timeoutMs}ms`);
+}
+
+async function waitForWebviewDocumentReady(timeoutMs: number = 30000): Promise<void> {
+  const startedAt = Date.now();
+  let lastError = 'document.body is not ready';
+
+  while (Date.now() - startedAt < timeoutMs) {
+    let sessionId: string | null = null;
+
+    try {
+      sessionId = await createProbeSession();
+      const ready = await probeDocumentReady(sessionId);
+      if (ready) {
+        await deleteProbeSession(sessionId);
+        return;
+      }
+      lastError = 'document.body is not ready';
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (sessionId) {
+        await deleteProbeSession(sessionId);
+      }
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+
+  throw new Error(`Webview document did not become ready within ${timeoutMs}ms: ${lastError}`);
 }
 
 async function fetchSessionLogs(
@@ -193,6 +269,7 @@ async function startBitFunApp(): Promise<void> {
   });
 
   await waitForEmbeddedDriverReady();
+  await waitForWebviewDocumentReady();
   console.log(`Embedded WebDriver is ready on http://${DRIVER_HOST}:${DRIVER_PORT}`);
 }
 

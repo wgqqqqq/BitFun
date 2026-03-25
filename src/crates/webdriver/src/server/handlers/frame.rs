@@ -7,7 +7,8 @@ use axum::{
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::{get_session, run_script};
+use super::get_session;
+use crate::executor::BridgeExecutor;
 use crate::server::response::{WebDriverErrorResponse, WebDriverResponse, WebDriverResult};
 use crate::server::AppState;
 use crate::webdriver::FrameId;
@@ -38,15 +39,11 @@ pub async fn switch_to_frame(
             let index = u32::try_from(index)
                 .map_err(|_| WebDriverErrorResponse::invalid_argument("Frame index too large"))?;
 
-            run_script(
-                state.clone(),
-                &session_id,
-                "(index) => { if (!window.__bitfunWd.validateFrameByIndex(index)) { throw new Error('Unable to locate frame'); } return true; }",
-                vec![Value::from(index)],
-                false,
-            )
-            .await
-            .map_err(|_| WebDriverErrorResponse::no_such_frame("Unable to locate frame"))?;
+            BridgeExecutor::from_session_id(state.clone(), &session_id)
+                .await?
+                .validate_frame_index(index)
+                .await
+                .map_err(|_| WebDriverErrorResponse::no_such_frame("Unable to locate frame"))?;
 
             let mut sessions = state.sessions.write().await;
             let session = sessions.get_mut(&session_id)?;
@@ -65,15 +62,11 @@ pub async fn switch_to_frame(
                 })?
                 .to_string();
 
-            run_script(
-                state.clone(),
-                &session_id,
-                "(elementId) => { if (!window.__bitfunWd.validateFrameElement(elementId)) { throw new Error('Unable to locate frame'); } return true; }",
-                vec![Value::String(element_id.clone())],
-                false,
-            )
-            .await
-            .map_err(|_| WebDriverErrorResponse::no_such_frame("Unable to locate frame"))?;
+            BridgeExecutor::from_session_id(state.clone(), &session_id)
+                .await?
+                .validate_frame_element(&element_id)
+                .await
+                .map_err(|_| WebDriverErrorResponse::no_such_frame("Unable to locate frame"))?;
 
             let mut sessions = state.sessions.write().await;
             let session = sessions.get_mut(&session_id)?;

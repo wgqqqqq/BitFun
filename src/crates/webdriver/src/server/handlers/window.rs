@@ -6,9 +6,11 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::json;
-use tauri::{Manager, PhysicalPosition, PhysicalSize, Position, Size};
+use tauri::Manager;
 
 use super::{ensure_session, get_session};
+use crate::executor::BridgeExecutor;
+use crate::platform::WindowRect;
 use crate::server::response::{WebDriverErrorResponse, WebDriverResponse, WebDriverResult};
 use crate::server::AppState;
 
@@ -34,6 +36,15 @@ pub struct WindowRectRequest {
     width: Option<u32>,
     #[serde(default)]
     height: Option<u32>,
+}
+
+fn rect_response(rect: WindowRect) -> WebDriverResponse {
+    WebDriverResponse::success(json!({
+        "x": rect.x,
+        "y": rect.y,
+        "width": rect.width,
+        "height": rect.height
+    }))
 }
 
 pub async fn get_window_handle(
@@ -115,30 +126,12 @@ pub async fn get_window_rect(
     State(state): State<Arc<AppState>>,
     Path(session_id): Path<String>,
 ) -> WebDriverResult {
-    let session = get_session(&state, &session_id).await?;
-    let window = state
-        .app
-        .get_webview_window(&session.current_window)
-        .ok_or_else(|| {
-            WebDriverErrorResponse::no_such_window(format!(
-                "Window not found: {}",
-                session.current_window
-            ))
-        })?;
-
-    let position = window.outer_position().map_err(|error| {
-        WebDriverErrorResponse::unknown_error(format!("Failed to read window position: {error}"))
-    })?;
-    let size = window.outer_size().map_err(|error| {
-        WebDriverErrorResponse::unknown_error(format!("Failed to read window size: {error}"))
-    })?;
-
-    Ok(WebDriverResponse::success(json!({
-        "x": position.x,
-        "y": position.y,
-        "width": size.width,
-        "height": size.height
-    })))
+    let _session = get_session(&state, &session_id).await?;
+    let rect = BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .get_window_rect()
+        .await?;
+    Ok(rect_response(rect))
 }
 
 pub async fn set_window_rect(
@@ -146,85 +139,41 @@ pub async fn set_window_rect(
     Path(session_id): Path<String>,
     Json(request): Json<WindowRectRequest>,
 ) -> WebDriverResult {
-    let session = get_session(&state, &session_id).await?;
-    let window = state
-        .app
-        .get_webview_window(&session.current_window)
-        .ok_or_else(|| {
-            WebDriverErrorResponse::no_such_window(format!(
-                "Window not found: {}",
-                session.current_window
-            ))
-        })?;
-
-    let current_position = window.outer_position().map_err(|error| {
-        WebDriverErrorResponse::unknown_error(format!("Failed to read window position: {error}"))
-    })?;
-    let current_size = window.outer_size().map_err(|error| {
-        WebDriverErrorResponse::unknown_error(format!("Failed to read window size: {error}"))
-    })?;
-
-    let x = request.x.unwrap_or(current_position.x);
-    let y = request.y.unwrap_or(current_position.y);
-    let width = request.width.unwrap_or(current_size.width);
-    let height = request.height.unwrap_or(current_size.height);
-
-    window
-        .set_position(Position::Physical(PhysicalPosition::new(x, y)))
-        .map_err(|error| {
-            WebDriverErrorResponse::unknown_error(format!("Failed to set window position: {error}"))
-        })?;
-    window
-        .set_size(Size::Physical(PhysicalSize::new(width, height)))
-        .map_err(|error| {
-            WebDriverErrorResponse::unknown_error(format!("Failed to set window size: {error}"))
-        })?;
-
-    Ok(WebDriverResponse::success(json!({
-        "x": x,
-        "y": y,
-        "width": width,
-        "height": height
-    })))
+    let _session = get_session(&state, &session_id).await?;
+    let executor = BridgeExecutor::from_session_id(state, &session_id).await?;
+    let current = executor.get_window_rect().await?;
+    let rect = executor
+        .set_window_rect(WindowRect {
+            x: request.x.unwrap_or(current.x),
+            y: request.y.unwrap_or(current.y),
+            width: request.width.unwrap_or(current.width),
+            height: request.height.unwrap_or(current.height),
+        })
+        .await?;
+    Ok(rect_response(rect))
 }
 
 pub async fn maximize(
     State(state): State<Arc<AppState>>,
     Path(session_id): Path<String>,
 ) -> WebDriverResult {
-    let session = get_session(&state, &session_id).await?;
-    let window = state
-        .app
-        .get_webview_window(&session.current_window)
-        .ok_or_else(|| {
-            WebDriverErrorResponse::no_such_window(format!(
-                "Window not found: {}",
-                session.current_window
-            ))
-        })?;
-    window.maximize().map_err(|error| {
-        WebDriverErrorResponse::unknown_error(format!("Failed to maximize window: {error}"))
-    })?;
-    get_window_rect(State(state), Path(session_id)).await
+    let _session = get_session(&state, &session_id).await?;
+    let rect = BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .maximize_window()
+        .await?;
+    Ok(rect_response(rect))
 }
 
 pub async fn minimize(
     State(state): State<Arc<AppState>>,
     Path(session_id): Path<String>,
 ) -> WebDriverResult {
-    let session = get_session(&state, &session_id).await?;
-    let window = state
-        .app
-        .get_webview_window(&session.current_window)
-        .ok_or_else(|| {
-            WebDriverErrorResponse::no_such_window(format!(
-                "Window not found: {}",
-                session.current_window
-            ))
-        })?;
-    window.minimize().map_err(|error| {
-        WebDriverErrorResponse::unknown_error(format!("Failed to minimize window: {error}"))
-    })?;
+    let _session = get_session(&state, &session_id).await?;
+    BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .minimize_window()
+        .await?;
     Ok(WebDriverResponse::null())
 }
 
@@ -232,18 +181,10 @@ pub async fn fullscreen(
     State(state): State<Arc<AppState>>,
     Path(session_id): Path<String>,
 ) -> WebDriverResult {
-    let session = get_session(&state, &session_id).await?;
-    let window = state
-        .app
-        .get_webview_window(&session.current_window)
-        .ok_or_else(|| {
-            WebDriverErrorResponse::no_such_window(format!(
-                "Window not found: {}",
-                session.current_window
-            ))
-        })?;
-    window.set_fullscreen(true).map_err(|error| {
-        WebDriverErrorResponse::unknown_error(format!("Failed to fullscreen window: {error}"))
-    })?;
-    get_window_rect(State(state), Path(session_id)).await
+    let _session = get_session(&state, &session_id).await?;
+    let rect = BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .fullscreen_window()
+        .await?;
+    Ok(rect_response(rect))
 }
