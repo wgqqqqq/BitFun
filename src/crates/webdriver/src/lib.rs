@@ -1,6 +1,6 @@
-mod bridge;
 mod executor;
 mod platform;
+mod runtime;
 pub mod server;
 pub mod webdriver;
 
@@ -32,10 +32,10 @@ pub fn maybe_start(app: AppHandle) {
         std::env::var("BITFUN_WEBDRIVER_LABEL").unwrap_or_else(|_| DEFAULT_WEBDRIVER_LABEL.into());
     let state = Arc::new(AppState::new(app.clone(), preferred_label, port));
 
-    bridge::register_listener(app, state.clone());
+    runtime::register_listener(app, state.clone());
     server::start(state);
 }
 
 pub fn handle_bridge_result(payload: Value) -> Result<(), String> {
-    bridge::handle_invoke_payload(payload)
+    runtime::handle_invoke_payload(payload)
 }

@@ -35,6 +35,51 @@ function pngDimensions(base64: string): { width: number; height: number } {
   };
 }
 
+async function installReactTrackedInput(id: string, initialValue: string): Promise<void> {
+  await browser.execute(({ inputId, value }) => {
+    let input = document.getElementById(inputId) as HTMLInputElement | null;
+    if (!input) {
+      input = document.createElement('input');
+      input.id = inputId;
+      input.style.position = 'fixed';
+      input.style.left = '24px';
+      input.style.top = '196px';
+      document.body.appendChild(input);
+    }
+
+    const proto = Object.getPrototypeOf(input) as HTMLInputElement;
+    const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+    if (!descriptor?.get || !descriptor?.set) {
+      throw new Error('Missing native value descriptor');
+    }
+
+    const tracker = { currentValue: value, syntheticChanges: 0 };
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      get() {
+        return descriptor.get!.call(this);
+      },
+      set(next: string) {
+        tracker.currentValue = String(next);
+        descriptor.set!.call(this, next);
+      },
+    });
+
+    descriptor.set.call(input, value);
+    input.focus();
+    input.setSelectionRange(value.length, value.length);
+    (window as typeof window & { __wdReactTracker?: typeof tracker }).__wdReactTracker = tracker;
+
+    input.oninput = () => {
+      const liveValue = descriptor.get!.call(input!);
+      if (liveValue !== tracker.currentValue) {
+        tracker.syntheticChanges += 1;
+        tracker.currentValue = liveValue;
+      }
+    };
+  }, { inputId: id, value: initialValue });
+}
+
 describe('L0 Embedded WebDriver Protocol', () => {
   it('supports alert lifecycle endpoints', async () => {
     const sessionId = browser.sessionId;
@@ -267,6 +312,94 @@ describe('L0 Embedded WebDriver Protocol', () => {
       return input?.value ?? '';
     });
     expect(finalValue).toBe('foobar!');
+  });
+
+  it('keeps React-style value tracking compatible with the element value endpoint', async () => {
+    const trackedInputId = `wd-react-tracked-${Date.now()}`;
+    await installReactTrackedInput(trackedInputId, 'foo');
+
+    const sessionId = browser.sessionId;
+    const input = await driverRequest<Record<string, string>>(`/session/${sessionId}/element`, {
+      method: 'POST',
+      body: JSON.stringify({
+        using: 'id',
+        value: trackedInputId,
+      }),
+    });
+    const inputId = input.value[ELEMENT_KEY];
+
+    await driverRequest<null>(`/session/${sessionId}/element/${inputId}/value`, {
+      method: 'POST',
+      body: JSON.stringify({
+        text: 'bar',
+      }),
+    });
+
+    const tracker = await browser.execute((inputSelectorId: string) => {
+      const wdWindow = window as typeof window & {
+        __wdReactTracker?: { currentValue: string; syntheticChanges: number };
+      };
+      return {
+        currentValue: wdWindow.__wdReactTracker?.currentValue ?? '',
+        syntheticChanges: wdWindow.__wdReactTracker?.syntheticChanges ?? 0,
+        liveValue: (document.getElementById(inputSelectorId) as HTMLInputElement | null)?.value ?? '',
+      };
+    }, trackedInputId);
+
+    expect(tracker.liveValue).toBe('foobar');
+    expect(tracker.syntheticChanges).toBe(1);
+    expect(tracker.currentValue).toBe('foobar');
+  });
+
+  it('keeps React-style value tracking compatible with printable key actions', async () => {
+    const trackedInputId = `wd-react-keys-${Date.now()}`;
+    await installReactTrackedInput(trackedInputId, 'foo');
+
+    const sessionId = browser.sessionId;
+    const input = await driverRequest<Record<string, string>>(`/session/${sessionId}/element`, {
+      method: 'POST',
+      body: JSON.stringify({
+        using: 'id',
+        value: trackedInputId,
+      }),
+    });
+    const inputId = input.value[ELEMENT_KEY];
+
+    await driverRequest<null>(`/session/${sessionId}/element/${inputId}/click`, {
+      method: 'POST',
+      body: '{}',
+    });
+
+    await driverRequest<null>(`/session/${sessionId}/actions`, {
+      method: 'POST',
+      body: JSON.stringify({
+        actions: [
+          {
+            type: 'key',
+            id: 'keyboard',
+            actions: [
+              { type: 'keyDown', value: 'b' },
+              { type: 'keyUp', value: 'b' },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const tracker = await browser.execute((inputSelectorId: string) => {
+      const wdWindow = window as typeof window & {
+        __wdReactTracker?: { currentValue: string; syntheticChanges: number };
+      };
+      return {
+        currentValue: wdWindow.__wdReactTracker?.currentValue ?? '',
+        syntheticChanges: wdWindow.__wdReactTracker?.syntheticChanges ?? 0,
+        liveValue: (document.getElementById(inputSelectorId) as HTMLInputElement | null)?.value ?? '',
+      };
+    }, trackedInputId);
+
+    expect(tracker.liveValue).toBe('foob');
+    expect(tracker.syntheticChanges).toBe(1);
+    expect(tracker.currentValue).toBe('foob');
   });
 
   it('returns cropped element screenshots', async () => {

@@ -7,7 +7,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::{ensure_session, run_script};
+use super::ensure_session;
+use crate::executor::BridgeExecutor;
 use crate::server::response::{WebDriverResponse, WebDriverResult};
 use crate::server::AppState;
 
@@ -148,15 +149,15 @@ pub async fn perform(
     Json(request): Json<PerformActionsRequest>,
 ) -> WebDriverResult {
     ensure_session(&state, &session_id).await?;
-    let actions_value = serde_json::to_value(&request.actions).unwrap_or(Value::Array(Vec::new()));
-    run_script(
-        state.clone(),
-        &session_id,
-        "async (actions) => { await window.__bitfunWd.performActions(actions); return null; }",
-        vec![actions_value],
-        false,
-    )
-    .await?;
+    let actions_value = serde_json::to_value(&request.actions)
+        .unwrap_or(Value::Array(Vec::new()))
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    BridgeExecutor::from_session_id(state.clone(), &session_id)
+        .await?
+        .perform_actions(&actions_value)
+        .await?;
 
     let mut sessions = state.sessions.write().await;
     let session = sessions.get_mut(&session_id)?;
@@ -185,14 +186,10 @@ pub async fn release(
         })
         .collect::<Vec<_>>();
 
-    run_script(
-        state.clone(),
-        &session_id,
-        "async (pressedKeys, pressedButtons) => { await window.__bitfunWd.releaseActions(pressedKeys, pressedButtons); return null; }",
-        vec![json!(pressed_keys), json!(pressed_buttons)],
-        false,
-    )
-    .await?;
+    BridgeExecutor::from_session_id(state.clone(), &session_id)
+        .await?
+        .release_actions(pressed_keys, pressed_buttons)
+        .await?;
 
     let mut sessions = state.sessions.write().await;
     let session = sessions.get_mut(&session_id)?;

@@ -1,49 +1,9 @@
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
-use serde::{Deserialize, Serialize};
 use tauri::{Runtime, Webview};
 
+use super::types::PrintOptions;
 use crate::server::response::WebDriverErrorResponse;
-
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct ElementScreenshotMetadata {
-    pub x: f64,
-    pub y: f64,
-    pub width: f64,
-    pub height: f64,
-    #[serde(rename = "devicePixelRatio", default = "default_dpr")]
-    pub device_pixel_ratio: f64,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PrintOptions {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub orientation: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub scale: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub background: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "pageWidth")]
-    pub page_width: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "pageHeight")]
-    pub page_height: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "marginTop")]
-    pub margin_top: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "marginBottom")]
-    pub margin_bottom: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "marginLeft")]
-    pub margin_left: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "marginRight")]
-    pub margin_right: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "shrinkToFit")]
-    pub shrink_to_fit: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "pageRanges")]
-    pub page_ranges: Option<Vec<String>>,
-}
-
-fn default_dpr() -> f64 {
-    1.0
-}
 
 pub async fn take_screenshot<R: Runtime>(
     webview: Webview<R>,
@@ -58,50 +18,6 @@ pub async fn print_page<R: Runtime>(
     options: &PrintOptions,
 ) -> Result<String, WebDriverErrorResponse> {
     imp::print_page(webview, timeout_ms, options).await
-}
-
-pub fn crop_screenshot(
-    screenshot_base64: String,
-    metadata: ElementScreenshotMetadata,
-) -> Result<String, WebDriverErrorResponse> {
-    let png_bytes = BASE64_STANDARD.decode(screenshot_base64).map_err(|error| {
-        WebDriverErrorResponse::unknown_error(format!("Invalid PNG payload: {error}"))
-    })?;
-    let image = image::load_from_memory(&png_bytes).map_err(|error| {
-        WebDriverErrorResponse::unknown_error(format!("Failed to decode screenshot PNG: {error}"))
-    })?;
-
-    let scale = if metadata.device_pixel_ratio.is_finite() && metadata.device_pixel_ratio > 0.0 {
-        metadata.device_pixel_ratio
-    } else {
-        1.0
-    };
-
-    let x = (metadata.x * scale).floor().max(0.0) as u32;
-    let y = (metadata.y * scale).floor().max(0.0) as u32;
-    let width = (metadata.width * scale).ceil().max(1.0) as u32;
-    let height = (metadata.height * scale).ceil().max(1.0) as u32;
-
-    let image_width = image.width();
-    let image_height = image.height();
-    if x >= image_width || y >= image_height {
-        return Err(WebDriverErrorResponse::unknown_error(
-            "Element screenshot rectangle is outside the viewport",
-        ));
-    }
-
-    let clamped_width = width.min(image_width.saturating_sub(x)).max(1);
-    let clamped_height = height.min(image_height.saturating_sub(y)).max(1);
-    let cropped = image.crop_imm(x, y, clamped_width, clamped_height);
-
-    let mut png = std::io::Cursor::new(Vec::new());
-    cropped
-        .write_to(&mut png, image::ImageFormat::Png)
-        .map_err(|error| {
-            WebDriverErrorResponse::unknown_error(format!("Failed to encode cropped PNG: {error}"))
-        })?;
-
-    Ok(BASE64_STANDARD.encode(png.into_inner()))
 }
 
 #[cfg(target_os = "macos")]
@@ -484,7 +400,6 @@ mod imp {
             let path = HSTRING::from(pdf_path_clone.to_string_lossy().to_string());
 
             if let Err(error) = webview7.PrintToPdf(&path, &settings, &handler) {
-                // PrintToPdf won't invoke the callback when the call itself fails.
                 if let Ok(mut guard) = handler_tx.lock() {
                     if let Some(tx) = guard.take() {
                         let _ = tx.send(Err(format!("PrintToPdf call failed: {error:?}")));
@@ -542,90 +457,75 @@ mod imp {
 
     #[implement(ICoreWebView2CapturePreviewCompletedHandler)]
     struct CapturePreviewHandler {
-        tx: CaptureSender,
+        sender: CaptureSender,
         stream: windows::Win32::System::Com::IStream,
     }
 
     impl CapturePreviewHandler {
-        fn new(tx: CaptureSender, stream: windows::Win32::System::Com::IStream) -> Self {
-            Self { tx, stream }
+        fn new(sender: CaptureSender, stream: windows::Win32::System::Com::IStream) -> Self {
+            Self { sender, stream }
         }
     }
 
     impl ICoreWebView2CapturePreviewCompletedHandler_Impl for CapturePreviewHandler_Impl {
-        fn Invoke(&self, errorcode: windows::core::HRESULT) -> windows::core::Result<()> {
-            let response = if errorcode.is_err() {
-                Err(format!("Capture preview failed: {errorcode:?}"))
-            } else {
+        fn Invoke(&self, error_code: windows::core::HRESULT) -> windows::core::Result<()> {
+            let response = if error_code.is_ok() {
                 unsafe {
                     let mut stat = std::mem::zeroed();
-                    if self.stream.Stat(&raw mut stat, STATFLAG_NONAME).is_err() {
-                        return Ok(());
-                    }
-                    let size = usize::try_from(stat.cbSize).unwrap_or(0);
-                    if size == 0 {
-                        Err("Capture preview returned empty data".to_string())
-                    } else {
-                        let _ = self.stream.Seek(0, STREAM_SEEK_SET, None);
-                        let mut buffer = vec![0u8; size];
-                        let mut bytes_read = 0u32;
-                        if self
-                            .stream
-                            .Read(
-                                buffer.as_mut_ptr().cast(),
-                                u32::try_from(size).unwrap_or(u32::MAX),
-                                Some(&raw mut bytes_read),
-                            )
-                            .is_err()
-                        {
-                            Err("Failed to read preview stream".to_string())
-                        } else {
-                            buffer.truncate(bytes_read as usize);
-                            Ok(BASE64_STANDARD.encode(buffer))
-                        }
-                    }
+                    self.stream.Stat(&mut stat, STATFLAG_NONAME)?;
+                    let size = stat.cbSize;
+                    self.stream.Seek(0, STREAM_SEEK_SET, None)?;
+                    let mut bytes = vec![0u8; size as usize];
+                    let mut read = 0;
+                    self.stream.Read(bytes.as_mut_ptr() as _, bytes.len() as u32, Some(&mut read))?;
+                    bytes.truncate(read as usize);
+                    Ok(BASE64_STANDARD.encode(bytes))
                 }
+            } else {
+                Err(format!("CapturePreview completion failed: {error_code:?}"))
             };
 
-            if let Ok(mut guard) = self.tx.lock() {
-                if let Some(tx) = guard.take() {
-                    let _ = tx.send(response);
+            if let Ok(mut guard) = self.sender.lock() {
+                if let Some(sender) = guard.take() {
+                    let _ = sender.send(response);
                 }
             }
+
             Ok(())
         }
     }
 
     #[implement(ICoreWebView2PrintToPdfCompletedHandler)]
     struct PrintToPdfHandler {
-        tx: PrintSender,
+        sender: PrintSender,
     }
 
     impl PrintToPdfHandler {
-        fn new(tx: PrintSender) -> Self {
-            Self { tx }
+        fn new(sender: PrintSender) -> Self {
+            Self { sender }
         }
     }
 
     impl ICoreWebView2PrintToPdfCompletedHandler_Impl for PrintToPdfHandler_Impl {
         fn Invoke(
             &self,
-            errorcode: windows::core::HRESULT,
-            issuccessful: BOOL,
+            error_code: windows::core::HRESULT,
+            is_successful: BOOL,
         ) -> windows::core::Result<()> {
-            let response = if errorcode.is_err() {
-                Err(format!("PrintToPdf failed: {errorcode:?}"))
-            } else if !issuccessful.as_bool() {
-                Err("PrintToPdf was not successful".to_string())
-            } else {
+            let response = if error_code.is_ok() && is_successful.as_bool() {
                 Ok(())
+            } else if error_code.is_ok() {
+                Err("PrintToPdf reported failure".to_string())
+            } else {
+                Err(format!("PrintToPdf completion failed: {error_code:?}"))
             };
 
-            if let Ok(mut guard) = self.tx.lock() {
-                if let Some(tx) = guard.take() {
-                    let _ = tx.send(response);
+            if let Ok(mut guard) = self.sender.lock() {
+                if let Some(sender) = guard.take() {
+                    let _ = sender.send(response);
                 }
             }
+
             Ok(())
         }
     }
@@ -637,10 +537,10 @@ mod imp {
     use std::time::Duration;
 
     use super::*;
-    use glib::MainContext;
-    use gtk::cairo::ImageSurface;
+    use gtk::prelude::*;
+    use gtk::{gio, glib};
     use tokio::sync::oneshot;
-    use webkit2gtk::{PrintOperationExt, SnapshotOptions, SnapshotRegion, WebViewExt};
+    use webkit2gtk::prelude::*;
 
     pub async fn take_screenshot<R: Runtime>(
         webview: Webview<R>,
@@ -649,36 +549,31 @@ mod imp {
         let (tx, rx) = oneshot::channel();
 
         let result = webview.with_webview(move |platform_webview| {
-            let webview = platform_webview.inner().clone();
-            let tx = Arc::new(std::sync::Mutex::new(Some(tx)));
-            let context = MainContext::default();
+            let webview = platform_webview.inner();
+            let sender = Arc::new(std::sync::Mutex::new(Some(tx)));
 
-            context.spawn_local(async move {
-                let response = match webview
-                    .snapshot_future(SnapshotRegion::Visible, SnapshotOptions::NONE)
-                    .await
-                {
-                    Ok(surface) => {
-                        let mut png_bytes = Vec::new();
-                        match ImageSurface::try_from(surface) {
-                            Ok(image_surface) => match image_surface.write_to_png(&mut png_bytes) {
-                                Ok(()) => Ok(BASE64_STANDARD.encode(png_bytes)),
-                                Err(error) => Err(format!("Failed to encode PNG: {error}")),
-                            },
-                            Err(error) => {
-                                Err(format!("Failed to convert snapshot surface: {error:?}"))
-                            }
+            webview.snapshot(
+                webkit2gtk::SnapshotRegion::FullDocument,
+                webkit2gtk::SnapshotOptions::TRANSPARENT_BACKGROUND,
+                None::<&gio::Cancellable>,
+                move |result| {
+                    let response = result
+                        .map_err(|error| error.to_string())
+                        .and_then(|surface| {
+                            let mut png = Vec::new();
+                            surface
+                                .write_to_png(&mut png)
+                                .map_err(|error| error.to_string())?;
+                            Ok(BASE64_STANDARD.encode(png))
+                        });
+
+                    if let Ok(mut guard) = sender.lock() {
+                        if let Some(sender) = guard.take() {
+                            let _ = sender.send(response);
                         }
                     }
-                    Err(error) => Err(error.to_string()),
-                };
-
-                if let Ok(mut guard) = tx.lock() {
-                    if let Some(tx) = guard.take() {
-                        let _ = tx.send(response);
-                    }
-                }
-            });
+                },
+            );
         });
 
         if let Err(error) = result {
@@ -695,7 +590,8 @@ mod imp {
         timeout_ms: u64,
         options: &PrintOptions,
     ) -> Result<String, WebDriverErrorResponse> {
-        let (tx, rx) = oneshot::channel::<Result<(), String>>();
+        let (tx, rx) = oneshot::channel();
+        let tx = Arc::new(std::sync::Mutex::new(Some(tx)));
 
         let temp_dir = tempfile::TempDir::new().map_err(|error| {
             WebDriverErrorResponse::unknown_error(format!("Failed to create temp dir: {error}"))
@@ -703,61 +599,72 @@ mod imp {
         let pdf_path = temp_dir.path().join("print.pdf");
         let pdf_path_clone = pdf_path.clone();
 
-        let orientation = options.orientation.clone();
-        let page_width = options.page_width;
-        let page_height = options.page_height;
-        let margin_top = options.margin_top;
-        let margin_bottom = options.margin_bottom;
-        let margin_left = options.margin_left;
-        let margin_right = options.margin_right;
+        let options = options.clone();
 
         let result = webview.with_webview(move |platform_webview| {
-            let webview = platform_webview.inner().clone();
-            let print_operation = webkit2gtk::PrintOperation::new(&webview);
+            let webview = platform_webview.inner();
+            let operation = webkit2gtk::PrintOperation::new(webview);
+            let settings = gtk::PrintSettings::new();
             let page_setup = gtk::PageSetup::new();
 
-            let width_points = page_width.unwrap_or(21.0) * 28.35;
-            let height_points = page_height.unwrap_or(29.7) * 28.35;
-            let paper_size = gtk::PaperSize::new_custom(
-                "custom",
-                "Custom",
-                width_points,
-                height_points,
-                gtk::Unit::Points,
-            );
-            page_setup.set_paper_size(&paper_size);
-
-            if orientation.as_deref() == Some("landscape") {
-                page_setup.set_orientation(gtk::PageOrientation::Landscape);
-            } else {
-                page_setup.set_orientation(gtk::PageOrientation::Portrait);
+            if let Some(orientation) = options.orientation.as_deref() {
+                page_setup.set_orientation(if orientation == "landscape" {
+                    gtk::PageOrientation::Landscape
+                } else {
+                    gtk::PageOrientation::Portrait
+                });
             }
 
-            page_setup.set_top_margin(margin_top.unwrap_or(1.0) * 28.35, gtk::Unit::Points);
-            page_setup.set_bottom_margin(margin_bottom.unwrap_or(1.0) * 28.35, gtk::Unit::Points);
-            page_setup.set_left_margin(margin_left.unwrap_or(1.0) * 28.35, gtk::Unit::Points);
-            page_setup.set_right_margin(margin_right.unwrap_or(1.0) * 28.35, gtk::Unit::Points);
-            print_operation.set_page_setup(&page_setup);
+            let paper_size = gtk::PaperSize::new_custom(
+                "bitfun",
+                "BitFun Custom",
+                options.page_width.unwrap_or(21.0),
+                options.page_height.unwrap_or(29.7),
+                gtk::Unit::Mm,
+            );
+            page_setup.set_paper_size(&paper_size);
+            page_setup.set_top_margin(options.margin_top.unwrap_or(1.0) * 10.0, gtk::Unit::Mm);
+            page_setup.set_bottom_margin(
+                options.margin_bottom.unwrap_or(1.0) * 10.0,
+                gtk::Unit::Mm,
+            );
+            page_setup.set_left_margin(options.margin_left.unwrap_or(1.0) * 10.0, gtk::Unit::Mm);
+            page_setup.set_right_margin(
+                options.margin_right.unwrap_or(1.0) * 10.0,
+                gtk::Unit::Mm,
+            );
 
-            let settings = gtk::PrintSettings::new();
-            settings.set_printer("Print to File");
             settings.set(
                 gtk::PRINT_SETTINGS_OUTPUT_URI,
-                Some(&format!("file://{}", pdf_path_clone.display())),
+                &glib::Value::from(format!("file://{}", pdf_path_clone.display())),
             );
-            settings.set(gtk::PRINT_SETTINGS_OUTPUT_FILE_FORMAT, Some("pdf"));
-            print_operation.set_print_settings(&settings);
 
-            let tx = Arc::new(std::sync::Mutex::new(Some(tx)));
-            print_operation.connect_finished(move |_operation| {
-                if let Ok(mut guard) = tx.lock() {
-                    if let Some(tx) = guard.take() {
-                        let _ = tx.send(Ok(()));
+            operation.set_print_settings(&settings);
+            operation.set_default_page_setup(&page_setup);
+
+            let sender = tx.clone();
+            operation.connect_done(move |_, result| {
+                let response = match result {
+                    gtk::PrintOperationResult::Apply => Ok(()),
+                    gtk::PrintOperationResult::Cancel => Err("Print cancelled".to_string()),
+                    gtk::PrintOperationResult::Error => Err("Print failed".to_string()),
+                    _ => Err("Unexpected print result".to_string()),
+                };
+
+                if let Ok(mut guard) = sender.lock() {
+                    if let Some(sender) = guard.take() {
+                        let _ = sender.send(response);
                     }
                 }
             });
 
-            let () = print_operation.print();
+            if let Err(error) = operation.run(gtk::PrintOperationAction::Export, None::<&gtk::Window>) {
+                if let Ok(mut guard) = tx.lock() {
+                    if let Some(sender) = guard.take() {
+                        let _ = sender.send(Err(error.to_string()));
+                    }
+                }
+            }
         });
 
         if let Err(error) = result {

@@ -7,7 +7,8 @@ use axum::{
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::{ensure_session, run_script};
+use super::ensure_session;
+use crate::executor::BridgeExecutor;
 use crate::server::response::{WebDriverResponse, WebDriverResult};
 use crate::server::AppState;
 
@@ -24,7 +25,10 @@ pub async fn execute_sync(
     Json(request): Json<ExecuteRequest>,
 ) -> WebDriverResult {
     ensure_session(&state, &session_id).await?;
-    let result = run_script(state, &session_id, &request.script, request.args, false).await?;
+    let result = BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .run_script(&request.script, request.args, false)
+        .await?;
     Ok(WebDriverResponse::success(result))
 }
 
@@ -34,6 +38,9 @@ pub async fn execute_async(
     Json(request): Json<ExecuteRequest>,
 ) -> WebDriverResult {
     ensure_session(&state, &session_id).await?;
-    let result = run_script(state, &session_id, &request.script, request.args, true).await?;
+    let result = BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .run_script(&request.script, request.args, true)
+        .await?;
     Ok(WebDriverResponse::success(result))
 }

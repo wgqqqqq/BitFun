@@ -6,7 +6,8 @@ use axum::{
 };
 use serde::Deserialize;
 
-use super::{ensure_session, run_script};
+use super::ensure_session;
+use crate::executor::BridgeExecutor;
 use crate::server::response::{WebDriverErrorResponse, WebDriverResponse, WebDriverResult};
 use crate::server::AppState;
 
@@ -20,15 +21,11 @@ pub async fn dismiss(
     Path(session_id): Path<String>,
 ) -> WebDriverResult {
     ensure_session(&state, &session_id).await?;
-    run_script(
-        state,
-        &session_id,
-        "() => window.__bitfunWd.closeAlert(false)",
-        Vec::new(),
-        false,
-    )
-    .await
-    .map_err(|_| WebDriverErrorResponse::no_such_alert("No alert is currently open"))?;
+    BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .dismiss_alert()
+        .await
+        .map_err(|_| WebDriverErrorResponse::no_such_alert("No alert is currently open"))?;
     Ok(WebDriverResponse::null())
 }
 
@@ -37,15 +34,11 @@ pub async fn accept(
     Path(session_id): Path<String>,
 ) -> WebDriverResult {
     ensure_session(&state, &session_id).await?;
-    run_script(
-        state,
-        &session_id,
-        "() => window.__bitfunWd.closeAlert(true)",
-        Vec::new(),
-        false,
-    )
-    .await
-    .map_err(|_| WebDriverErrorResponse::no_such_alert("No alert is currently open"))?;
+    BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .accept_alert()
+        .await
+        .map_err(|_| WebDriverErrorResponse::no_such_alert("No alert is currently open"))?;
     Ok(WebDriverResponse::null())
 }
 
@@ -54,15 +47,11 @@ pub async fn get_text(
     Path(session_id): Path<String>,
 ) -> WebDriverResult {
     ensure_session(&state, &session_id).await?;
-    let text = run_script(
-        state,
-        &session_id,
-        "() => window.__bitfunWd.getAlertText()",
-        Vec::new(),
-        false,
-    )
-    .await
-    .map_err(|_| WebDriverErrorResponse::no_such_alert("No alert is currently open"))?;
+    let text = BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .get_alert_text()
+        .await
+        .map_err(|_| WebDriverErrorResponse::no_such_alert("No alert is currently open"))?;
     Ok(WebDriverResponse::success(text))
 }
 
@@ -72,15 +61,11 @@ pub async fn send_text(
     Json(request): Json<SendAlertTextRequest>,
 ) -> WebDriverResult {
     ensure_session(&state, &session_id).await?;
-    run_script(
-        state,
-        &session_id,
-        "(text) => window.__bitfunWd.sendAlertText(text)",
-        vec![request.text.into()],
-        false,
-    )
-    .await
-    .map_err(|error| {
+    BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .send_alert_text(&request.text)
+        .await
+        .map_err(|error| {
         if error.error == "javascript error" {
             WebDriverErrorResponse::no_such_alert("No prompt is currently open")
         } else {

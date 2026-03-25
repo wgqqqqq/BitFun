@@ -7,7 +7,8 @@ use axum::{
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::{ensure_session, run_script};
+use super::ensure_session;
+use crate::executor::BridgeExecutor;
 use crate::server::response::{WebDriverErrorResponse, WebDriverResponse, WebDriverResult};
 use crate::server::AppState;
 
@@ -22,15 +23,11 @@ pub async fn get_shadow_root(
     Path((session_id, element_id)): Path<(String, String)>,
 ) -> WebDriverResult {
     ensure_session(&state, &session_id).await?;
-    let value = run_script(
-        state,
-        &session_id,
-        "(elementId) => window.__bitfunWd.getShadowRoot(elementId)",
-        vec![Value::String(element_id)],
-        false,
-    )
-    .await
-    .map_err(|_| {
+    let value = BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .get_shadow_root(&element_id)
+        .await
+        .map_err(|_| {
         WebDriverErrorResponse::no_such_shadow_root("Element does not have a shadow root")
     })?;
 
@@ -49,18 +46,11 @@ pub async fn find_element_in_shadow(
     Json(request): Json<FindShadowRequest>,
 ) -> WebDriverResult {
     ensure_session(&state, &session_id).await?;
-    let value = run_script(
-        state,
-        &session_id,
-        "(shadowId, using, value) => { const results = window.__bitfunWd.findElementsFromShadow(shadowId, using, value); return results.length ? results[0] : null; }",
-        vec![
-            Value::String(shadow_id),
-            Value::String(request.using),
-            Value::String(request.value),
-        ],
-        false,
-    )
-    .await?;
+    let results = BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .find_elements_from_shadow(&shadow_id, &request.using, &request.value)
+        .await?;
+    let value = results.into_iter().next().unwrap_or(Value::Null);
 
     if value.is_null() {
         return Err(WebDriverErrorResponse::no_such_element(
@@ -77,17 +67,9 @@ pub async fn find_elements_in_shadow(
     Json(request): Json<FindShadowRequest>,
 ) -> WebDriverResult {
     ensure_session(&state, &session_id).await?;
-    let value = run_script(
-        state,
-        &session_id,
-        "(shadowId, using, value) => window.__bitfunWd.findElementsFromShadow(shadowId, using, value)",
-        vec![
-            Value::String(shadow_id),
-            Value::String(request.using),
-            Value::String(request.value),
-        ],
-        false,
-    )
-    .await?;
+    let value = BridgeExecutor::from_session_id(state, &session_id)
+        .await?
+        .find_elements_from_shadow(&shadow_id, &request.using, &request.value)
+        .await?;
     Ok(WebDriverResponse::success(value))
 }
