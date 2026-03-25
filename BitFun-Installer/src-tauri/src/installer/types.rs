@@ -46,6 +46,15 @@ pub struct ModelConfig {
     pub custom_headers_mode: Option<String>,
 }
 
+/// One entry from provider model discovery (installer-local; mirrors main app shape).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteModelInfo {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionTestResult {

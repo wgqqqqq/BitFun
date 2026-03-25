@@ -54,8 +54,35 @@ function buildProviderPatch(settingsAiModel) {
   return providerPatch;
 }
 
-function buildModelPatch(settingsAiModel, languageTag) {
+function buildFormPatch(form) {
+  if (!form || typeof form !== 'object') return {};
+  return {
+    baseUrl: form.baseUrl ?? '',
+    apiKey: form.apiKey ?? '',
+    apiKeyPlaceholder: form.apiKeyPlaceholder ?? '',
+    provider: form.provider ?? '',
+    providerPlaceholder: form.providerPlaceholder ?? '',
+    modelSelection: form.modelSelection ?? '',
+    modelName: form.modelName ?? '',
+    resolvedUrlLabel: form.resolvedUrlLabel ?? '',
+  };
+}
+
+function buildFormatsPatch(formats) {
+  if (!formats || typeof formats !== 'object') return {};
+  return {
+    openaiCompatible: formats.openaiCompatible ?? '',
+    responsesApi: formats.responsesApi ?? '',
+    claudeApi: formats.claudeApi ?? '',
+    geminiApi: formats.geminiApi ?? '',
+  };
+}
+
+function buildModelPatch(settingsAiModel, languageTag, components) {
   const isZh = languageTag === 'zh';
+  const form = get(settingsAiModel, 'form', {});
+  const formats = get(settingsAiModel, 'formats', {});
+  const input = get(components, 'input', {});
   return {
     description: get(
       settingsAiModel,
@@ -66,19 +93,40 @@ function buildModelPatch(settingsAiModel, languageTag) {
     selectProvider: get(settingsAiModel, 'providerSelection.orSelectProvider', 'Select a provider...'),
     customProvider: get(settingsAiModel, 'providerSelection.customTitle', 'Custom'),
     getApiKey: get(settingsAiModel, 'providerSelection.getApiKey', 'How to get an API Key?'),
+    fillApiKeyBeforeFetch: get(
+      settingsAiModel,
+      'providerSelection.fillApiKeyBeforeFetch',
+      'Enter the API key before fetching models'
+    ),
+    fetchingModels: get(settingsAiModel, 'providerSelection.fetchingModels', 'Fetching model list...'),
+    fetchFailedFallback: get(
+      settingsAiModel,
+      'providerSelection.fetchFailedFallback',
+      'Failed to fetch model list, fell back to common preset models'
+    ),
+    fetchEmptyFallback: get(
+      settingsAiModel,
+      'providerSelection.fetchEmptyFallback',
+      'Provider returned no models, fell back to common preset models'
+    ),
+    usingPresetModels: get(
+      settingsAiModel,
+      'providerSelection.usingPresetModels',
+      'Currently showing common preset models'
+    ),
     modelNamePlaceholder: get(
       settingsAiModel,
       'providerSelection.inputModelName',
       get(settingsAiModel, 'form.modelName', 'Enter model name...')
     ),
     modelNameSelectPlaceholder: get(settingsAiModel, 'providerSelection.selectModel', 'Select a model...'),
-    modelSearchPlaceholder: get(
-      settingsAiModel,
-      'providerSelection.searchOrInputModel',
-      'Search or enter a custom model name...'
-    ),
     modelNoResults: isZh ? '没有匹配的模型' : 'No matching models',
-    customModel: get(settingsAiModel, 'providerSelection.useCustomModel', 'Use custom model name'),
+    /** Installer: use addCustomModel (not useCustomModel / "Press Enter") for the extra dropdown option */
+    addCustomModel: get(settingsAiModel, 'providerSelection.addCustomModel', 'Add Custom Model'),
+    form: buildFormPatch(form),
+    formats: buildFormatsPatch(formats),
+    showSecret: get(input, 'show', 'Show'),
+    hideSecret: get(input, 'hide', 'Hide'),
     baseUrlPlaceholder: isZh
       ? '示例：https://open.bigmodel.cn/api/paas/v4/chat/completions'
       : 'e.g., https://open.bigmodel.cn/api/paas/v4/chat/completions',
@@ -135,13 +183,28 @@ function syncOne(languageTag) {
     'settings',
     'ai-model.json'
   );
+  const sourceComponentsPath = path.join(
+    PROJECT_ROOT,
+    'src',
+    'web-ui',
+    'src',
+    'locales',
+    localeDir,
+    'components.json'
+  );
 
   const targetPath = path.join(INSTALLER_ROOT, 'src', 'i18n', 'locales', installerLocale);
 
   const settingsAiModel = readJson(sourceAiModelPath);
+  let components = {};
+  try {
+    components = readJson(sourceComponentsPath);
+  } catch {
+    // optional
+  }
   const target = readJson(targetPath);
 
-  const patch = buildModelPatch(settingsAiModel, languageTag);
+  const patch = buildModelPatch(settingsAiModel, languageTag, components);
   target.model = mergeDeep(target.model || {}, patch);
 
   writeJson(targetPath, target);

@@ -1,7 +1,10 @@
 //! Tauri commands exposed to the frontend installer UI.
 
 use super::extract::{self, ESTIMATED_INSTALL_SIZE};
-use super::types::{ConnectionTestResult, DiskSpaceInfo, InstallOptions, InstallProgress, ModelConfig};
+use super::model_list;
+use super::types::{
+    ConnectionTestResult, DiskSpaceInfo, InstallOptions, InstallProgress, ModelConfig, RemoteModelInfo,
+};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -662,15 +665,79 @@ pub async fn test_model_config_connection(model_config: ModelConfig) -> Result<C
     }
 }
 
+/// List remote models using the same discovery rules as the main app (installer-local HTTP).
+#[tauri::command]
+pub async fn list_model_config_models(model_config: ModelConfig) -> Result<Vec<RemoteModelInfo>, String> {
+    if model_config.api_key.trim().is_empty() {
+        return Err("API key is required".to_string());
+    }
+    if model_config.base_url.trim().is_empty() {
+        return Err("Base URL is required".to_string());
+    }
+    model_list::list_remote_models(&model_config).await
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+/// API format for HTTP test (connection + headers).
 fn normalize_api_format(model: &ModelConfig) -> String {
     let normalized = model.format.trim().to_ascii_lowercase();
-    if normalized == "anthropic" {
-        "anthropic".to_string()
-    } else {
-        "openai".to_string()
+    match normalized.as_str() {
+        "anthropic" => "anthropic".to_string(),
+        "gemini" | "google" => "gemini".to_string(),
+        "responses" | "response" => "responses".to_string(),
+        _ => "openai".to_string(),
     }
+}
+
+fn storage_format(model: &ModelConfig) -> String {
+    model.format.trim().to_ascii_lowercase()
+}
+
+/// Stored `request_url` aligned with settings `resolveRequestUrl` (no bitfun_core).
+fn resolve_stored_request_url(base_url: &str, format: &str) -> String {
+    let trimmed = base_url.trim().trim_end_matches('/');
+    if trimmed.ends_with('#') {
+        return trimmed[..trimmed.len().saturating_sub(1)]
+            .trim_end_matches('/')
+            .to_string();
+    }
+    match format {
+        "openai" => {
+            if trimmed.ends_with("chat/completions") {
+                trimmed.to_string()
+            } else {
+                format!("{}/chat/completions", trimmed)
+            }
+        }
+        "responses" | "response" => {
+            if trimmed.ends_with("responses") {
+                trimmed.to_string()
+            } else {
+                format!("{}/responses", trimmed)
+            }
+        }
+        "anthropic" => {
+            if trimmed.ends_with("v1/messages") {
+                trimmed.to_string()
+            } else {
+                format!("{}/v1/messages", trimmed)
+            }
+        }
+        "gemini" | "google" => gemini_installer_base_url(trimmed).to_string(),
+        _ => trimmed.to_string(),
+    }
+}
+
+fn gemini_installer_base_url(url: &str) -> &str {
+    let mut u = url;
+    if let Some(pos) = u.find("/v1beta") {
+        u = &u[..pos];
+    }
+    if let Some(pos) = u.find("/models/") {
+        u = &u[..pos];
+    }
+    u.trim_end_matches('/')
 }
 
 fn append_endpoint(base_url: &str, endpoint: &str) -> String {
@@ -684,7 +751,7 @@ fn append_endpoint(base_url: &str, endpoint: &str) -> String {
     format!("{}/{}", base.trim_end_matches('/'), endpoint)
 }
 
-fn resolve_request_url(base_url: &str, format: &str) -> String {
+fn resolve_request_url(base_url: &str, format: &str, model_name: &str) -> String {
     let trimmed = base_url.trim().trim_end_matches('/').to_string();
     if trimmed.is_empty() {
         return String::new();
@@ -696,7 +763,12 @@ fn resolve_request_url(base_url: &str, format: &str) -> String {
 
     match format {
         "anthropic" => append_endpoint(&trimmed, "v1/messages"),
-        "openai" => append_endpoint(&trimmed, "chat/completions"),
+        "openai" | "responses" => append_endpoint(&trimmed, "chat/completions"),
+        "gemini" => {
+            let base = gemini_installer_base_url(&trimmed);
+            let encoded = urlencoding::encode(model_name.trim());
+            format!("{}/v1beta/models/{}:generateContent", base, encoded)
+        }
         _ => trimmed,
     }
 }
@@ -748,6 +820,14 @@ fn build_request_headers(model: &ModelConfig, format: &str) -> Result<HeaderMap,
                 HeaderName::from_static("anthropic-version"),
                 HeaderValue::from_static("2023-06-01"),
             );
+        } else if format == "gemini" {
+            let api_key = HeaderValue::from_str(model.api_key.trim())
+                .map_err(|_| "apiKey contains unsupported header characters".to_string())?;
+            headers.insert(HeaderName::from_static("x-goog-api-key"), api_key.clone());
+            let bearer = format!("Bearer {}", model.api_key.trim());
+            let auth = HeaderValue::from_str(&bearer)
+                .map_err(|_| "apiKey contains unsupported header characters".to_string())?;
+            headers.insert(AUTHORIZATION, auth);
         } else {
             let bearer = format!("Bearer {}", model.api_key.trim());
             let auth = HeaderValue::from_str(&bearer)
@@ -783,19 +863,28 @@ fn truncate_error_text(raw: &str, limit: usize) -> String {
 
 async fn run_model_connection_test(model: &ModelConfig) -> Result<Option<String>, String> {
     let format = normalize_api_format(model);
-    let endpoint = resolve_request_url(&model.base_url, &format);
+    let endpoint = resolve_request_url(&model.base_url, &format, model.model_name.trim());
     let headers = build_request_headers(model, &format)?;
     let custom_request_body = parse_custom_request_body(&model.custom_request_body)?;
 
     let mut payload = Map::new();
-    payload.insert("model".to_string(), Value::String(model.model_name.trim().to_string()));
     if format == "anthropic" {
+        payload.insert("model".to_string(), Value::String(model.model_name.trim().to_string()));
         payload.insert("max_tokens".to_string(), Value::Number(16_u64.into()));
         payload.insert(
             "messages".to_string(),
             serde_json::json!([{ "role": "user", "content": "hello" }]),
         );
+    } else if format == "gemini" {
+        payload.insert(
+            "contents".to_string(),
+            serde_json::json!([{ "parts": [{ "text": "hello" }] }]),
+        );
+        let mut gen = Map::new();
+        gen.insert("maxOutputTokens".to_string(), Value::Number(32_u64.into()));
+        payload.insert("generationConfig".to_string(), Value::Object(gen));
     } else {
+        payload.insert("model".to_string(), Value::String(model.model_name.trim().to_string()));
         payload.insert("max_tokens".to_string(), Value::Number(16_u64.into()));
         payload.insert("temperature".to_string(), serde_json::json!(0.1));
         payload.insert(
@@ -841,6 +930,18 @@ async fn run_model_connection_test(model: &ModelConfig) -> Result<Option<String>
             .and_then(|v| v.as_array())
             .and_then(|arr| arr.first())
             .and_then(|item| item.get("text"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    } else if format == "gemini" {
+        parsed_json
+            .get("candidates")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|c| c.get("content"))
+            .and_then(|c| c.get("parts"))
+            .and_then(|p| p.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|part| part.get("text"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
     } else {
@@ -1152,15 +1253,15 @@ fn apply_first_launch_model(model: &ModelConfig) -> Result<(), String> {
         .map(|v| v.to_string())
         .unwrap_or_else(|| format!("{} - {}", model.provider, model.model_name));
 
-    let custom_request_body = parse_custom_request_body(&model.custom_request_body)?;
-    let api_format = normalize_api_format(model);
-    let request_url = resolve_request_url(model.base_url.trim(), &api_format);
+    let _ = parse_custom_request_body(&model.custom_request_body)?;
+    let stored_fmt = storage_format(model);
+    let request_url = resolve_stored_request_url(model.base_url.trim(), &stored_fmt);
     let mut model_map = Map::new();
     model_map.insert("id".to_string(), Value::String(model_id.clone()));
     model_map.insert("name".to_string(), Value::String(display_name));
     model_map.insert(
         "provider".to_string(),
-        Value::String(api_format),
+        Value::String(stored_fmt),
     );
     model_map.insert(
         "model_name".to_string(),
@@ -1191,6 +1292,7 @@ fn apply_first_launch_model(model: &ModelConfig) -> Result<(), String> {
     model_map.insert("metadata".to_string(), Value::Null);
     model_map.insert("enable_thinking_process".to_string(), Value::Bool(false));
     model_map.insert("support_preserved_thinking".to_string(), Value::Bool(false));
+    model_map.insert("inline_think_in_text".to_string(), Value::Bool(false));
 
     if let Some(skip_ssl_verify) = model.skip_ssl_verify {
         model_map.insert("skip_ssl_verify".to_string(), Value::Bool(skip_ssl_verify));
@@ -1220,8 +1322,11 @@ fn apply_first_launch_model(model: &ModelConfig) -> Result<(), String> {
             }
         }
     }
-    if let Some(extra_body) = custom_request_body {
-        model_map.insert("custom_request_body".to_string(), Value::Object(extra_body));
+    if let Some(raw) = &model.custom_request_body {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            model_map.insert("custom_request_body".to_string(), Value::String(trimmed.to_string()));
+        }
     }
 
     let model_json = Value::Object(model_map);

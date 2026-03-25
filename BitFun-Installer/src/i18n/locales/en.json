@@ -133,7 +133,31 @@
     "testSuccess": "Test successful",
     "testFailed": "Test failed",
     "modelSearchPlaceholder": "Search or enter model name...",
-    "modelNoResults": "No matching models"
+    "modelNoResults": "No matching models",
+    "fillApiKeyBeforeFetch": "Enter the API key before fetching models",
+    "fetchingModels": "Fetching model list...",
+    "fetchFailedFallback": "Failed to fetch model list, fell back to common preset models",
+    "fetchEmptyFallback": "Provider returned no models, fell back to common preset models",
+    "usingPresetModels": "Currently showing common preset models",
+    "addCustomModel": "Add Custom Model",
+    "form": {
+      "baseUrl": "API URL",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "Enter your API Key",
+      "provider": "Request Format",
+      "providerPlaceholder": "Select request format",
+      "modelSelection": "Select Models",
+      "modelName": "Model Name",
+      "resolvedUrlLabel": "Request URL: "
+    },
+    "formats": {
+      "openaiCompatible": "OpenAI Compatible",
+      "responsesApi": "OpenAI Responses API",
+      "claudeApi": "Claude API",
+      "geminiApi": "Gemini GenerateContent API"
+    },
+    "showSecret": "Show",
+    "hideSecret": "Hide"
   },
   "progress": {
     "title": "Installing",

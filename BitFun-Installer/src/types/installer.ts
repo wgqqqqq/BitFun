@@ -25,7 +25,7 @@ export interface ModelConfig {
   apiKey: string;
   baseUrl: string;
   modelName: string;
-  format: 'openai' | 'anthropic';
+  format: 'openai' | 'anthropic' | 'gemini' | 'responses';
   configName?: string;
   customRequestBody?: string;
   skipSslVerify?: boolean;
@@ -38,6 +38,12 @@ export interface ConnectionTestResult {
   responseTimeMs: number;
   modelResponse?: string;
   errorDetails?: string;
+}
+
+/** Remote model id from installer list_models command (settings-aligned shape). */
+export interface RemoteModelInfo {
+  id: string;
+  displayName?: string;
 }
 
 /** Installation options sent to the Rust backend */
