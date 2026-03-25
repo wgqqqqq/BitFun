@@ -125,8 +125,8 @@ cargo build -p bitfun-desktop
 
 Check that the app binary exists:
 
-**Windows**: `target/release/bitfun-desktop.exe`
-**Linux/macOS**: `target/release/bitfun-desktop`
+**Windows**: `target/debug/bitfun-desktop.exe`
+**Linux/macOS**: `target/debug/bitfun-desktop`
 
 ### 3. Run Tests
 
@@ -148,14 +148,9 @@ pnpm test -- --spec ./specs/l0-smoke.spec.ts
 
 ### 4. Test Running Mode (Release vs Dev)
 
-The test framework supports two running modes:
+The test framework runs in debug/dev mode:
 
-#### Release Mode (Default)
-- **Application Path**: `target/release/bitfun-desktop.exe`
-- **Characteristics**: Optimized build, fast startup, production-ready
-- **Use Case**: CI/CD, formal testing
-
-#### Dev Mode
+#### Debug Mode (Default)
 - **Application Path**: `target/debug/bitfun-desktop.exe`
 - **Characteristics**: Includes debug symbols, requires dev server (port 1422)
 - **Use Case**: Local development, rapid iteration
@@ -165,15 +160,12 @@ The test framework supports two running modes:
 When running tests, check the first few lines of output:
 
 ```bash
-# Release Mode Output
-application: <PROJECT_ROOT>\target\release\bitfun-desktop.exe
-
-# Dev Mode Output
+# Debug Mode Output
 application: <PROJECT_ROOT>\target\debug\bitfun-desktop.exe
 Debug build detected, checking dev server...
 ```
 
-**Core Principle**: The test framework prioritizes `target/release/bitfun-desktop.exe`. If it doesn't exist, it automatically uses `target/debug/bitfun-desktop.exe`.
+**Core Principle**: E2E uses `target/debug/bitfun-desktop.exe` only. If the debug binary is missing, the run should fail instead of falling back to `release`.
 
 ## Test Structure
 
@@ -418,18 +410,18 @@ BITFUN_E2E_APP_MODE=debug pnpm --dir tests/e2e run test:l0:protocol
 
 #### 2. App not built
 
-**Symptom**: `Application not found at target/release/bitfun-desktop.exe`
+**Symptom**: `Application not found at target/debug/bitfun-desktop.exe`
 
 **Solution**:
 ```bash
 # Build the app (from project root)
-pnpm run desktop:build
+cargo build -p bitfun-desktop
 
 # Verify binary exists
 # Windows
-dir target\release\bitfun-desktop.exe
+dir target\debug\bitfun-desktop.exe
 # Linux/macOS
-ls -la target/release/bitfun-desktop
+ls -la target/debug/bitfun-desktop
 ```
 
 #### 3. Test timeouts
@@ -584,9 +576,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Build app
-        run: pnpm run desktop:build
+        run: cargo build -p bitfun-desktop
       - name: Run L1 tests
-        run: cd tests/e2e && pnpm run test:l1
+        run: cd tests/e2e && BITFUN_E2E_APP_MODE=debug pnpm run test:l1
 ```
 
 ### Test Execution Matrix

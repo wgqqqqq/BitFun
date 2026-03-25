@@ -52,15 +52,17 @@ export function getApplicationPath(): string {
   }
 
   if (forcedMode === 'release') {
-    return executableCandidates('release')[0];
+    throw new Error('Release mode is disabled for E2E. Use the debug desktop build instead.');
   }
 
-  const releaseMatch = executableCandidates('release').find(candidate => fs.existsSync(candidate));
-  if (releaseMatch) {
-    return releaseMatch;
+  const debugMatch = executableCandidates('debug').find(candidate => fs.existsSync(candidate));
+  if (debugMatch) {
+    return debugMatch;
   }
 
-  return executableCandidates('debug')[0];
+  throw new Error(
+    `Debug desktop build not found. Expected one of: ${executableCandidates('debug').join(', ')}`
+  );
 }
 
 async function waitForDevServerIfNeeded(appPath: string): Promise<void> {
@@ -234,8 +236,8 @@ async function startBitFunApp(): Promise<void> {
 
   if (!fs.existsSync(appPath)) {
     console.error(`Application not found at: ${appPath}`);
-    console.error('Please build the application first with:');
-    console.error('pnpm run desktop:build');
+    console.error('Please build the debug application first with:');
+    console.error('cargo build -p bitfun-desktop');
     throw new Error('Application not built');
   }
 
@@ -341,8 +343,8 @@ export function createEmbeddedConfig(specs: string[], label: string): Options.Te
 
       if (!fs.existsSync(appPath)) {
         console.error(`Application not found at: ${appPath}`);
-        console.error('Please build the application first with:');
-        console.error('pnpm run desktop:build');
+        console.error('Please build the debug application first with:');
+        console.error('cargo build -p bitfun-desktop');
         throw new Error('Application not built');
       }
 

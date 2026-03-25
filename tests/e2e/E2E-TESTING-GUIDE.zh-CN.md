@@ -125,8 +125,8 @@ cargo build -p bitfun-desktop
 
 检查应用二进制文件是否存在：
 
-**Windows**: `target/release/bitfun-desktop.exe`
-**Linux/macOS**: `target/release/bitfun-desktop`
+**Windows**: `target/debug/bitfun-desktop.exe`
+**Linux/macOS**: `target/debug/bitfun-desktop`
 
 ### 3. 运行测试
 
@@ -148,14 +148,9 @@ pnpm test -- --spec ./specs/l0-smoke.spec.ts
 
 ### 4. 测试运行模式（Release vs Dev）
 
-测试框架支持两种运行模式：
+测试框架统一运行在 debug/dev 模式：
 
-#### Release 模式（默认）
-- **应用路径**: `target/release/bitfun-desktop.exe`
-- **特点**: 优化构建、快速启动、生产就绪
-- **使用场景**: CI/CD、正式测试
-
-#### Dev 模式
+#### Debug 模式（默认）
 - **应用路径**: `target/debug/bitfun-desktop.exe`
 - **特点**: 包含调试符号、需要 dev server（端口 1422）
 - **使用场景**: 本地开发、快速迭代
@@ -165,15 +160,12 @@ pnpm test -- --spec ./specs/l0-smoke.spec.ts
 运行测试时，查看输出的前几行：
 
 ```bash
-# Release 模式输出
-application: <PROJECT_ROOT>\target\release\bitfun-desktop.exe
-
-# Dev 模式输出
+# Debug 模式输出
 application: <PROJECT_ROOT>\target\debug\bitfun-desktop.exe
 Debug build detected, checking dev server...
 ```
 
-**核心原理**: 测试框架优先使用 `target/release/bitfun-desktop.exe`。如果不存在，则自动使用 `target/debug/bitfun-desktop.exe`。
+**核心原理**: E2E 只使用 `target/debug/bitfun-desktop.exe`。如果 debug 二进制不存在，应直接失败，而不是回退到 `release`。
 
 ## 测试结构
 
@@ -418,18 +410,18 @@ BITFUN_E2E_APP_MODE=debug pnpm --dir tests/e2e run test:l0:protocol
 
 #### 2. 应用未构建
 
-**症状**: `Application not found at target/release/bitfun-desktop.exe`
+**症状**: `Application not found at target/debug/bitfun-desktop.exe`
 
 **解决方案**:
 ```bash
 # 构建应用（从项目根目录）
-pnpm run desktop:build
+cargo build -p bitfun-desktop
 
 # 验证二进制文件存在
 # Windows
-dir target\release\bitfun-desktop.exe
+dir target\debug\bitfun-desktop.exe
 # Linux/macOS
-ls -la target/release/bitfun-desktop
+ls -la target/debug/bitfun-desktop
 ```
 
 #### 3. 测试超时
@@ -584,9 +576,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: 构建应用
-        run: pnpm run desktop:build
+        run: cargo build -p bitfun-desktop
       - name: 运行 L1 测试
-        run: cd tests/e2e && pnpm run test:l1
+        run: cd tests/e2e && BITFUN_E2E_APP_MODE=debug pnpm run test:l1
 ```
 
 ### 测试执行矩阵

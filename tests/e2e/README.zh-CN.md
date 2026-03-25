@@ -11,8 +11,8 @@
 ### 1. 安装依赖
 
 ```bash
-# 构建应用
-pnpm run desktop:build
+# 构建 debug 应用
+cargo build -p bitfun-desktop
 
 # 安装测试依赖
 cd tests/e2e && pnpm install
@@ -62,7 +62,7 @@ tests/e2e/
 ### 应用未构建
 
 ```bash
-pnpm run desktop:build
+cargo build -p bitfun-desktop
 ```
 
 ### 测试超时

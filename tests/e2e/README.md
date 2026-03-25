@@ -11,8 +11,8 @@ E2E test framework using WebDriverIO + the embedded BitFun WebDriver.
 ### 1. Install Dependencies
 
 ```bash
-# Build the app
-pnpm run desktop:build
+# Build the debug app
+cargo build -p bitfun-desktop
 
 # Install test dependencies
 cd tests/e2e && pnpm install
@@ -62,7 +62,7 @@ The test runner starts BitFun directly and waits for the embedded WebDriver serv
 ### App not built
 
 ```bash
-pnpm run desktop:build
+cargo build -p bitfun-desktop
 ```
 
 ### Test timeout

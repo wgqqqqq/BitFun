@@ -88,10 +88,24 @@ export async function ensureCodeSessionOpen(): Promise<void> {
     return;
   }
 
-  const welcomeButtons = await $$('.welcome-scene__session-btn');
-  if (welcomeButtons.length > 0) {
-    await welcomeButtons[0].click();
-  } else {
+  const selectors = [
+    '.bitfun-nav-panel__workspace-create-main--split-left',
+    '[data-testid="chat-input-send-btn"]',
+  ];
+
+  let opened = false;
+  for (const selector of selectors) {
+    const element = await $(selector);
+    if (await element.isExisting()) {
+      if (selector !== '[data-testid="chat-input-send-btn"]') {
+        await element.click();
+      }
+      opened = true;
+      break;
+    }
+  }
+
+  if (!opened) {
     const fallbackButton = await $('//button[contains(normalize-space(.), "Code")]');
     await fallbackButton.click();
   }

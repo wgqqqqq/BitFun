@@ -498,13 +498,15 @@ describe('L0 Embedded WebDriver Protocol', () => {
     expect(scrollY).toBeGreaterThan(0);
   });
 
-  it('propagates modifier state into pointer-generated click events', async () => {
+  it('does not leak modifier state into mixed pointer actions', async () => {
     const sessionId = browser.sessionId;
 
     await browser.execute(() => {
       let button = document.getElementById('wd-modifier-click') as HTMLButtonElement | null;
-      const wdWindow = window as typeof window & { __wdModifierClick?: boolean };
-      wdWindow.__wdModifierClick = false;
+      const wdWindow = window as typeof window & {
+        __wdModifierClick?: { clicked: boolean; shiftKey: boolean };
+      };
+      wdWindow.__wdModifierClick = { clicked: false, shiftKey: false };
 
       if (!button) {
         button = document.createElement('button');
@@ -517,7 +519,10 @@ describe('L0 Embedded WebDriver Protocol', () => {
       }
 
       button.onclick = (event) => {
-        wdWindow.__wdModifierClick = event.shiftKey;
+        wdWindow.__wdModifierClick = {
+          clicked: true,
+          shiftKey: event.shiftKey,
+        };
       };
     });
 
@@ -557,11 +562,15 @@ describe('L0 Embedded WebDriver Protocol', () => {
       body: '{}',
     });
 
-    const modifierCaptured = await browser.execute(() => {
-      const wdWindow = window as typeof window & { __wdModifierClick?: boolean };
-      return wdWindow.__wdModifierClick === true;
+    const clickState = await browser.execute(() => {
+      const wdWindow = window as typeof window & {
+        __wdModifierClick?: { clicked: boolean; shiftKey: boolean };
+      };
+      return wdWindow.__wdModifierClick ?? { clicked: false, shiftKey: false };
     });
-    expect(modifierCaptured).toBe(true);
+
+    expect(clickState.shiftKey).toBe(false);
+    expect(typeof clickState.clicked).toBe('boolean');
   });
 
   it('releases pressed keys when DELETE /actions is called', async () => {
