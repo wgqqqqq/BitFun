@@ -26,6 +26,10 @@ pub(super) fn script() -> &'static str {
       }
     };
 
+    const shouldIgnoreLogMessage = (message) => {
+      return /^JSON error: missing field `cmd` at line 1 column \d+$/.test(message);
+    };
+
     const setFrameContext = (frameContext) => {
       currentFrameContext = Array.isArray(frameContext) ? frameContext : [];
     };
@@ -64,11 +68,14 @@ pub(super) fn script() -> &'static str {
         const original = console[level];
         console[level] = (...args) => {
           try {
-            ensureLogs().push({
-              level: level === "warn" ? "WARNING" : level === "error" ? "SEVERE" : "INFO",
-              message: args.map((item) => safeStringify(item)).join(" "),
-              timestamp: Date.now()
-            });
+            const message = args.map((item) => safeStringify(item)).join(" ");
+            if (!shouldIgnoreLogMessage(message)) {
+              ensureLogs().push({
+                level: level === "warn" ? "WARNING" : level === "error" ? "SEVERE" : "INFO",
+                message,
+                timestamp: Date.now()
+              });
+            }
             if (ensureLogs().length > 200) {
               ensureLogs().splice(0, ensureLogs().length - 200);
             }
@@ -126,12 +133,25 @@ pub(super) fn script() -> &'static str {
 
     const emitResult = async (payload) => {
       const errors = [];
+      const webviewPostMessage = window.chrome && window.chrome.webview
+        && typeof window.chrome.webview.postMessage === "function"
+        ? window.chrome.webview.postMessage.bind(window.chrome.webview)
+        : null;
       const tauriInvoke = window.__TAURI__ && window.__TAURI__.core && typeof window.__TAURI__.core.invoke === "function"
         ? window.__TAURI__.core.invoke.bind(window.__TAURI__.core)
         : null;
       const internalInvoke = window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === "function"
         ? window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__)
         : null;
+
+      if (webviewPostMessage) {
+        try {
+          webviewPostMessage(JSON.stringify(payload));
+          return;
+        } catch (error) {
+          errors.push(`window.chrome.webview.postMessage failed: ${safeStringify(error)}`);
+        }
+      }
 
       if (tauriInvoke) {
         try {

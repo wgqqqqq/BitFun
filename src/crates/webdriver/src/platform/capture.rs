@@ -206,7 +206,7 @@ mod imp {
         ICoreWebView2_7, COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG,
         COREWEBVIEW2_PRINT_ORIENTATION_LANDSCAPE, COREWEBVIEW2_PRINT_ORIENTATION_PORTRAIT,
     };
-    use windows::core::{implement, HSTRING};
+    use windows::core::{implement, HSTRING, Interface};
     use windows::Win32::Foundation::HGLOBAL;
     use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
     use windows::Win32::System::Com::{
@@ -241,7 +241,7 @@ mod imp {
             };
 
             let handler_tx = Arc::new(std::sync::Mutex::new(Some(tx)));
-            let handler = CapturePreviewHandler::new(handler_tx, stream.clone());
+            let handler = CapturePreviewHandler::new(handler_tx.clone(), stream.clone());
             let handler: ICoreWebView2CapturePreviewCompletedHandler = handler.into();
 
             if let Err(error) = webview2.CapturePreview(
@@ -469,20 +469,38 @@ mod imp {
 
     impl ICoreWebView2CapturePreviewCompletedHandler_Impl for CapturePreviewHandler_Impl {
         fn Invoke(&self, error_code: windows::core::HRESULT) -> windows::core::Result<()> {
-            let response = if error_code.is_ok() {
+            let response = if error_code.is_err() {
+                Err(format!("CapturePreview completion failed: {error_code:?}"))
+            } else {
                 unsafe {
                     let mut stat = std::mem::zeroed();
-                    self.stream.Stat(&mut stat, STATFLAG_NONAME)?;
-                    let size = stat.cbSize;
-                    self.stream.Seek(0, STREAM_SEEK_SET, None)?;
-                    let mut bytes = vec![0u8; size as usize];
-                    let mut read = 0;
-                    self.stream.Read(bytes.as_mut_ptr() as _, bytes.len() as u32, Some(&mut read))?;
-                    bytes.truncate(read as usize);
-                    Ok(BASE64_STANDARD.encode(bytes))
+                    if self.stream.Stat(&raw mut stat, STATFLAG_NONAME).is_err() {
+                        Err("Failed to read preview stream metadata".to_string())
+                    } else {
+                        let size = usize::try_from(stat.cbSize).unwrap_or(0);
+                        if size == 0 {
+                            Err("Preview stream was empty".to_string())
+                        } else {
+                            let _ = self.stream.Seek(0, STREAM_SEEK_SET, None);
+                            let mut bytes = vec![0u8; size];
+                            let mut read = 0u32;
+                            if self
+                                .stream
+                                .Read(
+                                    bytes.as_mut_ptr().cast(),
+                                    u32::try_from(size).unwrap_or(u32::MAX),
+                                    Some(&raw mut read),
+                                )
+                                .is_err()
+                            {
+                                Err("Failed to read preview stream bytes".to_string())
+                            } else {
+                                bytes.truncate(read as usize);
+                                Ok(BASE64_STANDARD.encode(bytes))
+                            }
+                        }
+                    }
                 }
-            } else {
-                Err(format!("CapturePreview completion failed: {error_code:?}"))
             };
 
             if let Ok(mut guard) = self.sender.lock() {

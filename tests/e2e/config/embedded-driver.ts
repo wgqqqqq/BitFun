@@ -11,8 +11,12 @@ const __dirname = dirname(__filename);
 
 const DRIVER_HOST = '127.0.0.1';
 const DRIVER_PORT = Number(process.env.BITFUN_E2E_WEBDRIVER_PORT || 4445);
+const DEV_SERVER_HOST = '127.0.0.1';
+const DEV_SERVER_PORT = 1422;
 
 let bitfunApp: ChildProcess | null = null;
+let devServerProcess: ChildProcess | null = null;
+let ownsDevServer = false;
 
 function projectRoot(): string {
   return path.resolve(__dirname, '..', '..', '..');
@@ -70,33 +74,14 @@ async function waitForDevServerIfNeeded(appPath: string): Promise<void> {
     return;
   }
 
-  const hosts = ['127.0.0.1', '::1'];
-  const running = await Promise.any(hosts.map(host => {
-    return new Promise<boolean>((resolve, reject) => {
-      const client = new net.Socket();
-      client.setTimeout(2000);
-      client.connect(1422, host, () => {
-        client.destroy();
-        resolve(true);
-      });
-      client.on('error', error => {
-        client.destroy();
-        reject(error);
-      });
-      client.on('timeout', () => {
-        client.destroy();
-        reject(new Error(`Timeout connecting to ${host}:1422`));
-      });
-    });
-  })).then(() => true).catch(() => false);
+  const running = await isPortOpen(DEV_SERVER_PORT, [DEV_SERVER_HOST, '::1']);
 
   if (running) {
-    console.log('Dev server is already running on port 1422');
+    console.log(`Dev server is already running on port ${DEV_SERVER_PORT}`);
     return;
   }
 
-  console.warn('Dev server not running on port 1422');
-  console.warn('Please start it with: pnpm run dev:web');
+  await startDevServer();
 }
 
 async function fetchDriverStatus(): Promise<boolean> {
@@ -146,7 +131,29 @@ async function probeDocumentReady(sessionId: string): Promise<boolean> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      script: '() => Boolean(document?.body)',
+      script: `() => {
+        const root = document.getElementById('root');
+        const appLayout = document.querySelector('[data-testid="app-layout"], .bitfun-app-layout');
+        const mainContent = document.querySelector('[data-testid="app-main-content"], .bitfun-app-main-workspace');
+        const shell = document.querySelector(
+          '.bitfun-nav-panel, .bitfun-scene-bar, .bitfun-nav-bar, .welcome-scene'
+        );
+        const splashVisible = Boolean(document.querySelector('.splash-screen'));
+        const tauriReady =
+          typeof window.__TAURI__ !== 'undefined' ||
+          typeof window.__TAURI_INTERNALS__ !== 'undefined';
+
+        return Boolean(
+          document?.body &&
+          root &&
+          root.childElementCount > 0 &&
+          appLayout &&
+          mainContent &&
+          shell &&
+          tauriReady &&
+          !splashVisible
+        );
+      }`,
       args: [],
     }),
   });
@@ -174,7 +181,7 @@ async function waitForEmbeddedDriverReady(timeoutMs: number = 30000): Promise<vo
 
 async function waitForWebviewDocumentReady(timeoutMs: number = 30000): Promise<void> {
   const startedAt = Date.now();
-  let lastError = 'document.body is not ready';
+  let lastError = 'BitFun app shell is not ready';
 
   while (Date.now() - startedAt < timeoutMs) {
     let sessionId: string | null = null;
@@ -186,7 +193,7 @@ async function waitForWebviewDocumentReady(timeoutMs: number = 30000): Promise<v
         await deleteProbeSession(sessionId);
         return;
       }
-      lastError = 'document.body is not ready';
+      lastError = 'BitFun app shell is not ready';
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
     } finally {
@@ -229,6 +236,126 @@ function stopBitFunApp(): void {
 
   bitfunApp.kill();
   bitfunApp = null;
+}
+
+function stopDevServer(): void {
+  if (!devServerProcess || !ownsDevServer) {
+    return;
+  }
+
+  devServerProcess.kill();
+  devServerProcess = null;
+  ownsDevServer = false;
+}
+
+async function isPortOpen(port: number, hosts: string[]): Promise<boolean> {
+  return Promise.any(hosts.map(host => {
+    return new Promise<boolean>((resolve, reject) => {
+      const client = new net.Socket();
+      client.setTimeout(2000);
+      client.connect(port, host, () => {
+        client.destroy();
+        resolve(true);
+      });
+      client.on('error', error => {
+        client.destroy();
+        reject(error);
+      });
+      client.on('timeout', () => {
+        client.destroy();
+        reject(new Error(`Timeout connecting to ${host}:${port}`));
+      });
+    });
+  })).then(() => true).catch(() => false);
+}
+
+async function waitForPort(port: number, hosts: string[], timeoutMs: number): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await isPortOpen(port, hosts)) {
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  throw new Error(`Port ${port} did not become ready within ${timeoutMs}ms`);
+}
+
+async function startDevServer(): Promise<void> {
+  if (devServerProcess) {
+    await waitForPort(DEV_SERVER_PORT, [DEV_SERVER_HOST, '::1'], 60000);
+    return;
+  }
+
+  console.log(`Starting dev server on http://${DEV_SERVER_HOST}:${DEV_SERVER_PORT}`);
+
+  const spawnOptions = {
+    cwd: projectRoot(),
+    stdio: ['ignore', 'pipe', 'pipe'] as const,
+    env: {
+      ...process.env,
+      TAURI_DEV_HOST: DEV_SERVER_HOST,
+    },
+  };
+
+  if (process.platform === 'win32') {
+    const commandLine = [
+      'pnpm',
+      '--dir',
+      'src/web-ui',
+      'exec',
+      'vite',
+      '--force',
+      '--host',
+      DEV_SERVER_HOST,
+      '--port',
+      String(DEV_SERVER_PORT),
+    ].join(' ');
+
+    devServerProcess = spawn(
+      process.env.ComSpec || 'C:\\Windows\\System32\\cmd.exe',
+      ['/d', '/s', '/c', commandLine],
+      spawnOptions,
+    );
+  } else {
+    devServerProcess = spawn(
+      'pnpm',
+      [
+        '--dir',
+        'src/web-ui',
+        'exec',
+        'vite',
+        '--force',
+        '--host',
+        DEV_SERVER_HOST,
+        '--port',
+        String(DEV_SERVER_PORT),
+      ],
+      spawnOptions,
+    );
+  }
+  ownsDevServer = true;
+
+  devServerProcess.stdout?.on('data', (data: Buffer) => {
+    console.log(`[dev-server] ${data.toString().trim()}`);
+  });
+
+  devServerProcess.stderr?.on('data', (data: Buffer) => {
+    console.error(`[dev-server] ${data.toString().trim()}`);
+  });
+
+  devServerProcess.on('exit', (code, signal) => {
+    console.log(`[dev-server] exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`);
+    devServerProcess = null;
+    ownsDevServer = false;
+  });
+
+  try {
+    await waitForPort(DEV_SERVER_PORT, [DEV_SERVER_HOST, '::1'], 60000);
+  } catch (error) {
+    stopDevServer();
+    throw error;
+  }
 }
 
 async function startBitFunApp(): Promise<void> {
@@ -378,6 +505,7 @@ export function createEmbeddedConfig(specs: string[], label: string): Options.Te
     onComplete: function onComplete() {
       console.log(`${label} E2E test run completed`);
       stopBitFunApp();
+      stopDevServer();
     },
   };
 }

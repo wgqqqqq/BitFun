@@ -1,20 +1,22 @@
 use std::sync::Arc;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 use std::time::Duration;
 
 use serde_json::Value;
 use tauri::Webview;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 use crate::runtime::script;
-#[cfg(not(target_os = "macos"))]
-use crate::runtime::{BridgeError, BridgeResponse};
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+use crate::runtime::BridgeError;
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 use tokio::sync::oneshot;
 use crate::server::response::WebDriverErrorResponse;
 use crate::server::AppState;
 
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "windows")]
+mod windows;
 
 pub(crate) async fn evaluate_script<R: tauri::Runtime>(
     state: Arc<AppState>,
@@ -39,7 +41,21 @@ pub(crate) async fn evaluate_script<R: tauri::Runtime>(
         .await;
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        return windows::evaluate_script(
+            state,
+            webview,
+            timeout_ms,
+            script_source,
+            args,
+            async_mode,
+            frame_context,
+        )
+        .await;
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let request_id = state.next_request_id();
         let (sender, receiver) = oneshot::channel();
@@ -95,7 +111,7 @@ pub(crate) async fn evaluate_script<R: tauri::Runtime>(
 }
 
 #[cfg(not(target_os = "macos"))]
-fn remove_pending_request(state: &AppState, request_id: &str) {
+pub(super) fn remove_pending_request(state: &AppState, request_id: &str) {
     if let Ok(mut pending) = state.pending_requests.lock() {
         pending.remove(request_id);
     }
