@@ -17,6 +17,10 @@ const DEFAULT_WEBDRIVER_LABEL: &str = "main";
 static SERVER_STARTED: AtomicBool = AtomicBool::new(false);
 
 pub fn maybe_start(app: AppHandle) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+
     let Some(port) = std::env::var("BITFUN_WEBDRIVER_PORT")
         .ok()
         .and_then(|raw| raw.parse::<u16>().ok())

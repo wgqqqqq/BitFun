@@ -35,7 +35,7 @@ pub struct LogConfig {
 }
 
 fn is_embedded_webdriver_mode() -> bool {
-    std::env::var_os("BITFUN_WEBDRIVER_PORT").is_some()
+    cfg!(debug_assertions) && std::env::var_os("BITFUN_WEBDRIVER_PORT").is_some()
 }
 
 fn resolve_logs_root() -> PathBuf {

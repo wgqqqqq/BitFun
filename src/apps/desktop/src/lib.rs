@@ -723,8 +723,9 @@ pub async fn run() {
 }
 
 fn trace_startup(message: &str) {
-    if std::env::var_os("BITFUN_WEBDRIVER_PORT").is_some()
-        || std::env::var_os("BITFUN_E2E_TRACE_STARTUP").is_some()
+    let trace_webdriver_startup =
+        cfg!(debug_assertions) && std::env::var_os("BITFUN_WEBDRIVER_PORT").is_some();
+    if trace_webdriver_startup || std::env::var_os("BITFUN_E2E_TRACE_STARTUP").is_some()
     {
         eprintln!("[startup] {message}");
     }
