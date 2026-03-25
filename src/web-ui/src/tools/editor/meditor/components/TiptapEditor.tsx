@@ -1063,6 +1063,7 @@ export const TiptapEditor = React.forwardRef<TiptapEditorHandle, TiptapEditorPro
       {inlineAiState?.isOpen && inlineAiState.status === 'idle' && (
         <div
           className="m-editor-inline-ai"
+          data-testid="md-inline-ai-panel"
           style={{
             top: `${inlineAiState.anchorTop}px`,
             left: `${inlineAiState.anchorLeft}px`,
@@ -1079,6 +1080,7 @@ export const TiptapEditor = React.forwardRef<TiptapEditorHandle, TiptapEditorPro
                   variant="filled"
                   inputSize="medium"
                   className="m-editor-inline-ai__composer-input"
+                  data-testid="md-inline-ai-input"
                   prefix={<PenLine size={14} strokeWidth={1.75} />}
                   value={inlineAiState.query}
                   onChange={(event) => {
@@ -1146,6 +1148,7 @@ export const TiptapEditor = React.forwardRef<TiptapEditorHandle, TiptapEditorPro
                 <button
                   type="button"
                   className="m-editor-inline-ai__quick-action m-editor-inline-ai__quick-action--primary"
+                  data-testid="md-inline-ai-continue"
                   onClick={() => {
                     handleInlineAiQuickAction('continue', '');
                   }}
@@ -1158,6 +1161,7 @@ export const TiptapEditor = React.forwardRef<TiptapEditorHandle, TiptapEditorPro
                 <button
                   type="button"
                   className="m-editor-inline-ai__quick-action"
+                  data-testid="md-inline-ai-summary"
                   onClick={() => {
                     handleInlineAiQuickAction('summary', t('editor.meditor.inlineAi.summaryDirection'));
                   }}
@@ -1170,6 +1174,7 @@ export const TiptapEditor = React.forwardRef<TiptapEditorHandle, TiptapEditorPro
                 <button
                   type="button"
                   className="m-editor-inline-ai__quick-action"
+                  data-testid="md-inline-ai-todo"
                   onClick={() => {
                     handleInlineAiQuickAction('todo', t('editor.meditor.inlineAi.todoDirection'));
                   }}

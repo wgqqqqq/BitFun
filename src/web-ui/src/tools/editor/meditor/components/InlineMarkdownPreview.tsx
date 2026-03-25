@@ -12,7 +12,7 @@ export const InlineMarkdownPreview: React.FC<InlineMarkdownPreviewProps> = ({
 }) => {
   return (
     <div className="m-editor-inline-ai-rendered">
-      <div className="m-editor-inline-ai-rendered__content">
+      <div className="m-editor-inline-ai-rendered__content" data-testid="md-inline-ai-preview-content">
         <MarkdownRenderer content={value} basePath={basePath} />
       </div>
     </div>
