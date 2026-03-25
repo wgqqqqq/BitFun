@@ -4,7 +4,6 @@ import {
   FolderPlus,
   LayoutGrid,
   Play,
-  RefreshCw,
   Sparkles,
   Square,
   Tag,
@@ -31,6 +30,7 @@ import { getMiniAppIconGradient, renderMiniAppIcon } from '../utils/miniAppIcons
 import { useCurrentWorkspace } from '@/infrastructure/contexts/WorkspaceContext';
 import { useMiniAppStore } from '../miniAppStore';
 import { useI18n } from '@/infrastructure/i18n';
+import { useGallerySceneAutoRefresh } from '@/app/hooks/useGallerySceneAutoRefresh';
 import './MiniAppGalleryView.scss';
 
 const log = createLogger('MiniAppGalleryView');
@@ -41,6 +41,7 @@ const MiniAppGalleryView: React.FC = () => {
   const runningWorkerIds = useMiniAppStore((state) => state.runningWorkerIds);
   const setApps = useMiniAppStore((state) => state.setApps);
   const setLoading = useMiniAppStore((state) => state.setLoading);
+  const setRunningWorkerIds = useMiniAppStore((state) => state.setRunningWorkerIds);
   const markWorkerStopped = useMiniAppStore((state) => state.markWorkerStopped);
   const { workspacePath } = useCurrentWorkspace();
   const { openScene, activateScene, closeScene, openTabs } = useSceneManager();
@@ -134,15 +135,26 @@ const MiniAppGalleryView: React.FC = () => {
     }
   };
 
-  const handleRefresh = async () => {
+  const refetchMiniAppGallery = useCallback(async () => {
     setLoading(true);
     try {
-      const refreshed = await miniAppAPI.listMiniApps();
+      const [refreshed, running] = await Promise.all([
+        miniAppAPI.listMiniApps(),
+        miniAppAPI.workerListRunning(),
+      ]);
       setApps(refreshed);
+      setRunningWorkerIds(running);
+    } catch (error) {
+      log.error('Failed to refresh miniapp gallery', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [setApps, setLoading, setRunningWorkerIds]);
+
+  useGallerySceneAutoRefresh({
+    sceneId: 'miniapps',
+    refetch: refetchMiniAppGallery,
+  });
 
   const handleAddFromFolder = async () => {
     try {
@@ -218,18 +230,6 @@ const MiniAppGalleryView: React.FC = () => {
               title={t('importFromFolder')}
             >
               <FolderPlus size={15} />
-            </button>
-            <button
-              type="button"
-              className="gallery-action-btn"
-              onClick={handleRefresh}
-              disabled={loading}
-              title={t('refreshList')}
-            >
-              <RefreshCw
-                size={15}
-                className={loading ? 'gallery-spinning' : undefined}
-              />
             </button>
           </>
         )}

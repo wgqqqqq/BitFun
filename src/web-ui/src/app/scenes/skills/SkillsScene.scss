@@ -123,6 +123,35 @@
     gap: 4px;
   }
 
+  &__detail-path-btn {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    font-family: $font-family-mono;
+    font-size: 11px;
+    line-height: $line-height-base;
+    text-align: left;
+    word-break: break-all;
+    color: var(--color-accent-500);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    transition: color $motion-fast $easing-standard;
+
+    &:hover {
+      color: var(--color-accent-600);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-accent-500);
+      outline-offset: 2px;
+    }
+  }
+
   &__detail-row {
     display: flex;
     align-items: baseline;

@@ -189,6 +189,7 @@
       "inheritPrimary": "继承模板（主力）",
       "inheritFast":    "继承模板（快速）",
       "personaDocsTitle": "关键文档",
+      "sessionsSectionTitle": "会话",
       "scheduledSessionsTitle": "定时会话",
       "scheduledSessionsNoWorkspace": "请先选择助理工作区后再管理定时会话。",
       "personaDocs": {

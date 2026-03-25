@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   CheckCircle2,
   ChevronLeft,
@@ -9,7 +9,6 @@ import {
   Package,
   Plus,
   Puzzle,
-  RefreshCw,
   Search as SearchIcon,
   Sparkles,
   Store,
@@ -28,17 +27,26 @@ import {
   GalleryZone,
 } from '@/app/components';
 import type { SkillInfo, SkillLevel, SkillMarketItem } from '@/infrastructure/config/types';
+import { workspaceAPI } from '@/infrastructure/api';
+import { workspaceManager } from '@/infrastructure/services/business/workspaceManager';
+import { useNotification } from '@/shared/notification-system';
+import { isRemoteWorkspace } from '@/shared/types';
+import { createLogger } from '@/shared/utils/logger';
 import { getCardGradient } from '@/shared/utils/cardGradients';
 import { useInstalledSkills } from './hooks/useInstalledSkills';
 import { useSkillMarket } from './hooks/useSkillMarket';
 import SkillCard from './components/SkillCard';
 import './SkillsScene.scss';
 import { useSkillsSceneStore } from './skillsSceneStore';
+import { useGallerySceneAutoRefresh } from '@/app/hooks/useGallerySceneAutoRefresh';
+
+const log = createLogger('SkillsScene');
 
 const SKILLS_SOURCE_URL = 'https://skills.sh';
 
 const SkillsScene: React.FC = () => {
   const { t } = useTranslation('scenes/skills');
+  const notification = useNotification();
   const {
     searchDraft,
     marketQuery,
@@ -76,14 +84,31 @@ const SkillsScene: React.FC = () => {
     },
   });
 
-  const isRefreshing = installed.loading || market.marketLoading || market.loadingMore;
+  const refetchSkillsScene = useCallback(async () => {
+    await Promise.all([installed.loadSkills(true), market.refresh()]);
+  }, [installed.loadSkills, market.refresh]);
 
-  const handleRefreshAll = async () => {
-    await Promise.all([
-      installed.loadSkills(true),
-      market.refresh(),
-    ]);
-  };
+  useGallerySceneAutoRefresh({
+    sceneId: 'skills',
+    refetch: refetchSkillsScene,
+  });
+
+  const canRevealSkillPath = !isRemoteWorkspace(workspaceManager.getState().currentWorkspace);
+
+  const handleRevealSkillPath = useCallback(
+    async (path: string) => {
+      if (!canRevealSkillPath || !path.trim()) {
+        return;
+      }
+      try {
+        await workspaceAPI.revealInExplorer(path);
+      } catch (error) {
+        log.error('Failed to reveal skill path in explorer', { path, error });
+        notification.error(t('messages.revealPathFailed', { error: String(error) }));
+      }
+    },
+    [canRevealSkillPath, notification, t],
+  );
 
   const handleAddSkill = async () => {
     const added = await installed.handleAdd();
@@ -197,16 +222,6 @@ const SkillsScene: React.FC = () => {
             >
               <Plus size={15} />
               <span>{t('toolbar.addTooltip')}</span>
-            </button>
-            <button
-              type="button"
-              className="gallery-action-btn"
-              onClick={handleRefreshAll}
-              disabled={isRefreshing}
-              aria-label={t('toolbar.refreshTooltip')}
-              title={t('toolbar.refreshTooltip')}
-            >
-              <RefreshCw size={15} className={isRefreshing ? 'gallery-spinning' : undefined} />
             </button>
           </>
         )}
@@ -404,7 +419,18 @@ const SkillsScene: React.FC = () => {
         {selectedInstalledSkill ? (
           <div className="bitfun-skills-scene__detail-row">
             <span className="bitfun-skills-scene__detail-label">{t('list.item.pathLabel')}</span>
-            <code className="bitfun-skills-scene__detail-value">{selectedInstalledSkill.path}</code>
+            {canRevealSkillPath ? (
+              <button
+                type="button"
+                className="bitfun-skills-scene__detail-path-btn"
+                title={t('list.item.openPathInExplorer')}
+                onClick={() => void handleRevealSkillPath(selectedInstalledSkill.path)}
+              >
+                {selectedInstalledSkill.path}
+              </button>
+            ) : (
+              <code className="bitfun-skills-scene__detail-value">{selectedInstalledSkill.path}</code>
+            )}
           </div>
         ) : null}
 

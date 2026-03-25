@@ -13,6 +13,7 @@ import type { SceneTabId } from '../components/SceneBar/types';
 import { useSceneManager } from '../hooks/useSceneManager';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 import { useDialogCompletionNotify } from '../hooks/useDialogCompletionNotify';
+import { ProcessingIndicator } from '@/flow_chat/components/modern/ProcessingIndicator';
 import './SceneViewport.scss';
 
 const SessionScene    = lazy(() => import('./session/SessionScene'));
@@ -56,7 +57,18 @@ const SceneViewport: React.FC<SceneViewportProps> = ({ workspacePath, isEntering
   return (
     <div className="bitfun-scene-viewport">
       <div className="bitfun-scene-viewport__clip">
-        <Suspense fallback={null}>
+        <Suspense
+          fallback={(
+            <div
+              className="bitfun-scene-viewport__lazy-fallback"
+              role="status"
+              aria-busy="true"
+              aria-label={t('loading.scenes')}
+            >
+              <ProcessingIndicator visible />
+            </div>
+          )}
+        >
           {openTabs.map(tab => (
             <div
               key={tab.id}

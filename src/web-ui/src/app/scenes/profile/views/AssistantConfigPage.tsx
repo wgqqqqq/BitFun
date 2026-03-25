@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import {
   Button,
-  ConfirmDialog,
   IconButton,
   Input,
 } from '@/component-library';
@@ -93,7 +92,6 @@ const AssistantConfigPage: React.FC = () => {
   const {
     document: identityDocument,
     updateField: updateIdentityField,
-    resetPersonaFiles,
     reload: reloadIdentityDocument,
   } = useAgentIdentityDocument(workspacePath);
 
@@ -111,8 +109,6 @@ const AssistantConfigPage: React.FC = () => {
   const [editValue, setEditValue] = useState('');
   const nameInputRef = useRef<HTMLInputElement>(null);
   const metaInputRef = useRef<HTMLInputElement>(null);
-  const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
-
   const [rightView, setRightView] = useState<RightPanelView>('info');
   const [personaDoc, setPersonaDoc] = useState<PersonaDocState | null>(null);
   const personaSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -450,16 +446,6 @@ const AssistantConfigPage: React.FC = () => {
                 )}
               </div>
             </div>
-            <IconButton
-              type="button"
-              size="xs"
-              className="acp-left-header__reset"
-              aria-label={t('identity.resetTooltip')}
-              tooltip={t('identity.resetTooltip')}
-              onClick={() => setIsResetDialogOpen(true)}
-            >
-              <RefreshCw size={13} />
-            </IconButton>
           </div>
 
           <AssistantQuickInput
@@ -468,6 +454,7 @@ const AssistantConfigPage: React.FC = () => {
             assistantName={identityName}
           />
           <div className="acp-sessions-area">
+            <h2 className="acp-sessions-area__title">{t('nursery.assistant.sessionsSectionTitle')}</h2>
             <SessionsSection
               workspaceId={workspace?.id}
               workspacePath={workspacePath}
@@ -483,23 +470,6 @@ const AssistantConfigPage: React.FC = () => {
           {rightView === 'personaDoc' ? renderPersonaDocPanel() : renderInfoPanel()}
         </div>
       </div>
-
-      <ConfirmDialog
-        isOpen={isResetDialogOpen}
-        title={t('identity.resetConfirmTitle')}
-        message={t('identity.resetConfirmMessage')}
-        confirmText={t('identity.resetConfirmAction')}
-        cancelText={t('identity.resetCancel')}
-        confirmDanger
-        onClose={() => setIsResetDialogOpen(false)}
-        onConfirm={() => {
-          setIsResetDialogOpen(false);
-          resetPersonaFiles()
-            .then(() => notificationService.success(t('identity.resetSuccess')))
-            .catch(() => notificationService.error(t('identity.resetFailed')));
-        }}
-        onCancel={() => setIsResetDialogOpen(false)}
-      />
     </div>
   );
 };

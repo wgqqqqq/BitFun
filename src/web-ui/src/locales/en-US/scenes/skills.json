@@ -36,7 +36,6 @@
   },
   "toolbar": {
     "searchPlaceholder": "Search skills...",
-    "refreshTooltip": "Refresh",
     "addTooltip": "Add Skill"
   },
   "filters": {
@@ -58,7 +57,6 @@
     "subtitlePrefix": "Browse reusable skills from",
     "subtitleSuffix": ".",
     "searchPlaceholder": "Search marketplace skills...",
-    "refreshTooltip": "Refresh marketplace results",
     "loading": "Loading marketplace skills...",
     "errorPrefix": "Failed to load marketplace: ",
     "empty": {
@@ -124,7 +122,9 @@
       "user": "User",
       "project": "Project",
       "deleteTooltip": "Delete",
-      "pathLabel": "Path:"
+      "pathLabel": "Path:",
+      "openPathInExplorer": "Open this folder in file explorer",
+      "revealPathUnavailableRemote": "Remote workspace paths cannot be opened in the local file manager"
     }
   },
   "deleteModal": {
@@ -146,6 +146,7 @@
     "marketDownloadSuccess": "Skill \"{{name}}\" downloaded successfully",
     "marketDownloadFailed": "Failed to download: {{error}}",
     "enabled": "enabled",
-    "disabled": "disabled"
+    "disabled": "disabled",
+    "revealPathFailed": "Could not open in file explorer: {{error}}"
   }
 }

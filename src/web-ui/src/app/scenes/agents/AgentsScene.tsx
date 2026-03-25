@@ -32,6 +32,7 @@ import { getCardGradient } from '@/shared/utils/cardGradients';
 import { getAgentBadge } from './utils';
 import './AgentsView.scss';
 import './AgentsScene.scss';
+import { useGallerySceneAutoRefresh } from '@/app/hooks/useGallerySceneAutoRefresh';
 
 const HIDDEN_AGENT_IDS = new Set(['Claw']);
 
@@ -75,6 +76,11 @@ const AgentsHomeView: React.FC = () => {
     filterLevel: agentFilterLevel,
     filterType: agentFilterType,
     t,
+  });
+
+  useGallerySceneAutoRefresh({
+    sceneId: 'agents',
+    refetch: () => void loadAgents(),
   });
 
   const coreAgentMeta = useMemo((): Record<string, CoreAgentMeta> => ({
@@ -190,19 +196,6 @@ const AgentsHomeView: React.FC = () => {
                 </button>
               )}
             />
-            <button
-              type="button"
-              className="gallery-action-btn"
-              onClick={() => void loadAgents()}
-              disabled={loading}
-              aria-label={t('page.refresh')}
-              title={t('page.refresh')}
-            >
-              <RefreshCw
-                size={15}
-                className={loading ? 'gallery-spinning' : undefined}
-              />
-            </button>
           </>
         )}
       />

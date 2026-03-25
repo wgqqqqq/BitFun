@@ -1,6 +1,8 @@
 import React, { Suspense, lazy, useMemo, useEffect } from 'react';
 import { useWorkspaceContext } from '@/infrastructure/contexts/WorkspaceContext';
+import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 import { WorkspaceKind } from '@/shared/types';
+import { ProcessingIndicator } from '@/flow_chat/components/modern/ProcessingIndicator';
 import { useMyAgentStore } from '../my-agent/myAgentStore';
 import './AssistantScene.scss';
 
@@ -11,6 +13,7 @@ interface AssistantSceneProps {
 }
 
 const AssistantScene: React.FC<AssistantSceneProps> = ({ workspacePath }) => {
+  const { t } = useI18n('common');
   const selectedAssistantWorkspaceId = useMyAgentStore((s) => s.selectedAssistantWorkspaceId);
   const setSelectedAssistantWorkspaceId = useMyAgentStore((s) => s.setSelectedAssistantWorkspaceId);
   const { currentWorkspace, assistantWorkspacesList } = useWorkspaceContext();
@@ -67,7 +70,18 @@ const AssistantScene: React.FC<AssistantSceneProps> = ({ workspacePath }) => {
 
   return (
     <div className="bitfun-assistant-scene">
-      <Suspense fallback={<div className="bitfun-assistant-scene__loading" />}>
+      <Suspense
+        fallback={(
+          <div
+            className="bitfun-assistant-scene__loading"
+            role="status"
+            aria-busy="true"
+            aria-label={t('loading.scenes')}
+          >
+            <ProcessingIndicator visible />
+          </div>
+        )}
+      >
         <ProfileScene
           key={resolvedAssistantWorkspace?.id ?? 'default-assistant-workspace'}
           workspacePath={resolvedAssistantWorkspace?.rootPath ?? workspacePath}

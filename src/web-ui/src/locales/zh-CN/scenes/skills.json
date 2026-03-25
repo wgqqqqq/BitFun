@@ -36,7 +36,6 @@
   },
   "toolbar": {
     "searchPlaceholder": "搜索技能...",
-    "refreshTooltip": "刷新",
     "addTooltip": "添加技能"
   },
   "filters": {
@@ -58,7 +57,6 @@
     "subtitlePrefix": "从",
     "subtitleSuffix": "浏览和下载可复用技能。",
     "searchPlaceholder": "搜索市场技能...",
-    "refreshTooltip": "刷新市场结果",
     "loading": "正在加载市场技能...",
     "errorPrefix": "市场加载失败: ",
     "empty": {
@@ -124,7 +122,9 @@
       "user": "用户级",
       "project": "项目级",
       "deleteTooltip": "删除",
-      "pathLabel": "路径:"
+      "pathLabel": "路径:",
+      "openPathInExplorer": "在资源管理器中打开此文件夹",
+      "revealPathUnavailableRemote": "远程工作区无法在本地资源管理器中打开路径"
     }
   },
   "deleteModal": {
@@ -146,6 +146,7 @@
     "marketDownloadSuccess": "技能 \"{{name}}\" 下载成功",
     "marketDownloadFailed": "下载失败: {{error}}",
     "enabled": "启用",
-    "disabled": "禁用"
+    "disabled": "禁用",
+    "revealPathFailed": "无法在资源管理器中打开: {{error}}"
   }
 }

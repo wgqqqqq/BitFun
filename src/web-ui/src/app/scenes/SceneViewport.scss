@@ -64,6 +64,25 @@
     margin: 0;
   }
 
+  // ── Lazy chunk loading (matches flow_chat ProcessingIndicator dots) ──
+
+  &__lazy-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 1;
+
+    .processing-indicator {
+      max-width: none;
+      width: auto;
+      margin: 0;
+      padding: 0;
+    }
+  }
+
   // ── Scene slot ────────────────────────────────────────
 
   &__scene {

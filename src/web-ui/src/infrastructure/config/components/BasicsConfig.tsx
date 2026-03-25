@@ -8,7 +8,6 @@ import {
   Tooltip,
   ConfigPageLoading,
   ConfigPageMessage,
-  ConfigPageRefreshButton,
   IconButton,
 } from '@/component-library';
 import { configAPI, workspaceAPI } from '@/infrastructure/api';
@@ -380,11 +379,6 @@ function BasicsLoggingSection() {
     [configLevel, showMessage, t]
   );
 
-  const handleRefresh = useCallback(async () => {
-    await loadData();
-    showMessage('info', t('logging.messages.refreshed'));
-  }, [loadData, showMessage, t]);
-
   const handleOpenFolder = useCallback(async () => {
     const folder = runtimeInfo?.sessionLogDir;
     if (!folder) {
@@ -415,14 +409,6 @@ function BasicsLoggingSection() {
         <ConfigPageSection
           title={t('logging.sections.logging')}
           description={t('logging.sections.loggingHint')}
-          extra={
-            <ConfigPageRefreshButton
-              tooltip={t('logging.actions.refreshTooltip')}
-              onClick={handleRefresh}
-              loading={loading}
-              disabled={loading || saving}
-            />
-          }
         >
           <ConfigPageRow
             label={t('logging.sections.level')}
@@ -528,11 +514,6 @@ function BasicsTerminalSection() {
     [showMessage, t]
   );
 
-  const handleRefresh = useCallback(async () => {
-    await loadData();
-    showMessage('info', t('terminal.messages.refreshed'));
-  }, [loadData, showMessage, t]);
-
   const shouldShowPowerShellCoreRecommendation = useMemo(() => {
     const isWindows = platform === 'windows';
     if (!isWindows) return false;
@@ -593,14 +574,6 @@ function BasicsTerminalSection() {
         <ConfigPageSection
           title={t('terminal.sections.terminal')}
           description={terminalSectionDescription}
-          extra={
-            <ConfigPageRefreshButton
-              tooltip={t('terminal.controls.refreshTooltip')}
-              onClick={handleRefresh}
-              loading={loading}
-              disabled={loading}
-            />
-          }
         >
           <ConfigPageRow
             label={t('terminal.sections.defaultTerminal')}

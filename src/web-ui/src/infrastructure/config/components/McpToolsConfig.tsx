@@ -509,19 +509,14 @@ const McpToolsConfig: React.FC = () => {
   };
 
   const mcpSectionExtra = (
-    <>
-      <IconButton
-        variant="ghost"
-        size="small"
-        onClick={() => setShowJsonEditor(!showJsonEditor)}
-        tooltip={showJsonEditor ? tMcp('actions.backToList') : tMcp('actions.jsonConfig')}
-      >
-        {showJsonEditor ? <X size={16} /> : <FileJson size={16} />}
-      </IconButton>
-      <IconButton variant="ghost" size="small" onClick={loadServers} tooltip={tMcp('actions.refresh')}>
-        <RefreshCw size={16} />
-      </IconButton>
-    </>
+    <IconButton
+      variant="ghost"
+      size="small"
+      onClick={() => setShowJsonEditor(!showJsonEditor)}
+      tooltip={showJsonEditor ? tMcp('actions.backToList') : tMcp('actions.jsonConfig')}
+    >
+      {showJsonEditor ? <X size={16} /> : <FileJson size={16} />}
+    </IconButton>
   );
 
   const renderServerBadge = (server: MCPServerInfo) => (

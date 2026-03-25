@@ -189,6 +189,7 @@
       "inheritPrimary": "Inherit from template (primary)",
       "inheritFast":    "Inherit from template (fast)",
       "personaDocsTitle": "Key documents",
+      "sessionsSectionTitle": "Sessions",
       "scheduledSessionsTitle": "Scheduled sessions",
       "scheduledSessionsNoWorkspace": "Select an assistant workspace to manage scheduled sessions.",
       "personaDocs": {

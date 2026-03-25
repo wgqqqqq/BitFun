@@ -50,9 +50,13 @@ const SkillCard: React.FC<SkillCardProps> = ({
         '--skill-card-color-rgb': getCardColorRgb(accentSeed ?? name),
       } as React.CSSProperties}
       onClick={openDetails}
-      role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && openDetails()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openDetails();
+        }
+      }}
       aria-label={name}
     >
       {/* Header: icon + badges */}
@@ -71,7 +75,15 @@ const SkillCard: React.FC<SkillCardProps> = ({
         {description?.trim() && (
           <p className="skill-card__desc">{description.trim()}</p>
         )}
-        {meta && <div className="skill-card__meta">{meta}</div>}
+        {meta ? (
+          <div
+            className="skill-card__meta"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {meta}
+          </div>
+        ) : null}
       </div>
 
       {/* Footer: action buttons */}

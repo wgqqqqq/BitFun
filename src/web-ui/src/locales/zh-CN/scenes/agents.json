@@ -11,8 +11,7 @@
     "title": "专业智能体",
     "subtitle": "查看与管理核心模式、Agent 与 Sub-Agent，配置工具与 Skills。",
     "searchPlaceholder": "搜索 Agent 名称或描述…",
-    "newAgent": "新建 Agent",
-    "refresh": "刷新"
+    "newAgent": "新建 Agent"
   },
   "nav": {
     "coreAgents": "核心智能体",

@@ -783,6 +783,9 @@
     "assistant": "助理",
     "shell": "Shell"
   },
+  "loading": {
+    "scenes": "正在加载场景"
+  },
   "welcomeScene": {
     "tabLabel": "欢迎使用",
     "welcomeBack": "欢迎回到",

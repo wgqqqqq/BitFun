@@ -783,6 +783,9 @@
     "assistant": "Assistant",
     "shell": "Shell"
   },
+  "loading": {
+    "scenes": "Loading scene"
+  },
   "welcomeScene": {
     "tabLabel": "Welcome",
     "welcomeBack": "Welcome back to",

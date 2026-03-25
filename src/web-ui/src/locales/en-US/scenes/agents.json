@@ -11,8 +11,7 @@
     "title": "Agents",
     "subtitle": "Review and manage core modes, agents, and sub-agents, including tools and skills.",
     "searchPlaceholder": "Search agents by name or description…",
-    "newAgent": "New Agent",
-    "refresh": "Refresh"
+    "newAgent": "New Agent"
   },
   "nav": {
     "coreAgents": "Core Agents",

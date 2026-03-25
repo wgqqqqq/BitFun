@@ -2798,6 +2798,8 @@ $acp-content-top: clamp(40px, 4.5vh, 52px);
     flex-direction: column;
     overflow: hidden;
     padding: 0;
+    // Shared with AssistantQuickInput (.aqi) and .acp-sessions-area horizontal inset
+    --acp-left-inline-pad: #{$size-gap-6};
   }
 
   &__right {
@@ -2890,11 +2892,6 @@ $acp-content-top: clamp(40px, 4.5vh, 52px);
     font-size: $font-size-base;
     max-width: 140px;
   }
-
-  &__reset.icon-btn {
-    flex-shrink: 0;
-    margin-top: 4px;
-  }
 }
 
 // ── Left: quick input area — handled by AssistantQuickInput component ────────
@@ -2907,8 +2904,17 @@ $acp-content-top: clamp(40px, 4.5vh, 52px);
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-top: $size-gap-5;
-  padding-bottom: $size-gap-8;
+  padding: $size-gap-5 var(--acp-left-inline-pad) $size-gap-8;
+
+  &__title {
+    margin: 0 0 $size-gap-3;
+    padding: 0;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-semibold;
+    line-height: $line-height-tight;
+    letter-spacing: -0.01em;
+    color: var(--color-text-secondary);
+  }
 
   &::-webkit-scrollbar {
     width: 4px;
@@ -2944,13 +2950,13 @@ $acp-content-top: clamp(40px, 4.5vh, 52px);
   }
 
   .bitfun-nav-panel__inline-empty {
-    padding: $size-gap-4 $size-gap-3;
+    padding: $size-gap-4 0;
     font-size: $font-size-sm;
   }
 
   .bitfun-nav-panel__inline-action {
     min-height: 38px;
-    padding: $size-gap-3 $size-gap-3;
+    padding: $size-gap-3 0;
     font-size: $font-size-sm;
     border-radius: $size-radius-lg;
   }

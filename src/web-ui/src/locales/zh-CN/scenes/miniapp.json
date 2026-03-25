@@ -3,7 +3,6 @@
   "subtitle": "即时生成的小应用，打开就能用，也能继续迭代。",
   "searchPlaceholder": "搜索小应用...",
   "importFromFolder": "从文件夹导入",
-  "refreshList": "刷新列表",
   "running": "已启动",
   "allApps": "全部应用",
   "noRunningApps": "暂无运行中的应用",
