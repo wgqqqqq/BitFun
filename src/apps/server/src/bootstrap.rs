@@ -53,21 +53,9 @@ pub async fn initialize(workspace: Option<String>) -> anyhow::Result<Arc<ServerA
     let persistence_manager =
         Arc::new(persistence::PersistenceManager::new(path_manager.clone())?);
 
-    let history_manager = Arc::new(session::MessageHistoryManager::new(
-        persistence_manager.clone(),
-        session::HistoryConfig {
-            enable_persistence: false,
-            ..Default::default()
-        },
-    ));
+    let history_manager = Arc::new(session::MessageHistoryManager::new());
 
-    let compression_manager = Arc::new(session::CompressionManager::new(
-        persistence_manager.clone(),
-        session::CompressionConfig {
-            enable_persistence: false,
-            ..Default::default()
-        },
-    ));
+    let compression_manager = Arc::new(session::CompressionManager::new(Default::default()));
 
     let session_manager = Arc::new(session::SessionManager::new(
         history_manager,

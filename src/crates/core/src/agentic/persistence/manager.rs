@@ -1,7 +1,6 @@
 //! Persistence Manager
 //!
-//! Responsible for project-scoped session persistence and legacy
-//! message/compression persistence used by in-memory managers.
+//! Responsible for project-scoped session persistence.
 
 use crate::agentic::core::{
     strip_prompt_markup, CompressionState, Message, MessageContent, Session, SessionConfig,
@@ -13,7 +12,7 @@ use crate::service::session::{
     SessionTranscriptExportOptions, SessionTranscriptIndexEntry, ToolItemData, TranscriptLineRange,
 };
 use crate::util::errors::{BitFunError, BitFunResult};
-use log::{debug, info, warn};
+use log::{info, warn};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -22,7 +21,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::fs;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 
 const SESSION_SCHEMA_VERSION: u32 = 2;
@@ -2043,227 +2041,6 @@ impl PersistenceManager {
         Ok(())
     }
 
-    // ============ Legacy message persistence ============
-
-    fn legacy_sessions_dir(&self) -> PathBuf {
-        self.path_manager.user_data_dir().join("legacy-sessions")
-    }
-
-    fn legacy_session_dir(&self, session_id: &str) -> PathBuf {
-        self.legacy_sessions_dir().join(session_id)
-    }
-
-    async fn ensure_legacy_session_dir(&self, session_id: &str) -> BitFunResult<PathBuf> {
-        let dir = self.legacy_session_dir(session_id);
-        fs::create_dir_all(&dir).await.map_err(|e| {
-            BitFunError::io(format!("Failed to create legacy session directory: {}", e))
-        })?;
-        Ok(dir)
-    }
-
-    /// Append message (JSONL format)
-    pub async fn append_message(&self, session_id: &str, message: &Message) -> BitFunResult<()> {
-        let dir = self.ensure_legacy_session_dir(session_id).await?;
-        let messages_path = dir.join("messages.jsonl");
-
-        let sanitized_message = Self::sanitize_message_for_persistence(message);
-        let json = serde_json::to_string(&sanitized_message).map_err(|e| {
-            BitFunError::serialization(format!("Failed to serialize message: {}", e))
-        })?;
-
-        let mut file = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&messages_path)
-            .await
-            .map_err(|e| BitFunError::io(format!("Failed to open message file: {}", e)))?;
-
-        file.write_all(json.as_bytes())
-            .await
-            .map_err(|e| BitFunError::io(format!("Failed to write message: {}", e)))?;
-        file.write_all(b"\n")
-            .await
-            .map_err(|e| BitFunError::io(format!("Failed to write newline: {}", e)))?;
-
-        Ok(())
-    }
-
-    /// Load all messages
-    pub async fn load_messages(&self, session_id: &str) -> BitFunResult<Vec<Message>> {
-        let messages_path = self.legacy_session_dir(session_id).join("messages.jsonl");
-        if !messages_path.exists() {
-            return Ok(vec![]);
-        }
-
-        let file = fs::File::open(&messages_path)
-            .await
-            .map_err(|e| BitFunError::io(format!("Failed to open message file: {}", e)))?;
-
-        let reader = BufReader::new(file);
-        let mut lines = reader.lines();
-        let mut messages = Vec::new();
-
-        while let Some(line) = lines
-            .next_line()
-            .await
-            .map_err(|e| BitFunError::io(format!("Failed to read message line: {}", e)))?
-        {
-            if line.trim().is_empty() {
-                continue;
-            }
-
-            match serde_json::from_str::<Message>(&line) {
-                Ok(message) => messages.push(message),
-                Err(e) => warn!("Failed to deserialize message: {}", e),
-            }
-        }
-
-        Ok(messages)
-    }
-
-    /// Clear messages
-    pub async fn clear_messages(&self, session_id: &str) -> BitFunResult<()> {
-        let messages_path = self.legacy_session_dir(session_id).join("messages.jsonl");
-        if messages_path.exists() {
-            fs::remove_file(&messages_path)
-                .await
-                .map_err(|e| BitFunError::io(format!("Failed to delete message file: {}", e)))?;
-        }
-        Ok(())
-    }
-
-    /// Delete messages
-    pub async fn delete_messages(&self, session_id: &str) -> BitFunResult<()> {
-        self.clear_messages(session_id).await
-    }
-
-    // ============ Legacy compressed history persistence ============
-
-    pub async fn append_compressed_message(
-        &self,
-        session_id: &str,
-        message: &Message,
-    ) -> BitFunResult<()> {
-        let dir = self.ensure_legacy_session_dir(session_id).await?;
-        let compressed_path = dir.join("compressed_messages.jsonl");
-
-        let sanitized_message = Self::sanitize_message_for_persistence(message);
-        let json = serde_json::to_string(&sanitized_message).map_err(|e| {
-            BitFunError::serialization(format!("Failed to serialize compressed message: {}", e))
-        })?;
-
-        let mut file = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&compressed_path)
-            .await
-            .map_err(|e| {
-                BitFunError::io(format!("Failed to open compressed message file: {}", e))
-            })?;
-
-        file.write_all(json.as_bytes())
-            .await
-            .map_err(|e| BitFunError::io(format!("Failed to write compressed message: {}", e)))?;
-        file.write_all(b"\n")
-            .await
-            .map_err(|e| BitFunError::io(format!("Failed to write newline: {}", e)))?;
-
-        Ok(())
-    }
-
-    pub async fn save_compressed_messages(
-        &self,
-        session_id: &str,
-        messages: &[Message],
-    ) -> BitFunResult<()> {
-        let dir = self.ensure_legacy_session_dir(session_id).await?;
-        let compressed_path = dir.join("compressed_messages.jsonl");
-
-        let mut file = fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&compressed_path)
-            .await
-            .map_err(|e| {
-                BitFunError::io(format!("Failed to open compressed message file: {}", e))
-            })?;
-
-        let sanitized_messages = Self::sanitize_messages_for_persistence(messages);
-        for message in &sanitized_messages {
-            let json = serde_json::to_string(message).map_err(|e| {
-                BitFunError::serialization(format!("Failed to serialize compressed message: {}", e))
-            })?;
-
-            file.write_all(json.as_bytes()).await.map_err(|e| {
-                BitFunError::io(format!("Failed to write compressed message: {}", e))
-            })?;
-            file.write_all(b"\n")
-                .await
-                .map_err(|e| BitFunError::io(format!("Failed to write newline: {}", e)))?;
-        }
-
-        debug!(
-            "Legacy compressed history persisted: session_id={}, message_count={}",
-            session_id,
-            messages.len()
-        );
-        Ok(())
-    }
-
-    pub async fn load_compressed_messages(
-        &self,
-        session_id: &str,
-    ) -> BitFunResult<Option<Vec<Message>>> {
-        let compressed_path = self
-            .legacy_session_dir(session_id)
-            .join("compressed_messages.jsonl");
-
-        if !compressed_path.exists() {
-            return Ok(None);
-        }
-
-        let file = fs::File::open(&compressed_path).await.map_err(|e| {
-            BitFunError::io(format!("Failed to open compressed message file: {}", e))
-        })?;
-
-        let reader = BufReader::new(file);
-        let mut lines = reader.lines();
-        let mut messages = Vec::new();
-
-        while let Some(line) = lines.next_line().await.map_err(|e| {
-            BitFunError::io(format!("Failed to read compressed message line: {}", e))
-        })? {
-            if line.trim().is_empty() {
-                continue;
-            }
-
-            match serde_json::from_str::<Message>(&line) {
-                Ok(message) => messages.push(message),
-                Err(e) => warn!("Failed to deserialize compressed message: {}", e),
-            }
-        }
-
-        if messages.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some(messages))
-    }
-
-    pub async fn delete_compressed_messages(&self, session_id: &str) -> BitFunResult<()> {
-        let compressed_path = self
-            .legacy_session_dir(session_id)
-            .join("compressed_messages.jsonl");
-
-        if compressed_path.exists() {
-            fs::remove_file(&compressed_path).await.map_err(|e| {
-                BitFunError::io(format!("Failed to delete compressed message file: {}", e))
-            })?;
-        }
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]

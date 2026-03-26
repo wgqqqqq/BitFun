@@ -1002,31 +1002,31 @@ impl ExecutionEngine {
             // Add assistant message to history
             messages.push(round_result.assistant_message.clone());
 
-            // Immediately save assistant message (prevent loss on cancellation)
+            // Update the in-memory message caches immediately so subsequent rounds see it.
             if let Err(e) = self
                 .session_manager
                 .add_message(&context.session_id, round_result.assistant_message.clone())
                 .await
             {
-                warn!("Failed to save assistant message in real-time: {}", e);
+                warn!("Failed to update assistant message in memory: {}", e);
             }
 
             // Add tool result messages to history
             for tool_result_msg in round_result.tool_result_messages.iter() {
                 messages.push(tool_result_msg.clone());
 
-                // Immediately save tool result message
+                // Update the in-memory message caches immediately so subsequent rounds see it.
                 if let Err(e) = self
                     .session_manager
                     .add_message(&context.session_id, tool_result_msg.clone())
                     .await
                 {
-                    warn!("Failed to save tool result message in real-time: {}", e);
+                    warn!("Failed to update tool result message in memory: {}", e);
                 }
             }
 
             debug!(
-                "Saved round messages in real-time: round_index={}, assistant + {} tool results",
+                "Updated round messages in memory: round_index={}, assistant + {} tool results",
                 round_index,
                 round_result.tool_result_messages.len()
             );
@@ -1042,8 +1042,8 @@ impl ExecutionEngine {
                 break;
             }
 
-            // Queued user message while this turn was running: stop after a full model round
-            // (AI response + tool execution for this round are already persisted).
+            // Queued user message while this turn was running: stop after a full model round.
+            // The round output has already been reflected in the in-memory message caches.
             // No special deferral for tool-confirmation phases: we do not require the user to
             // finish confirming before this boundary check runs; the check applies as soon as
             // this `execute_round` completes (same as any other round).

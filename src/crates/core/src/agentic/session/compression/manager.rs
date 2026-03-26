@@ -1,6 +1,6 @@
 //! Context Compression Manager
 //!
-//! Responsible for managing session context compression
+//! Responsible for managing in-memory session context compression.
 
 use super::fallback::{
     build_structured_compression_reminder, CompressionFallbackOptions, CompressionReminder,
@@ -9,7 +9,6 @@ use crate::agentic::core::{
     render_system_reminder, CompressionPayload, Message, MessageHelper, MessageRole,
     MessageSemanticKind,
 };
-use crate::agentic::persistence::PersistenceManager;
 use crate::infrastructure::ai::{get_global_ai_client_factory, AIClient};
 use crate::util::errors::{BitFunError, BitFunResult};
 use crate::util::types::Message as AIMessage;
@@ -21,7 +20,6 @@ use std::sync::Arc;
 /// Compression manager configuration
 #[derive(Debug, Clone)]
 pub struct CompressionConfig {
-    pub enable_persistence: bool,
     pub keep_turns_ratio: f32,
     pub keep_last_turn_ratio: f32,
     pub single_request_max_tokens_ratio: f32,
@@ -35,7 +33,6 @@ pub struct CompressionConfig {
 impl Default for CompressionConfig {
     fn default() -> Self {
         Self {
-            enable_persistence: true,
             keep_turns_ratio: 0.3,
             keep_last_turn_ratio: 0.4,
             single_request_max_tokens_ratio: 0.7,
@@ -70,17 +67,14 @@ pub struct CompressionResult {
 pub struct CompressionManager {
     /// Compressed message history (by session ID)
     compressed_histories: Arc<DashMap<String, Vec<Message>>>,
-    /// Persistence manager
-    persistence: Arc<PersistenceManager>,
     /// Configuration
     config: CompressionConfig,
 }
 
 impl CompressionManager {
-    pub fn new(persistence: Arc<PersistenceManager>, config: CompressionConfig) -> Self {
+    pub fn new(config: CompressionConfig) -> Self {
         Self {
             compressed_histories: Arc::new(DashMap::new()),
-            persistence,
             config,
         }
     }
@@ -95,27 +89,18 @@ impl CompressionManager {
         );
     }
 
-    /// Add message (async, supports persistence)
+    /// Add message to the in-memory context history.
     pub async fn add_message(&self, session_id: &str, message: Message) -> BitFunResult<()> {
-        // 1. Add to memory
         if let Some(mut compressed) = self.compressed_histories.get_mut(session_id) {
-            compressed.push(message.clone());
+            compressed.push(message);
         } else {
             self.compressed_histories
-                .insert(session_id.to_string(), vec![message.clone()]);
+                .insert(session_id.to_string(), vec![message]);
         }
-
-        // 2. Persist (append single message, similar to MessageHistoryManager)
-        if self.config.enable_persistence {
-            self.persistence
-                .append_compressed_message(session_id, &message)
-                .await?;
-        }
-
         Ok(())
     }
 
-    /// Batch restore messages (doesn't trigger persistence, used for session restore)
+    /// Batch restore messages into the in-memory compression cache.
     pub fn restore_session(&self, session_id: &str, messages: Vec<Message>) {
         self.compressed_histories
             .insert(session_id.to_string(), messages);
@@ -295,28 +280,6 @@ impl CompressionManager {
         // Update compression history
         self.compressed_histories
             .insert(session_id.to_string(), compressed_messages.clone());
-
-        // Persist compression history (similar to MessageHistoryManager pattern).
-        // Persistence is intentionally off until the storage contract is finalized.
-        #[allow(clippy::overly_complex_bool_expr)]
-        if false && self.config.enable_persistence {
-            if let Err(e) = self
-                .persistence
-                .save_compressed_messages(session_id, &compressed_messages)
-                .await
-            {
-                warn!(
-                    "Failed to persist compressed history: session_id={}, error={}",
-                    session_id, e
-                );
-            } else {
-                debug!(
-                    "Compressed history persisted: session_id={}, message_count={}",
-                    session_id,
-                    compressed_messages.len()
-                );
-            }
-        }
 
         Ok(CompressionResult {
             messages: compressed_messages,

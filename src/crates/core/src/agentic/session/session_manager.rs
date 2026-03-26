@@ -581,7 +581,7 @@ impl SessionManager {
             .restore_session(session_id, messages.clone())
             .await?;
 
-        // 3. Restore compression manager - batch restore, don't trigger persistence
+        // 3. Restore the in-memory compression manager state from the recovered messages.
         // If session already exists, delete old one first then create (ensure clean state)
         if session_already_in_memory {
             self.compression_manager.delete_session(session_id);
@@ -1074,14 +1074,14 @@ impl SessionManager {
             .save_dialog_turn(workspace_path, &turn)
             .await?;
 
-        // Sync messages to in-memory caches so subsequent对话 can access context
+        // Sync messages to the in-memory caches so subsequent turns can access context.
         let user_message = Message::user(question.to_string())
             .with_turn_id(turn_id.clone())
             .with_semantic_kind(MessageSemanticKind::ActualUserInput);
         let assistant_message = Message::assistant(full_text.to_string())
             .with_turn_id(turn_id.clone());
 
-        // Add to MessageHistoryManager
+        // Add to the in-memory history cache.
         self.history_manager
             .add_message(child_session_id, user_message.clone())
             .await?;
@@ -1089,7 +1089,7 @@ impl SessionManager {
             .add_message(child_session_id, assistant_message.clone())
             .await?;
 
-        // Add to CompressionManager
+        // Add to the in-memory compression/context cache.
         self.compression_manager
             .add_message(child_session_id, user_message)
             .await?;
@@ -1141,11 +1141,11 @@ impl SessionManager {
 
     /// Add message to session
     pub async fn add_message(&self, session_id: &str, message: Message) -> BitFunResult<()> {
-        // Add to history manager
+        // Add to the in-memory history cache.
         self.history_manager
             .add_message(session_id, message.clone())
             .await?;
-        // Also add to compression manager
+        // Also add to the in-memory compression/context cache.
         self.compression_manager
             .add_message(session_id, message)
             .await?;
