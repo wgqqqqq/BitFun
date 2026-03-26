@@ -76,7 +76,56 @@ html, body, #root {
 
 .installer-content {
   flex: 1; display: flex; flex-direction: column;
+  min-height: 0;
   overflow: hidden; position: relative;
+}
+
+.page-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 32px 18px;
+}
+
+.page-container {
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.page-container--center {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.page-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 22px 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  background: var(--color-bg-primary);
+  flex-shrink: 0;
+}
+
+.page-footer--split {
+  justify-content: space-between;
+}
+
+.page-footer--center {
+  justify-content: center;
 }
 
 .btn {
@@ -487,6 +536,7 @@ html, body, #root {
   justify-content: flex-end;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
   padding: 10px 22px 12px;
   border-top: 1px solid rgba(148, 163, 184, 0.12);
   background: var(--color-bg-primary);
@@ -584,11 +634,8 @@ html, body, #root {
 .uninstall-page {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 28px 42px 92px;
-  animation: fadeIn 0.4s ease-out;
-  position: relative;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .uninstall-card {
@@ -602,8 +649,7 @@ html, body, #root {
 }
 
 .uninstall-title {
-  margin-top: -34px;
-  margin-bottom: 30px;
+  margin-bottom: 22px;
   font-size: 24px;
   font-weight: 600;
   color: var(--color-text-primary);
@@ -684,7 +730,27 @@ html, body, #root {
 .uninstall-actions {
   display: flex;
   gap: 10px;
-  position: absolute;
-  right: 24px;
-  bottom: 18px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+  .page-scroll {
+    padding: 18px 18px 12px;
+  }
+
+  .page-footer {
+    padding: 8px 14px 10px;
+  }
+}
+
+@media (max-width: 520px) {
+  .page-container--center {
+    justify-content: flex-start;
+  }
+
+  .page-footer,
+  .page-footer--split {
+    justify-content: center;
+  }
 }

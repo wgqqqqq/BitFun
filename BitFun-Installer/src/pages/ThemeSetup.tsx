@@ -67,78 +67,81 @@ export function ThemeSetup({ options, setOptions, onLaunch, onClose }: ThemeSetu
   };
 
   return (
-    <div style={{
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '0 24px',
-      animation: 'fadeIn 0.4s ease-out',
-    }}>
-      <p style={{
-        fontSize: 14,
-        color: 'var(--color-text-secondary)',
-        marginBottom: 12,
-      }}>
-        {t('themeSetup.subtitle')}
-      </p>
+    <div className="page-shell">
+      <div className="page-scroll">
+        <div className="page-container page-container--center" style={{ maxWidth: 760 }}>
+          <p style={{
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+            marginBottom: 12,
+          }}>
+            {t('themeSetup.subtitle')}
+          </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, marginBottom: 16, width: '100%', maxWidth: 760 }}>
-        <button
-          type="button"
-          style={cardStyle(options.themePreference === SYSTEM_THEME_ID)}
-          onClick={() => selectTheme(SYSTEM_THEME_ID)}
-        >
-          <div style={{ ...previewBaseStyle, display: 'flex' }}>
-            <div style={{ flex: 1, background: lightPreview.colors.background.primary }} />
-            <div style={{ flex: 1, background: darkPreview.colors.background.primary }} />
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-primary)' }}>
-            {t('themeSetup.followSystem')}
-          </div>
-        </button>
-
-        {orderedThemes.map((theme) => (
-          <button key={theme.id} type="button" style={cardStyle(options.themePreference === theme.id)} onClick={() => selectTheme(theme.id as ThemeId)}>
-            <div style={{ ...previewBaseStyle, background: theme.colors.background.primary }}>
-              <div style={{ height: 16, background: theme.colors.background.secondary, opacity: 0.9 }} />
-              <div style={{ display: 'flex', gap: 6, padding: 8 }}>
-                <div style={{ width: 22, height: 22, borderRadius: 5, background: theme.colors.element.base, opacity: 0.9 }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ height: 5, width: '62%', background: theme.colors.text.muted, opacity: 0.5, borderRadius: 3, marginBottom: 5 }} />
-                  <div style={{ height: 5, width: '78%', background: theme.colors.accent['500'], borderRadius: 3 }} />
-                </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))',
+              gap: 8,
+              marginBottom: 16,
+              width: '100%',
+            }}
+          >
+            <button
+              type="button"
+              style={cardStyle(options.themePreference === SYSTEM_THEME_ID)}
+              onClick={() => selectTheme(SYSTEM_THEME_ID)}
+            >
+              <div style={{ ...previewBaseStyle, display: 'flex' }}>
+                <div style={{ flex: 1, background: lightPreview.colors.background.primary }} />
+                <div style={{ flex: 1, background: darkPreview.colors.background.primary }} />
               </div>
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--color-text-primary)' }}>
-              {t(`themeSetup.themeNames.${theme.id}`, { defaultValue: theme.name })}
-            </div>
-          </button>
-        ))}
-      </div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-primary)' }}>
+                {t('themeSetup.followSystem')}
+              </div>
+            </button>
 
-      <div style={{ width: '100%', maxWidth: 760, marginBottom: 14 }}>
-        <Checkbox
-          checked={options.launchAfterInstall}
-          onChange={(checked) => setOptions((prev) => ({ ...prev, launchAfterInstall: checked }))}
-          label={t('options.launchAfterInstall')}
-        />
-      </div>
+            {orderedThemes.map((theme) => (
+              <button key={theme.id} type="button" style={cardStyle(options.themePreference === theme.id)} onClick={() => selectTheme(theme.id as ThemeId)}>
+                <div style={{ ...previewBaseStyle, background: theme.colors.background.primary }}>
+                  <div style={{ height: 16, background: theme.colors.background.secondary, opacity: 0.9 }} />
+                  <div style={{ display: 'flex', gap: 6, padding: 8 }}>
+                    <div style={{ width: 22, height: 22, borderRadius: 5, background: theme.colors.element.base, opacity: 0.9 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ height: 5, width: '62%', background: theme.colors.text.muted, opacity: 0.5, borderRadius: 3, marginBottom: 5 }} />
+                      <div style={{ height: 5, width: '78%', background: theme.colors.accent['500'], borderRadius: 3 }} />
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-primary)' }}>
+                  {t(`themeSetup.themeNames.${theme.id}`, { defaultValue: theme.name })}
+                </div>
+              </button>
+            ))}
+          </div>
 
-      {finishError && (
-        <div style={{
-          color: 'var(--color-error)',
-          marginBottom: 12,
-          fontSize: 12,
-          maxWidth: 760,
-          width: '100%',
-        }}>
-          {finishError}
+          <div style={{ width: '100%', marginBottom: 14 }}>
+            <Checkbox
+              checked={options.launchAfterInstall}
+              onChange={(checked) => setOptions((prev) => ({ ...prev, launchAfterInstall: checked }))}
+              label={t('options.launchAfterInstall')}
+            />
+          </div>
+
+          {finishError && (
+            <div style={{
+              color: 'var(--color-error)',
+              marginBottom: 12,
+              fontSize: 12,
+              width: '100%',
+            }}>
+              {finishError}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
-      <div style={{ display: 'flex', gap: 10 }}>
+      <div className="page-footer page-footer--center">
         <button
           className="btn btn-success"
           onClick={handleFinish}

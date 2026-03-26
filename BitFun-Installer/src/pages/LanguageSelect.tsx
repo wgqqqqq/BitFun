@@ -8,7 +8,7 @@ interface LanguageSelectProps {
 
 const LANGUAGES = [
   { code: 'en', label: 'English', native: 'English' },
-  { code: 'zh', label: 'Chinese', native: '简体中文' },
+  { code: 'zh', label: 'Chinese', native: '\u7b80\u4f53\u4e2d\u6587' },
 ];
 
 export function LanguageSelect({ onSelect }: LanguageSelectProps) {
@@ -26,7 +26,7 @@ export function LanguageSelect({ onSelect }: LanguageSelectProps) {
 
   return (
     <div style={{
-      flex: 1, display: 'flex', flexDirection: 'row', overflow: 'hidden',
+      flex: 1, minHeight: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden',
     }}>
       <div style={{
         flex: '0 0 42%',
@@ -82,81 +82,84 @@ export function LanguageSelect({ onSelect }: LanguageSelectProps) {
       </div>
 
       <div style={{
-        flex: 1, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        padding: '24px 32px',
+        flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
       }}>
-        <div style={{
-          display: 'flex', flexDirection: 'column', gap: 16,
-          width: '100%', maxWidth: 320,
-          animation: 'fadeIn 0.5s ease-out',
-        }}>
-          <div className="section-label">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-            </svg>
-            Select Language / 选择语言
-          </div>
+        <div className="page-scroll" style={{ padding: '24px 32px 18px' }}>
+          <div className="page-container page-container--center" style={{ maxWidth: 320 }}>
+            <div style={{
+              display: 'flex', flexDirection: 'column', gap: 16,
+              width: '100%',
+              animation: 'fadeIn 0.5s ease-out',
+            }}>
+              <div className="section-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                </svg>
+                Select Language / {'\u9009\u62e9\u8bed\u8a00'}
+              </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {LANGUAGES.map((lang) => {
-              const isSelected = selected === lang.code;
-              return (
-                <button
-                  key={lang.code}
-                  onClick={() => handleSelect(lang.code)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    padding: '14px 16px', width: '100%',
-                    background: isSelected ? 'rgba(96, 165, 250, 0.14)' : 'rgba(148, 163, 184, 0.08)',
-                    border: 'none',
-                    borderRadius: 'var(--radius-sm)',
-                    cursor: 'pointer', textAlign: 'left',
-                    transition: 'all 0.25s ease',
-                    outline: 'none',
-                    fontFamily: 'var(--font-sans)',
-                    boxShadow: 'none',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) {
-                      e.currentTarget.style.background = 'rgba(148, 163, 184, 0.14)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) {
-                      e.currentTarget.style.background = 'rgba(148, 163, 184, 0.08)';
-                    }
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div style={{
-                      fontSize: 14, fontWeight: 500,
-                      color: isSelected ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                      transition: 'color 0.2s ease',
-                    }}>{lang.native}</div>
-                    <div style={{
-                      fontSize: 11,
-                      color: 'var(--color-text-muted)', opacity: 0.7,
-                      marginTop: 2,
-                    }}>{lang.label}</div>
-                  </div>
-                </button>
-              );
-            })}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {LANGUAGES.map((lang) => {
+                  const isSelected = selected === lang.code;
+                  return (
+                    <button
+                      key={lang.code}
+                      onClick={() => handleSelect(lang.code)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '14px 16px', width: '100%',
+                        background: isSelected ? 'rgba(96, 165, 250, 0.14)' : 'rgba(148, 163, 184, 0.08)',
+                        border: 'none',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer', textAlign: 'left',
+                        transition: 'all 0.25s ease',
+                        outline: 'none',
+                        fontFamily: 'var(--font-sans)',
+                        boxShadow: 'none',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.background = 'rgba(148, 163, 184, 0.14)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.background = 'rgba(148, 163, 184, 0.08)';
+                        }
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div style={{
+                          fontSize: 14, fontWeight: 500,
+                          color: isSelected ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+                          transition: 'color 0.2s ease',
+                        }}>{lang.native}</div>
+                        <div style={{
+                          fontSize: 11,
+                          color: 'var(--color-text-muted)', opacity: 0.7,
+                          marginTop: 2,
+                        }}>{lang.label}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
+        </div>
 
+        <div className="page-footer page-footer--center">
           <button
             className={`btn ${selected ? 'btn-primary' : ''}`}
             onClick={handleContinue}
             disabled={!selected}
             style={{
               justifyContent: 'center',
-              marginTop: 8,
             }}
           >
-            {selected === 'zh' ? '继续' : 'Continue'}
+            {selected === 'zh' ? '\u7ee7\u7eed' : 'Continue'}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />
             </svg>
