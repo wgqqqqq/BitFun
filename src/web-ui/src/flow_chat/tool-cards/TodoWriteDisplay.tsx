@@ -58,26 +58,6 @@ export const TodoWriteDisplay: React.FC<ToolCardProps> = ({
   
   const displayMode = config?.displayMode || 'compact';
 
-  if (displayMode === 'compact') {
-    return (
-      <div className={`tool-display-compact todo-write-compact status-${status}`}>
-        <span className="tool-icon">
-          {isLoading ? (
-            <Loader2 className="animate-spin" size={14} />
-          ) : (
-            <ListTodo size={14} />
-          )}
-        </span>
-        {todosToDisplay.length > 0 && (
-          <>
-            <span className="todo-count">{t('toolCards.todoWrite.tasksCount', { count: todosToDisplay.length })}</span>
-            <span className="todo-progress">{t('toolCards.todoWrite.progress', { completed: taskStats.completed, total: taskStats.total })}</span>
-          </>
-        )}
-      </div>
-    );
-  }
-
   const renderTrackDot = (todo: any, index: number) => {
     const statusClass = `track-dot--${todo.status}`;
     return (
@@ -124,6 +104,26 @@ export const TodoWriteDisplay: React.FC<ToolCardProps> = ({
       setExpandedState(nextExpanded);
     });
   }, [applyExpandedState, isExpanded, todosToDisplay.length]);
+
+  if (displayMode === 'compact') {
+    return (
+      <div className={`tool-display-compact todo-write-compact status-${status}`}>
+        <span className="tool-icon">
+          {isLoading ? (
+            <Loader2 className="animate-spin" size={14} />
+          ) : (
+            <ListTodo size={14} />
+          )}
+        </span>
+        {todosToDisplay.length > 0 && (
+          <>
+            <span className="todo-count">{t('toolCards.todoWrite.tasksCount', { count: todosToDisplay.length })}</span>
+            <span className="todo-progress">{t('toolCards.todoWrite.progress', { completed: taskStats.completed, total: taskStats.total })}</span>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div

@@ -94,10 +94,6 @@ export const LSDisplay: React.FC<ToolCardProps> = ({
   const hasDetails = status === 'completed' && entries.length > 0;
   const hasResultData = toolResult?.result !== undefined && toolResult?.result !== null;
 
-  if (status === 'error') {
-    return null;
-  }
-
   const handleClick = useCallback(() => {
     if (hasDetails) {
       applyExpandedState(isExpanded, !isExpanded, setIsExpanded, {
@@ -181,6 +177,10 @@ export const LSDisplay: React.FC<ToolCardProps> = ({
       </div>
     </>
   );
+
+  if (status === 'error') {
+    return null;
+  }
 
   return (
     <div ref={cardRootRef} data-tool-card-id={toolId ?? ''}>

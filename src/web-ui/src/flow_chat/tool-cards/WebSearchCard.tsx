@@ -88,10 +88,6 @@ export const WebSearchCard: React.FC<ToolCardProps> = ({
   const hasResultData = toolResult?.result !== undefined && toolResult?.result !== null;
   const hasResults = searchResults && searchResults.results.length > 0;
 
-  if (status === 'error') {
-    return null;
-  }
-
   const handleClick = useCallback(() => {
     if (status === 'completed' && hasResults) {
       applyExpandedState(isExpanded, !isExpanded, setIsExpanded, {
@@ -140,6 +136,10 @@ export const WebSearchCard: React.FC<ToolCardProps> = ({
       ))}
     </div>
   );
+
+  if (status === 'error') {
+    return null;
+  }
 
   return (
     <div ref={cardRootRef} data-tool-card-id={toolId ?? ''}>

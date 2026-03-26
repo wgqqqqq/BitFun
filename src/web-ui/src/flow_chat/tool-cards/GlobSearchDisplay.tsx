@@ -100,10 +100,6 @@ export const GlobSearchDisplay: React.FC<ToolCardProps> = ({
   const hasDetails = status === 'completed' && files.length > 0;
   const hasResultData = toolResult?.result !== undefined && toolResult?.result !== null;
 
-  if (status === 'error') {
-    return null;
-  }
-
   const handleClick = useCallback(() => {
     if (hasDetails) {
       applyExpandedState(isExpanded, !isExpanded, setIsExpanded, {
@@ -185,6 +181,10 @@ export const GlobSearchDisplay: React.FC<ToolCardProps> = ({
       </div>
     </>
   );
+
+  if (status === 'error') {
+    return null;
+  }
 
   return (
     <div ref={cardRootRef} data-tool-card-id={toolId ?? ''}>

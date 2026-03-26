@@ -38,30 +38,15 @@ export interface TaskDetailPanelProps {
 export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ data }) => {
   const { t } = useTranslation('flow-chat');
   const { toolItem, taskInput, sessionId } = data || {};
+  const status = toolItem?.status;
+  const toolResult = toolItem?.toolResult;
+  const parentTaskToolId = toolItem?.id;
   
   const [subagentItems, setSubagentItems] = useState<FlowItem[]>([]);
   
   const contentRef = useRef<HTMLDivElement>(null);
   // Track auto-scroll; disable when the user scrolls up.
   const shouldAutoScrollRef = useRef(true);
-  
-  if (!toolItem) {
-    return (
-      <div className="task-detail-panel task-detail-panel--empty">
-        <div className="task-detail-panel__header">
-          <span className="task-detail-panel__header-title">
-            {t('toolCards.taskDetailPanel.untitled')}
-          </span>
-        </div>
-        <div className="task-detail-panel__empty-content">
-          {t('toolCards.taskDetailPanel.noData', 'Unable to load task data')}
-        </div>
-      </div>
-    );
-  }
-  
-  const { status, toolResult } = toolItem;
-  const parentTaskToolId = toolItem.id;
 
   // Collect subagent items associated with this task.
   useEffect(() => {
@@ -220,6 +205,21 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ data }) => {
         return null;
     }
   }, [sessionId, handleOpenInEditor]);
+
+  if (!toolItem) {
+    return (
+      <div className="task-detail-panel task-detail-panel--empty">
+        <div className="task-detail-panel__header">
+          <span className="task-detail-panel__header-title">
+            {t('toolCards.taskDetailPanel.untitled')}
+          </span>
+        </div>
+        <div className="task-detail-panel__empty-content">
+          {t('toolCards.taskDetailPanel.noData', 'Unable to load task data')}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="task-detail-panel">
