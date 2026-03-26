@@ -70,17 +70,10 @@
   
 }
 
-// Expanded state.
+// Expanded state (outer scroll area).
 .user-message-item--expanded {
   max-height: 60vh;
   overflow-y: auto;
-  
-  .user-message-item__content {
-    white-space: pre-wrap;
-    overflow: visible;
-    text-overflow: unset;
-    max-height: none;
-  }
 }
 
 // Failed state.
@@ -99,6 +92,15 @@
     border-color: var(--border-medium, #555);
     box-shadow: none;
   }
+}
+
+// Expanded message body: after --failed so multiline / whitespace always apply when open.
+.user-message-item--expanded .user-message-item__content {
+  white-space: pre-wrap;
+  overflow: visible;
+  text-overflow: unset;
+  max-height: none;
+  overflow-wrap: break-word;
 }
 
 .user-message-item__copy-btn {

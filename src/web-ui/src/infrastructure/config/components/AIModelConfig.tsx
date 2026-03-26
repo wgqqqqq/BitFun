@@ -1750,31 +1750,31 @@ const AIModelConfig: React.FC = () => {
           }}
           size="small"
         />
-        <button
-          type="button"
-          className="bitfun-collection-btn"
+        <IconButton
+          variant="ghost"
+          size="small"
+          isLoading={isTesting}
           onClick={() => void handleTest(config)}
-          disabled={isTesting}
-          title={t('actions.test')}
+          tooltip={t('actions.test')}
         >
-          {isTesting ? <Loader size={14} className="spinning" /> : <Wifi size={14} />}
-        </button>
-        <button
-          type="button"
-          className="bitfun-collection-btn"
+          {isTesting ? <Loader size={14} /> : <Wifi size={14} />}
+        </IconButton>
+        <IconButton
+          variant="ghost"
+          size="small"
           onClick={() => handleEdit(config)}
-          title={t('actions.edit')}
+          tooltip={t('actions.edit')}
         >
           <Edit2 size={14} />
-        </button>
-        <button
-          type="button"
-          className="bitfun-collection-btn bitfun-collection-btn--danger"
+        </IconButton>
+        <IconButton
+          variant="danger"
+          size="small"
           onClick={() => void handleDelete(config.id!)}
-          title={t('actions.delete')}
+          tooltip={t('actions.delete')}
         >
           <Trash2 size={14} />
-        </button>
+        </IconButton>
       </>
     );
 

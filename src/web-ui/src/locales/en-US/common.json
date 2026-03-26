@@ -51,7 +51,7 @@
     "chatPanel": "Chat",
     "showChatPanel": "Show Chat Panel",
     "hideChatPanel": "Hide Chat Panel",
-    "switchToToolbar": "Switch to Toolbar Mode",
+    "switchToToolbar": "Floating window mode",
     "remoteConnect": "Remote Control (Beta)",
     "modeSwitchAriaLabel": "View mode switch",
     "modeCowork": "Cowork",

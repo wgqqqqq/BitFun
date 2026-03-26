@@ -51,7 +51,7 @@
     "chatPanel": "聊天",
     "showChatPanel": "显示聊天面板",
     "hideChatPanel": "隐藏聊天面板",
-    "switchToToolbar": "切换到工具栏模式",
+    "switchToToolbar": "悬浮窗模式",
     "remoteConnect": "远程控制 (Beta)",
     "modeSwitchAriaLabel": "视图模式切换",
     "modeCowork": "Cowork",

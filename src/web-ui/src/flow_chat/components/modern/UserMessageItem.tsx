@@ -13,7 +13,7 @@ import { flowChatStore } from '../../store/FlowChatStore';
 import { snapshotAPI } from '@/infrastructure/api';
 import { notificationService } from '@/shared/notification-system';
 import { globalEventBus } from '@/infrastructure/event-bus';
-import { ReproductionStepsBlock, Tooltip } from '@/component-library';
+import { ReproductionStepsBlock, Tooltip, confirmDanger } from '@/component-library';
 import { createLogger } from '@/shared/utils/logger';
 import './UserMessageItem.scss';
 
@@ -101,7 +101,19 @@ export const UserMessageItem = React.memo<UserMessageItemProps>(
       e.stopPropagation();
       if (!canRollback || !sessionId) return;
 
-      const confirmed = await window.confirm(t('message.rollbackConfirm', { index: turnIndex + 1 }));
+      const index = turnIndex + 1;
+      const confirmed = await confirmDanger(
+        t('message.rollbackDialogTitle', { index }),
+        (
+          <>
+            <p className="confirm-dialog__message-intro">{t('message.rollbackDialogIntro')}</p>
+            <ul className="confirm-dialog__bullet-list">
+              <li>{t('message.rollbackDialogBulletFiles')}</li>
+              <li>{t('message.rollbackDialogBulletHistory')}</li>
+            </ul>
+          </>
+        )
+      );
       if (!confirmed) return;
 
       setIsRollingBack(true);
@@ -181,7 +193,11 @@ export const UserMessageItem = React.memo<UserMessageItemProps>(
             className="user-message-item__content"
             onClick={handleToggleExpand}
             title={(hasOverflow || expanded) ? (expanded ? t('message.clickToCollapse') : t('message.clickToExpand')) : undefined}
-            style={{ cursor: (hasOverflow || expanded) ? 'pointer' : 'text' }}
+            style={{
+              cursor: (hasOverflow || expanded) ? 'pointer' : 'text',
+              // Inline so newline preservation wins over any global/cascade overrides.
+              ...(expanded ? { whiteSpace: 'pre-wrap' as const } : {}),
+            }}
           >
             {displayText}
           </div>
