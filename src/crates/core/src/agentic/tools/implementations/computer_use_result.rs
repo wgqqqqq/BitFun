@@ -57,6 +57,7 @@ mod tests {
             enter_ready: true,
             requires_fresh_screenshot_before_click: true,
             requires_fresh_screenshot_before_enter: false,
+            recommend_screenshot_to_verify_last_action: true,
             last_screenshot_kind: Some(ComputerUseInteractionScreenshotKind::FullDisplay),
             last_mutation: None,
             recommended_next_action: Some("screenshot_navigate_quadrant".to_string()),
@@ -69,6 +70,10 @@ mod tests {
         assert_eq!(
             body["interaction_state"]["recommended_next_action"],
             json!("screenshot_navigate_quadrant")
+        );
+        assert_eq!(
+            body["interaction_state"]["recommend_screenshot_to_verify_last_action"],
+            json!(true)
         );
     }
 
@@ -104,6 +109,7 @@ mod tests {
             enter_ready: true,
             requires_fresh_screenshot_before_click: true,
             requires_fresh_screenshot_before_enter: false,
+            recommend_screenshot_to_verify_last_action: false,
             last_screenshot_kind: Some(ComputerUseInteractionScreenshotKind::FullDisplay),
             last_mutation: None,
             recommended_next_action: Some("screenshot_navigate_quadrant".to_string()),

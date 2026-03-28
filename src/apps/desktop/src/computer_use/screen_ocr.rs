@@ -139,11 +139,89 @@ fn normalize_query(text_query: &str) -> BitFunResult<String> {
     Ok(q.to_string())
 }
 
+/// Normalize for substring / fuzzy matching. Strips **all** Unicode whitespace so that
+/// Vision output like `"尉 怡 青"` or `"尉怡 青"` still matches query `"尉怡青"` (CJK UIs often
+/// insert spaces between glyphs). Latin phrases become `"helloworld"`-style; substring checks
+/// remain meaningful for short tokens.
 fn normalize_for_match(s: &str) -> String {
-    s.split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+    s.chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
         .to_lowercase()
+}
+
+/// Levenshtein distance on Unicode scalar values (not UTF-8 bytes).
+fn levenshtein_chars(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let n = a.len();
+    let m = b.len();
+    if n == 0 {
+        return m;
+    }
+    if m == 0 {
+        return n;
+    }
+    let mut prev: Vec<usize> = (0..=m).collect();
+    let mut curr = vec![0usize; m + 1];
+    for i in 0..n {
+        curr[0] = i + 1;
+        for j in 0..m {
+            let cost = usize::from(a[i] != b[j]);
+            curr[j + 1] = (prev[j] + cost)
+                .min(prev[j + 1] + 1)
+                .min(curr[j] + 1);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[m]
+}
+
+/// Max allowed edit distance for fuzzy OCR match (Vision mis-reads one CJK glyph, etc.).
+fn fuzzy_max_distance(query_len_chars: usize) -> usize {
+    match query_len_chars {
+        0 => 0,
+        1 => 0,
+        2 | 3 | 4 => 1,
+        5..=8 => 2,
+        _ => 3,
+    }
+}
+
+fn fuzzy_text_matches_query(ocr_text: &str, query: &str) -> bool {
+    let t = normalize_for_match(ocr_text);
+    let q = normalize_for_match(query);
+    if q.is_empty() {
+        return false;
+    }
+    if t.contains(&q) {
+        return true;
+    }
+    let ql = q.chars().count();
+    let dist = levenshtein_chars(&t, &q);
+    dist <= fuzzy_max_distance(ql)
+}
+
+#[cfg(test)]
+mod ocr_match_tests {
+    use super::*;
+
+    #[test]
+    fn normalize_strips_whitespace_for_cjk_substring() {
+        let q = normalize_for_match("尉怡青");
+        assert!(normalize_for_match("尉 怡 青").contains(&q));
+        assert!(normalize_for_match(" 尉怡 青 ").contains(&q));
+    }
+
+    #[test]
+    fn fuzzy_one_glyph_substitution_three_chars() {
+        assert!(fuzzy_text_matches_query("卫怡青", "尉怡青"));
+    }
+
+    #[test]
+    fn levenshtein_ascii() {
+        assert_eq!(levenshtein_chars("cat", "cats"), 1);
+    }
 }
 
 fn rank_matches(mut matches: Vec<OcrTextMatch>, query: &str) -> Vec<OcrTextMatch> {
@@ -195,7 +273,10 @@ fn filter_and_rank(query: &str, raw_matches: Vec<OcrTextMatch>) -> Vec<OcrTextMa
     let normalized_query = normalize_for_match(query);
     let filtered = raw_matches
         .into_iter()
-        .filter(|m| normalize_for_match(&m.text).contains(&normalized_query))
+        .filter(|m| {
+            let t = normalize_for_match(&m.text);
+            t.contains(&normalized_query) || fuzzy_text_matches_query(&m.text, query)
+        })
         .collect::<Vec<_>>();
     rank_matches(filtered, query)
 }
@@ -384,8 +465,8 @@ pub fn crop_shot_to_ocr_region(
 #[cfg(target_os = "macos")]
 mod macos {
     use super::{
-        filter_and_rank, image_box_to_global_match, image_content_rect_or_full, normalize_for_match,
-        OcrTextMatch,
+        filter_and_rank, fuzzy_text_matches_query, image_box_to_global_match,
+        image_content_rect_or_full, levenshtein_chars, normalize_for_match, OcrTextMatch,
     };
     use bitfun_core::agentic::tools::computer_use_host::ComputerScreenshot;
     use bitfun_core::util::errors::{BitFunError, BitFunResult};
@@ -426,7 +507,8 @@ mod macos {
         if ranked.is_empty() {
             return Err(BitFunError::tool(format!(
                 "No OCR text matched {:?} on screen (macOS Vision found {} text regions total). \
-                 If the UI is Chinese, try a shorter substring (e.g. one or two characters) or ensure the text is visible in the capture; Vision may mis-read stylized UI.",
+                 Matching strips whitespace between glyphs and allows small edit distance for OCR errors. \
+                 If the UI is Chinese, try a shorter substring or ensure the text is visible in the capture.",
                 text_query,
                 observations.len()
             )));
@@ -518,6 +600,32 @@ mod macos {
             }
         }
 
+        // Fuzzy fallback: Vision may insert spaces in CJK, mis-read one character, or split labels.
+        if chosen_text.is_none() {
+            let mut best: Option<(String, f32, usize)> = None;
+            for i in 0..n {
+                let candidate = unsafe { candidates.objectAtIndex_unchecked(i) };
+                let text = candidate.string().to_string();
+                if !fuzzy_text_matches_query(&text, text_query) {
+                    continue;
+                }
+                let nt = normalize_for_match(&text);
+                let dist = levenshtein_chars(&nt, &q_norm);
+                let conf = candidate.confidence();
+                let take = match &best {
+                    None => true,
+                    Some((_, bf, bd)) => dist < *bd || (dist == *bd && conf > *bf),
+                };
+                if take {
+                    best = Some((text, conf, dist));
+                }
+            }
+            if let Some((t, c, _)) = best {
+                chosen_text = Some(t);
+                chosen_confidence = c;
+            }
+        }
+
         let text = chosen_text?;
 
         // Vision bounding box is normalized to the **full** image (JPEG), not the content rect.
@@ -554,8 +662,8 @@ mod macos {
 #[cfg(target_os = "windows")]
 mod windows_backend {
     use super::{
-        filter_and_rank, image_box_to_global_match, image_content_rect_or_full, normalize_for_match,
-        OcrTextMatch,
+        filter_and_rank, fuzzy_text_matches_query, image_box_to_global_match,
+        image_content_rect_or_full, normalize_for_match, OcrTextMatch,
     };
     use bitfun_core::agentic::tools::computer_use_host::ComputerScreenshot;
     use bitfun_core::util::errors::{BitFunError, BitFunResult};
@@ -687,8 +795,10 @@ mod windows_backend {
     ) -> Option<OcrTextMatch> {
         let text = word.Text().ok()?.to_string();
 
-        // Pre-filter
-        if !normalize_for_match(&text).contains(&normalize_for_match(text_query)) {
+        // Pre-filter (same normalization + fuzzy as macOS / Linux)
+        let nq = normalize_for_match(text_query);
+        let nt = normalize_for_match(&text);
+        if !nt.contains(&nq) && !fuzzy_text_matches_query(&text, text_query) {
             return None;
         }
 
@@ -717,8 +827,8 @@ mod windows_backend {
 #[cfg(target_os = "linux")]
 mod linux_backend {
     use super::{
-        filter_and_rank, image_box_to_global_match, image_content_rect_or_full, normalize_for_match,
-        OcrTextMatch,
+        filter_and_rank, fuzzy_text_matches_query, image_box_to_global_match,
+        image_content_rect_or_full, normalize_for_match, OcrTextMatch,
     };
     use bitfun_core::agentic::tools::computer_use_host::ComputerScreenshot;
     use bitfun_core::util::errors::{BitFunError, BitFunResult};
@@ -841,8 +951,9 @@ mod linux_backend {
         _content_width: u32,
         _content_height: u32,
     ) -> Option<OcrTextMatch> {
-        // Pre-filter
-        if !normalize_for_match(text).contains(&normalize_for_match(text_query)) {
+        let nq = normalize_for_match(text_query);
+        let nt = normalize_for_match(text);
+        if !nt.contains(&nq) && !fuzzy_text_matches_query(text, text_query) {
             return None;
         }
 

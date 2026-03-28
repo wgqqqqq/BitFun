@@ -7,7 +7,7 @@ use super::computer_use_input::{
 use super::computer_use_locate::execute_computer_use_locate;
 use crate::agentic::tools::computer_use_capability::computer_use_desktop_available;
 use crate::agentic::tools::computer_use_host::{
-    ComputerScreenshot, ComputerUseNavigateQuadrant, ComputerUseScreenshotRefinement,
+    ComputerScreenshot, ComputerUseHost, ComputerUseNavigateQuadrant, ComputerUseScreenshotRefinement,
     OcrRegionNative, ScreenshotCropCenter, UiElementLocateQuery,
     COMPUTER_USE_POINT_CROP_HALF_MAX, COMPUTER_USE_POINT_CROP_HALF_MIN,
     COMPUTER_USE_QUADRANT_CLICK_READY_MAX_LONG_EDGE, COMPUTER_USE_QUADRANT_EDGE_EXPAND_PX,
@@ -377,7 +377,8 @@ impl ComputerUseTool {
             "som_label_note": som_note,
         });
         let shortcut_policy = format!(
-            "**Targeting priority:** `click_element` → **`move_to_text`** (OCR + move; no prior `screenshot` for targeting) → **`click_label`** if SoM exists on a shot → **`screenshot`** (confirm / drill) + **`mouse_move`** (**`use_screen_coordinates`: true only**) + **`click`** last. **Screenshots are for confirmation and navigation — do not guess move targets from JPEG pixels.** **`click`** never moves the pointer. **Host-only mandatory screenshot:** before **`click`** or Enter **`key_chord`** when the pointer changed since the last capture — **not** before `mouse_move`, `scroll`, `type_text`, `locate`, `wait`, or non-Enter `key_chord`. **Valid basis for a guarded `click`:** `FullDisplay`, `quadrant_navigation_click_ready`, or point crop; or bare **`screenshot`** after a pointer-changing action (**~500×500** implicit confirmation around mouse/caret). **`mouse_move`** must use **global** coordinates (from `move_to_text` global_center_*, `locate`, AX, or `pointer_global`). **Bare confirmation `screenshot`:** whenever the host still requires a capture before **`click`** or Enter **`key_chord`** (`requires_fresh_screenshot_*`), a bare `screenshot` (no crop / no reset) is **~500×500** centered on **mouse** (`screenshot_implicit_center` default `mouse`) — **including during quadrant drill** and the **first** such capture in a session. Before Enter in a text field, set **`screenshot_implicit_center`: `text_caret`**. Use **`screenshot_reset_navigation`**: true for a **full-screen** capture instead. **If AX failed:** try **`move_to_text`** before a long screenshot drill. **Optional refinement** for tiny targets: `screenshot_navigate_quadrant` until `quadrant_navigation_click_ready` (long edge < {} px) or point crop. Small moves: **ComputerUseMouseStep** over tiny **ComputerUseMousePrecise** (screen globals only).",
+            "**Verify step:** after **`click`**, **`key_chord`**, **`type_text`**, **`scroll`**, or **`drag`**, check **`interaction_state.recommend_screenshot_to_verify_last_action`** — when true, call **`screenshot`** next to confirm UI state (Cowork-style). \
+**Targeting priority:** `click_element` → **`move_to_text`** (OCR + move; no prior `screenshot` for targeting) → **`click_label`** if SoM exists on a shot → **`screenshot`** (confirm / drill) + **`mouse_move`** (**`use_screen_coordinates`: true only**) + **`click`** last. **Screenshots are for confirmation and navigation — do not guess move targets from JPEG pixels.** **`click`** never moves the pointer. **Host-only mandatory screenshot:** before **`click`** or Enter **`key_chord`** when the pointer changed since the last capture — **not** before `mouse_move`, `scroll`, `type_text`, `locate`, `wait`, or non-Enter `key_chord`. **Valid basis for a guarded `click`:** `FullDisplay`, `quadrant_navigation_click_ready`, or point crop; or bare **`screenshot`** after a pointer-changing action (**~500×500** implicit confirmation around mouse/caret). **`mouse_move`** must use **global** coordinates (from `move_to_text` global_center_*, `locate`, AX, or `pointer_global`). **Bare confirmation `screenshot`:** whenever the host still requires a capture before **`click`** or Enter **`key_chord`** (`requires_fresh_screenshot_*`), a bare `screenshot` (no crop / no reset) is **~500×500** centered on **mouse** (`screenshot_implicit_center` default `mouse`) — **including during quadrant drill** and the **first** such capture in a session. Before Enter in a text field, set **`screenshot_implicit_center`: `text_caret`**. Use **`screenshot_reset_navigation`**: true for a **full-screen** capture instead. **If AX failed:** try **`move_to_text`** before a long screenshot drill. **Optional refinement** for tiny targets: `screenshot_navigate_quadrant` until `quadrant_navigation_click_ready` (long edge < {} px) or point crop. Small moves: **ComputerUseMouseStep** over tiny **ComputerUseMousePrecise** (screen globals only).",
             COMPUTER_USE_QUADRANT_CLICK_READY_MAX_LONG_EDGE
         );
         let region_crop_size_note = shot
@@ -844,17 +845,18 @@ impl Tool for ComputerUseTool {
         let keys = Self::key_chord_os_hint();
         Ok(format!(
             "Desktop automation (host OS: {}). {} All actions in one tool. Send only parameters that apply to the chosen `action`. \
+**Cowork-style loop (default rhythm):** **`screenshot`** (observe current UI) → **one** input action (`key_chord`, `type_text`, `move_to_text` + `click`, `click_element`, `scroll`, …) → **`screenshot`** again to **verify** the outcome before the next decision. Use **`wait`** if the UI animates. When **`interaction_state.recommend_screenshot_to_verify_last_action`** is true, your **next** call should usually be **`screenshot`** (optionally **`screenshot_reset_navigation`**: true for full-screen context). This is separate from the host rule that requires a **fresh** capture **before** guarded **`click`** / Enter **`key_chord`** after pointer moves — follow both. \
 **Input priority:** Prefer **`key_chord`** / **`type_text`** over mouse when one key or typing completes the step (e.g. **Enter** to confirm default, **Escape** to cancel, **Tab** to move focus). Do not click “OK”/“Submit” when **Enter** is equivalent; use **`screenshot`** then Enter **`key_chord`** per host when required. \
 **Targeting priority (when pointing is required):** `click_element` → **`move_to_text`** (OCR + move pointer only) → `click_label` (when SoM exists) → **`screenshot`** (confirm / drill) + **`mouse_move`** (**`use_screen_coordinates`: true only**) + **`click`** last. **Screenshots are for confirmation — do not guess move targets from JPEG pixels.** \
-**`click_element`:** Accessibility tree (AX/UIA/AT-SPI) locate + click. Provide `title_contains` / `role_substring` / `identifier_contains`. Bypasses coordinate screenshot guard. \
-**`move_to_text`:** OCR-match visible text (`text_query`) and **move the pointer** to it (no click, no keys); **no prior `screenshot` required for targeting** (host captures **raw** pixels for Vision — no agent screenshot overlays; on macOS defaults to the **frontmost window** unless **`ocr_region_native`** overrides). If **several** hits match, the host returns **preview JPEGs + accessibility** per candidate — pick **`move_to_text_match_index`** (1-based) and call **`move_to_text` again** with the same query/region. Use **`click`** afterward if you need a mouse press. Prefer after `click_element` misses when text is visible. \
+**`click_element`:** Accessibility tree (AX/UIA/AT-SPI) locate + click. Provide `title_contains` / `role_substring` / `identifier_contains`. On macOS, **`TextArea`** and **`TextField`** match both `AXTextArea` and `AXTextField` (many chat apps use TextField for compose). If several text fields match, the host deprioritizes known **search** controls (e.g. WeChat `_SC_SEARCH_FIELD`) and prefers **lower** on-screen fields (composer). Bypasses coordinate screenshot guard. \
+**`move_to_text`:** OCR-match visible text (`text_query`) and **move the pointer** to it (no click, no keys); **no prior `screenshot` required for targeting** (host captures **raw** pixels for Vision — no agent screenshot overlays; on macOS defaults to the **frontmost window** unless **`ocr_region_native`** overrides). Matching **strips whitespace** between CJK glyphs and allows **small edit distance** when Vision mis-reads one character. The host **trusts** the resulting globals — **next `click`** does **not** require an extra `screenshot` (same as AX). If **several** hits match, the host returns **preview JPEGs + accessibility** per candidate — pick **`move_to_text_match_index`** (1-based) and call **`move_to_text` again** with the same query/region, or narrow with **`ocr_region_native`**. When **`click_label`** lists a results table (`AXTable`), prefer **`click_label`** on that label over guessing OCR row text. Use **`click`** afterward if you need a mouse press. Prefer after `click_element` misses when text is visible. \
 **`click_label`:** After `screenshot` with `som_labels`, click by label number. Bypasses coordinate guard. \
 **`click`:** Press at **current pointer only** — **never** pass `x`, `y`, `coordinate_mode`, or `use_screen_coordinates`. Position first with **`move_to_text`**, **`mouse_move`** (**globals only**), or **`click_element`**. After pointer moves, **`screenshot`** again before the next guarded **`click`** when the host requires it. \
 **`mouse_move` / `drag`:** **`use_screen_coordinates`: true** required — global coordinates from **`move_to_text`**, **`locate`**, AX, or **`pointer_global`**; never JPEG pixel guesses. \
 **`scroll` / `type_text` / `pointer_move_rel` / `wait` / `locate`:** No mandatory pre-screenshot by themselves. **`pointer_move_rel`** (and **ComputerUseMouseStep**) are **blocked immediately after `screenshot`** until **`move_to_text`**, **`mouse_move`** (globals), **`click_element`**, or **`click_label`** — do not nudge from the JPEG. \
 **`key_chord`:** Press key combination; prefer over **`click`** when shortcuts or **Enter**/**Escape**/**Tab** suffice. **Mandatory fresh screenshot only** when chord includes Return/Enter. \
 **`screenshot`:** JPEG for **confirmation** (optional pointer + SoM). When the host requires a fresh capture before **`click`** or Enter **`key_chord`**, a bare `screenshot` is **~500×500** around the **mouse** or **caret** (also during quadrant drill). Use **`screenshot_reset_navigation`**: true to force **full-screen** for wide context. \
-**`type_text`:** Type text; prefer clipboard for long content.",
+**`type_text`:** Type text; prefer clipboard for long content. Does **not** move the pointer — **Enter** **`key_chord`** may follow without a mandatory `screenshot` unless you moved the pointer since the last capture. If **`screenshot`** shows the correct chat is already open and the input may be focused, **try `type_text` first** before spending steps on `click_element` / `move_to_text`.",
             os, keys,
         ))
     }
@@ -887,7 +889,7 @@ impl Tool for ComputerUseTool {
                 "start_y": { "type": "integer", "description": "For `drag`: start Y coordinate." },
                 "end_x": { "type": "integer", "description": "For `drag`: end X coordinate." },
                 "end_y": { "type": "integer", "description": "For `drag`: end Y coordinate." },
-                "keys": { "type": "array", "items": { "type": "string" }, "description": "For `key_chord`: key names to press together. Use OS-appropriate modifier names. Host requires a fresh screenshot only before chords that include Return/Enter (not before other chords)." },
+                "keys": { "type": "array", "items": { "type": "string" }, "description": "For `key_chord`: keys in order — **modifiers first**, then the main key (e.g. `[\"command\",\"f\"]`). Desktop host waits after pressing modifiers so shortcuts register (important on macOS with IME). Modifiers: command, control, shift, alt/option. Arrows: `up`, `down`, … Host may require a fresh screenshot before Return/Enter when the pointer is stale." },
                 "text": { "type": "string", "description": "For `type_text`: text to type. Prefer clipboard paste (key_chord) for long content." },
                 "ms": { "type": "integer", "description": "For `wait`: duration in milliseconds." },
                 "label": { "type": "integer", "minimum": 1, "description": "For `click_label`: 1-based Set-of-Mark label number from the latest screenshot." },
@@ -1166,6 +1168,7 @@ impl Tool for ComputerUseTool {
                     host_ref
                         .mouse_move_global_f64(matched.center_x, matched.center_y)
                         .await?;
+                    ComputerUseHost::computer_use_trust_pointer_after_ocr_move(host_ref);
 
                     let other_matches = matches
                         .iter()
@@ -1212,7 +1215,7 @@ impl Tool for ComputerUseTool {
                     )
                     .await;
                     let summary = format!(
-                        "OCR move_to_text: matched {:?} at ({:.0}, {:.0}) [index {} of {}].",
+                        "OCR move_to_text: matched {:?} at ({:.0}, {:.0}) [index {} of {}]. Pointer is from trusted global OCR — you may **`click`** next without a separate **`screenshot`** (host clears stale-capture guard).",
                         matched.text,
                         matched.center_x,
                         matched.center_y,
@@ -1337,6 +1340,7 @@ impl Tool for ComputerUseTool {
                 host_ref.mouse_move_global_f64(sx1, sy1).await?;
                 host_ref.wait_ms(50).await?;
                 host_ref.mouse_up(button).await?;
+                ComputerUseHost::computer_use_after_committed_ui_action(host_ref);
 
                 let input_coords = json!({
                     "kind": "drag",

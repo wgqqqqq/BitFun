@@ -83,6 +83,28 @@ fn contains_ci(hay: &str, needle: &str) -> bool {
     hay.to_lowercase().contains(&needle.to_lowercase())
 }
 
+/// `role_substring` match with macOS AX aliases: chat apps often expose compose as **`AXTextField`**
+/// while models ask for `TextArea`; treat those as overlapping for locate/click_element.
+pub fn role_substring_matches_ax_role(ax_role: &str, want: &str) -> bool {
+    let w = want.trim();
+    if w.is_empty() {
+        return true;
+    }
+    if contains_ci(ax_role, w) {
+        return true;
+    }
+    let wl = w.to_lowercase();
+    match wl.as_str() {
+        "textarea" | "text area" | "text_area" | "axtextarea" => {
+            contains_ci(ax_role, "TextArea") || contains_ci(ax_role, "TextField")
+        }
+        "textfield" | "text field" | "text_field" | "axtextfield" => {
+            contains_ci(ax_role, "TextField") || contains_ci(ax_role, "TextArea")
+        }
+        _ => false,
+    }
+}
+
 fn combine_is_any(query: &UiElementLocateQuery) -> bool {
     matches!(
         query.filter_combine.as_deref(),
@@ -102,7 +124,7 @@ pub fn matches_filters_any(
     if let Some(ref want) = query.role_substring {
         if !want.trim().is_empty() {
             has_filter = true;
-            if contains_ci(role.unwrap_or(""), want.trim()) {
+            if role_substring_matches_ax_role(role.unwrap_or(""), want.trim()) {
                 matched = true;
             }
         }
@@ -136,7 +158,7 @@ pub fn matches_filters_all(
     if let Some(ref want) = query.role_substring {
         if !want.trim().is_empty() {
             let r = role.unwrap_or("");
-            if !contains_ci(r, want.trim()) {
+            if !role_substring_matches_ax_role(r, want.trim()) {
                 return false;
             }
         }
@@ -232,6 +254,23 @@ pub fn ok_result_with_context(
         total_matches,
         other_matches,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn role_textarea_alias_matches_axtextfield() {
+        assert!(role_substring_matches_ax_role("AXTextField", "TextArea"));
+        assert!(role_substring_matches_ax_role("AXTextField", "textarea"));
+        assert!(!role_substring_matches_ax_role("AXButton", "TextArea"));
+    }
+
+    #[test]
+    fn role_textfield_alias_matches_axtextarea() {
+        assert!(role_substring_matches_ax_role("AXTextArea", "TextField"));
+    }
 }
 
 /// Whether an element's global bounds fall within any visible display.

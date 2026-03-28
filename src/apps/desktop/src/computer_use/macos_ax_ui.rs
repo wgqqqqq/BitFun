@@ -224,6 +224,20 @@ impl CandidateMatch {
             score += 20;
         }
 
+        // WeChat (and similar): global search field is often the first AXTextField match but is the wrong target
+        // when the user wants the **chat composer**. Deprioritize known search chrome.
+        if let Some(ref id) = self.identifier {
+            if id.contains("_SC_SEARCH_FIELD") {
+                score -= 1500;
+            }
+        }
+
+        // Among text inputs, the composer is usually **lower** on screen than the top search bar.
+        let rl = self.role.to_lowercase();
+        if rl.contains("textfield") || rl.contains("textarea") {
+            score += ((self.gy / 8.0) as i64).clamp(0, 400);
+        }
+
         score
     }
 
@@ -352,13 +366,28 @@ pub fn locate_ui_element_center(query: &UiElementLocateQuery) -> BitFunResult<Ui
 
     if candidates.is_empty() {
         return Err(BitFunError::tool(
-            "No accessibility element matched in the frontmost app. Tips: use `filter_combine: \"any\"` for OR matching; use only `role_substring` or only `title_contains`; match UI language; ensure the target app is focused. Or fall back to `screenshot` + vision path."
+            "No accessibility element matched in the frontmost app. Tips: `role_substring` **`TextArea`** also matches **`AXTextField`** (WeChat compose is often TextField). Use `filter_combine: \"any\"` for OR matching; match UI language; ensure the target app is focused. For chat apps, if the conversation is already open, **`type_text`** may work without clicking. Or use `move_to_text` / `screenshot` + `click_label`."
                 .to_string(),
         ));
     }
 
-    // Sort by rank score (descending)
-    candidates.sort_by(|a, b| b.rank_score().cmp(&a.rank_score()));
+    // Sort by rank score (descending); tie-break text fields toward **lower on screen** (chat input).
+    candidates.sort_by(|a, b| {
+        let sa = a.rank_score();
+        let sb = b.rank_score();
+        match sb.cmp(&sa) {
+            std::cmp::Ordering::Equal => {
+                let a_txt = a.role.contains("TextField") || a.role.contains("TextArea");
+                let b_txt = b.role.contains("TextField") || b.role.contains("TextArea");
+                if a_txt && b_txt {
+                    b.gy.partial_cmp(&a.gy).unwrap_or(std::cmp::Ordering::Equal)
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            }
+            o => o,
+        }
+    });
 
     let total = candidates.len() as u32;
     let best = &candidates[0];

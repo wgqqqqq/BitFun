@@ -14,7 +14,7 @@
   },
   "computerUse": {
     "sectionTitle": "Computer use (Claw)",
-    "sectionDescription": "Let the assistant capture the screen and control the mouse and keyboard.",
+    "sectionDescription": "In the BitFun desktop app, the assistant can capture the screen and control the mouse and keyboard; requires a multimodal model for vision.",
     "enable": "Enable Computer use",
     "enableDesc": "When off, the ComputerUse tool stays disabled even in Claw mode.",
     "accessibility": "Accessibility",
