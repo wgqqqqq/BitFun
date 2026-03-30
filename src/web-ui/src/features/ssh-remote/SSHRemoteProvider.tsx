@@ -52,6 +52,8 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
   // Per-workspace connection statuses (keyed by connectionId)
   const [workspaceStatuses, setWorkspaceStatuses] = useState<Record<string, ConnectionStatus>>({});
   const heartbeatInterval = useRef<number | null>(null);
+  const startHeartbeatRef = useRef<(connId: string) => void>(() => {});
+  const checkRemoteWorkspaceRef = useRef<() => Promise<void>>(async () => {});
 
   const setWorkspaceStatus = useCallback((connId: string, st: ConnectionStatus) => {
     setWorkspaceStatuses(prev => ({ ...prev, [connId]: st }));
@@ -155,6 +157,41 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
     return false;
   }, []);
 
+  const statusRef = useRef<ConnectionStatus>(status);
+  statusRef.current = status;
+
+  const handleConnectionLost = useCallback((connId: string) => {
+    log.warn('Remote connection lost, attempting auto-reconnect...');
+    setStatus('error');
+    setWorkspaceStatus(connId, 'error');
+    setConnectionError('Connection lost. Attempting to reconnect...');
+    setIsConnected(false);
+    if (heartbeatInterval.current) {
+      clearInterval(heartbeatInterval.current);
+      heartbeatInterval.current = null;
+    }
+    // Attempt auto-reconnect in background
+    void checkRemoteWorkspaceRef.current();
+  }, [setWorkspaceStatus]);
+
+  const startHeartbeat = useCallback((connId: string) => {
+    if (heartbeatInterval.current) {
+      clearInterval(heartbeatInterval.current);
+    }
+
+    heartbeatInterval.current = window.setInterval(async () => {
+      try {
+        const connected = await sshApi.isConnected(connId);
+        if (!connected && statusRef.current === 'connected') {
+          handleConnectionLost(connId);
+        }
+      } catch {
+        // Ignore heartbeat errors
+      }
+    }, 30000);
+  }, [handleConnectionLost]);
+  startHeartbeatRef.current = startHeartbeat;
+
   const checkRemoteWorkspace = useCallback(async () => {
     try {
       // ── Collect all remote workspaces to reconnect ──────────────────────
@@ -229,7 +266,7 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
           setIsConnected(true);
           setConnectionId(workspace.connectionId);
           setRemoteWorkspace(workspace);
-          startHeartbeat(workspace.connectionId);
+          startHeartbeatRef.current(workspace.connectionId);
 
           if (!isAlreadyOpened) {
             await workspaceManager.openRemoteWorkspace(workspace).catch(() => {});
@@ -260,7 +297,7 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
           setIsConnected(true);
           setConnectionId(result.connectionId);
           setRemoteWorkspace(result.workspace);
-          startHeartbeat(result.connectionId);
+          startHeartbeatRef.current(result.connectionId);
 
           if (!isAlreadyOpened) {
             await workspaceManager.openRemoteWorkspace(result.workspace).catch(() => {});
@@ -290,41 +327,8 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
     } catch (e) {
       log.error('checkRemoteWorkspace failed', e);
     }
-  }, [setWorkspaceStatus, startHeartbeat, tryReconnectWithRetry]);
-
-  const statusRef = useRef<ConnectionStatus>(status);
-  statusRef.current = status;
-
-  const handleConnectionLost = useCallback((connId: string) => {
-    log.warn('Remote connection lost, attempting auto-reconnect...');
-    setStatus('error');
-    setWorkspaceStatus(connId, 'error');
-    setConnectionError('Connection lost. Attempting to reconnect...');
-    setIsConnected(false);
-    if (heartbeatInterval.current) {
-      clearInterval(heartbeatInterval.current);
-      heartbeatInterval.current = null;
-    }
-    // Attempt auto-reconnect in background
-    void checkRemoteWorkspace();
-  }, [checkRemoteWorkspace, setWorkspaceStatus]);
-
-  const startHeartbeat = useCallback((connId: string) => {
-    if (heartbeatInterval.current) {
-      clearInterval(heartbeatInterval.current);
-    }
-
-    heartbeatInterval.current = window.setInterval(async () => {
-      try {
-        const connected = await sshApi.isConnected(connId);
-        if (!connected && statusRef.current === 'connected') {
-          handleConnectionLost(connId);
-        }
-      } catch {
-        // Ignore heartbeat errors
-      }
-    }, 30000);
-  }, [handleConnectionLost]);
+  }, [setWorkspaceStatus, tryReconnectWithRetry]);
+  checkRemoteWorkspaceRef.current = checkRemoteWorkspace;
 
   // Wait for workspace manager to finish loading, then check remote workspaces
   useEffect(() => {

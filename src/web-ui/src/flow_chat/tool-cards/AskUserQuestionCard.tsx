@@ -195,6 +195,19 @@ export const AskUserQuestionCard: React.FC<ToolCardProps> = ({
     return t('toolCards.askUser.waitingAnswer');
   };
 
+  const getEffectiveAnswer = useCallback((questionIndex: number): string | string[] | undefined => {
+    const localAnswer = answers[questionIndex];
+    if (localAnswer !== undefined) return localAnswer;
+
+    if (status === 'completed' && toolResult?.result) {
+      const result = typeof toolResult.result === 'string'
+        ? JSON.parse(toolResult.result)
+        : toolResult.result;
+      return result?.answers?.[String(questionIndex)];
+    }
+    return undefined;
+  }, [answers, status, toolResult]);
+
   const renderQuestion = (q: QuestionData, questionIndex: number) => {
     const answer = getEffectiveAnswer(questionIndex);
     const otherInput = otherInputs[questionIndex] || '';
@@ -329,19 +342,6 @@ export const AskUserQuestionCard: React.FC<ToolCardProps> = ({
       </div>
     );
   };
-
-  const getEffectiveAnswer = useCallback((questionIndex: number): string | string[] | undefined => {
-    const localAnswer = answers[questionIndex];
-    if (localAnswer !== undefined) return localAnswer;
-
-    if (status === 'completed' && toolResult?.result) {
-      const result = typeof toolResult.result === 'string'
-        ? JSON.parse(toolResult.result)
-        : toolResult.result;
-      return result?.answers?.[String(questionIndex)];
-    }
-    return undefined;
-  }, [answers, status, toolResult]);
 
   const getAnswerDisplay = (questionIndex: number): string => {
     const answer = getEffectiveAnswer(questionIndex);

@@ -15,6 +15,8 @@ type ProviderConfigLike = {
 
 function inferProviderTemplate(config: ProviderConfigLike): ProviderTemplate | undefined {
   const matchedCatalogItem = matchProviderCatalogItemByBaseUrl(config.base_url);
+  // Safe module-level forward reference: PROVIDER_TEMPLATES is initialized before this runs.
+  // eslint-disable-next-line @typescript-eslint/no-use-before-define
   return matchedCatalogItem ? PROVIDER_TEMPLATES[matchedCatalogItem.id] : undefined;
 }
 

@@ -74,12 +74,6 @@ export const BranchQuickSwitch: React.FC<BranchQuickSwitchProps> = ({
   }, [isOpen, anchorRef]);
 
   useEffect(() => {
-    if (isOpen && repositoryPath) {
-      void loadBranches();
-    }
-  }, [isOpen, loadBranches, repositoryPath]);
-
-  useEffect(() => {
     if (!isOpen) {
       setSearchTerm('');
       setSelectedIndex(0);
@@ -143,6 +137,12 @@ export const BranchQuickSwitch: React.FC<BranchQuickSwitchProps> = ({
       setIsLoading(false);
     }
   }, [repositoryPath]);
+
+  useEffect(() => {
+    if (isOpen && repositoryPath) {
+      void loadBranches();
+    }
+  }, [isOpen, loadBranches, repositoryPath]);
 
   const filteredBranches = useMemo(() => {
     let result = branches;

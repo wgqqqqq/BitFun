@@ -159,7 +159,25 @@ export const MonacoDiffCore = forwardRef<MonacoDiffCoreRef, MonacoDiffCoreProps>
       const basePath = filePathRef.current || 'untitled';
       return monaco.Uri.parse(`inmemory://diff/${type}/${timestamp}/${random}/${basePath}`);
     }, []);
-    
+
+    const registerEventListeners = useCallback((
+      diffEditor: monaco.editor.IStandaloneDiffEditor,
+      modifiedModel: monaco.editor.ITextModel
+    ) => {
+      const contentDisposable = modifiedModel.onDidChangeContent(() => {
+        onModifiedContentChangeRef.current?.(modifiedModel.getValue());
+      });
+      disposablesRef.current.push(contentDisposable);
+
+      const diffDisposable = diffEditor.onDidUpdateDiff(() => {
+        const changes = diffEditor.getLineChanges() || [];
+        changesRef.current = changes;
+
+        onDiffChangeRef.current?.(changes);
+      });
+      disposablesRef.current.push(diffDisposable);
+    }, []);
+
     useEffect(() => {
       if (!containerRef.current) return;
       
@@ -253,24 +271,6 @@ export const MonacoDiffCore = forwardRef<MonacoDiffCoreRef, MonacoDiffCoreProps>
         setIsReady(false);
       };
     }, [filePath, generateUri, registerEventListeners]);
-    
-    const registerEventListeners = useCallback((
-      diffEditor: monaco.editor.IStandaloneDiffEditor,
-      modifiedModel: monaco.editor.ITextModel
-    ) => {
-      const contentDisposable = modifiedModel.onDidChangeContent(() => {
-        onModifiedContentChangeRef.current?.(modifiedModel.getValue());
-      });
-      disposablesRef.current.push(contentDisposable);
-      
-      const diffDisposable = diffEditor.onDidUpdateDiff(() => {
-        const changes = diffEditor.getLineChanges() || [];
-        changesRef.current = changes;
-        
-        onDiffChangeRef.current?.(changes);
-      });
-      disposablesRef.current.push(diffDisposable);
-    }, []);
     
     useEffect(() => {
       if (!isReady) return;

@@ -15,7 +15,7 @@ export const getWorkspaceDisplayName = (workspace: WorkspaceInfo | null): string
   return workspace.name;
 };
 
-interface WorkspaceContextValue extends WorkspaceState {
+export interface WorkspaceContextValue extends WorkspaceState {
   activeWorkspace: WorkspaceInfo | null;
   openedWorkspacesList: WorkspaceInfo[];
   normalWorkspacesList: WorkspaceInfo[];

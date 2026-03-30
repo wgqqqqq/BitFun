@@ -43,11 +43,7 @@ const AIFeaturesConfig: React.FC = () => {
   const [models, setModels] = useState<AIModelConfig[]>([]);
   const [funcAgentModels, setFuncAgentModels] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    loadAllData();
-  }, []);
-
-  const loadAllData = async () => {
+  const loadAllData = useCallback(async () => {
     setIsLoading(true);
     try {
       
@@ -70,7 +66,11 @@ const AIFeaturesConfig: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadAllData();
+  }, [loadAllData]);
 
   
   const getModelName = useCallback((modelId: string | null | undefined): string | undefined => {
@@ -99,6 +99,11 @@ const AIFeaturesConfig: React.FC = () => {
   };
 
   
+  function getFeatureIdByAgent(agentName: string): string {
+    const feature = FEATURE_CONFIGS.find(f => f.agentName === agentName);
+    return feature?.id || agentName;
+  }
+
   const handleAgentSelectionChange = async (
     agentName: string,
     modelId: string
@@ -135,11 +140,6 @@ const AIFeaturesConfig: React.FC = () => {
   };
 
   
-  const getFeatureIdByAgent = (agentName: string): string => {
-    const feature = FEATURE_CONFIGS.find(f => f.agentName === agentName);
-    return feature?.id || agentName;
-  };
-
   
   const enabledModels = models.filter(m => m.enabled);
 

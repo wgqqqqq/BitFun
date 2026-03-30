@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-use-before-define */
 /**
  * AIRulesMemoryConfig — merged Rules & Memory settings page.
  * Two sections (Rules / Memory), each with inner tabs: User | Project.

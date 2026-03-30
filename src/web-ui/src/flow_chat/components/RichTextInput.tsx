@@ -193,6 +193,14 @@ export const RichTextInput = React.forwardRef<HTMLDivElement, RichTextInputProps
     return null;
   }, []);
 
+  function sanitizeText(text: string): string {
+    // Strip zero-width and control characters that WebKit/WebView may inject
+    // (e.g. from dead-key sequences, function keys, arrow keys, etc.)
+    // Preserve normal whitespace: space (0x20), tab (0x09), newline (0x0A), carriage return (0x0D).
+    // eslint-disable-next-line no-control-regex -- This intentionally removes specific ASCII control-character ranges.
+    return text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\u200B-\u200F\u2028\u2029\uFEFF\u2060\u00AD]/g, '');
+  }
+
   // Extract plain text including # tag format
   const extractTextContent = useCallback((): string => {
     if (!internalRef.current) return '';
@@ -301,14 +309,6 @@ export const RichTextInput = React.forwardRef<HTMLDivElement, RichTextInputProps
       onMentionStateChange?.({ isActive: false, query: '', startOffset: 0 });
     }
   }, [onMentionStateChange, internalRef]);
-
-  const sanitizeText = (text: string): string => {
-    // Strip zero-width and control characters that WebKit/WebView may inject
-    // (e.g. from dead-key sequences, function keys, arrow keys, etc.)
-    // Preserve normal whitespace: space (0x20), tab (0x09), newline (0x0A), carriage return (0x0D).
-    // eslint-disable-next-line no-control-regex -- This intentionally removes specific ASCII control-character ranges.
-    return text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\u200B-\u200F\u2028\u2029\uFEFF\u2060\u00AD]/g, '');
-  };
 
   /** Compute the cursor's character offset within the editor. */
   const getCursorOffset = useCallback((editor: HTMLElement): number => {

@@ -33,12 +33,7 @@ export function useSSHRemote() {
   const { recentWorkspaces, switchWorkspace } = useWorkspaceContext();
   const previousWorkspaceRef = useRef<string | null>(null);
 
-  // Check for existing remote workspace on mount
-  useEffect(() => {
-    checkRemoteWorkspace();
-  }, []);
-
-  const checkRemoteWorkspace = async () => {
+  const checkRemoteWorkspace = useCallback(async () => {
     try {
       const workspace = await sshApi.getWorkspaceInfo();
       if (workspace) {
@@ -51,7 +46,12 @@ export function useSSHRemote() {
     } catch (_error) {
       // Ignore errors on initial check
     }
-  };
+  }, []);
+
+  // Check for existing remote workspace on mount
+  useEffect(() => {
+    void checkRemoteWorkspace();
+  }, [checkRemoteWorkspace]);
 
   const connect = useCallback(
     async (connectionId: string, config: SSHConnectionConfig) => {

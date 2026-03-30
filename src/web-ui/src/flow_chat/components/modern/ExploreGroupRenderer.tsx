@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-use-before-define */
 /**
  * Explore group renderer.
  * Renders merged explore-only rounds as a collapsible region.

@@ -399,15 +399,20 @@ export const MCPToolDisplay: React.FC<ToolCardProps> = ({
 
             // Set up response listener before emitting
             const responsePromise = new Promise<McpUiMessageResult>((resolve) => {
+              let handleResponse: ((response: McpAppMessageResponseEvent) => void) | null = null;
               const timeout = setTimeout(() => {
-                globalEventBus.off('mcp-app:message-response', handleResponse);
+                if (handleResponse) {
+                  globalEventBus.off('mcp-app:message-response', handleResponse);
+                }
                 resolve({ isError: true });
               }, 5000); // 5 second timeout
 
-              const handleResponse = (response: McpAppMessageResponseEvent) => {
+              handleResponse = (response: McpAppMessageResponseEvent) => {
                 if (response.requestId === requestId) {
                   clearTimeout(timeout);
-                  globalEventBus.off('mcp-app:message-response', handleResponse);
+                  if (handleResponse) {
+                    globalEventBus.off('mcp-app:message-response', handleResponse);
+                  }
                   resolve(response.result);
                 }
               };

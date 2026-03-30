@@ -62,12 +62,6 @@ export const BranchSelectModal: React.FC<BranchSelectModalProps> = ({
 
 
   useEffect(() => {
-    if (isOpen && repositoryPath) {
-      void loadBranches();
-    }
-  }, [isOpen, loadBranches, repositoryPath]);
-
-  useEffect(() => {
     if (!isOpen) {
       setSearchTerm('');
       setSelectedBranch(null);
@@ -104,6 +98,12 @@ export const BranchSelectModal: React.FC<BranchSelectModalProps> = ({
       setIsLoading(false);
     }
   }, [repositoryPath, t]);
+
+  useEffect(() => {
+    if (isOpen && repositoryPath) {
+      void loadBranches();
+    }
+  }, [isOpen, loadBranches, repositoryPath]);
 
   const filteredBranches = useMemo<SelectableBranch[]>(() => {
     let result = branches;

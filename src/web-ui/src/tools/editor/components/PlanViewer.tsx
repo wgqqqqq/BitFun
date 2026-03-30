@@ -717,7 +717,7 @@ ${JSON.stringify(simpleTodos, null, 2)}
   }, [filePath, buildStatus, planData, planContent, t]);
 
   // Get todo status icon
-  const getTodoIcon = (status?: string) => {
+  function getTodoIcon(status?: string) {
     switch (status) {
       case 'completed':
         return <Check size={14} className="todo-icon todo-icon--completed" />;
@@ -729,7 +729,7 @@ ${JSON.stringify(simpleTodos, null, 2)}
       default:
         return <Circle size={14} className="todo-icon todo-icon--pending" />;
     }
-  };
+  }
 
   // Render loading state
   if (loading) {

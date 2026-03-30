@@ -53,6 +53,7 @@ export default tseslint.config(
       'react-hooks/exhaustive-deps': 'error',
       'no-undef': 'off',
       'no-unused-vars': 'off',
+      'no-use-before-define': 'off',
       'no-case-declarations': 'warn',
       'no-cond-assign': 'warn',
       'no-control-regex': 'warn',
@@ -63,6 +64,17 @@ export default tseslint.config(
       '@typescript-eslint/no-empty-object-type': 'warn',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-namespace': 'warn',
+      '@typescript-eslint/no-use-before-define': [
+        'error',
+        {
+          functions: false,
+          classes: true,
+          variables: true,
+          enums: true,
+          typedefs: true,
+          ignoreTypeReferences: true,
+        },
+      ],
       '@typescript-eslint/no-unused-expressions': 'warn',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unused-vars': [

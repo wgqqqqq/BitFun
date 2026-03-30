@@ -142,6 +142,29 @@ export const MonacoEditorCore = forwardRef<MonacoEditorCoreRef, MonacoEditorCore
         enableLsp: overrides?.enableLsp ?? enableLspRef.current,
       };
     }, []);
+
+    const registerEventListeners = useCallback((
+      editor: monaco.editor.IStandaloneCodeEditor,
+      model: monaco.editor.ITextModel
+    ) => {
+      const contentDisposable = model.onDidChangeContent((event) => {
+        onContentChangeRef.current?.(model.getValue(), event);
+
+        const context = createExtensionContext();
+        editorExtensionManager.notifyContentChanged(editor, model, event, context);
+      });
+      disposablesRef.current.push(contentDisposable);
+
+      const cursorDisposable = editor.onDidChangeCursorPosition((e) => {
+        onCursorChangeRef.current?.(e.position);
+      });
+      disposablesRef.current.push(cursorDisposable);
+
+      const selectionDisposable = editor.onDidChangeCursorSelection((e) => {
+        onSelectionChangeRef.current?.(e.selection);
+      });
+      disposablesRef.current.push(selectionDisposable);
+    }, [createExtensionContext]);
     
     useEffect(() => {
       if (!containerRef.current) return;
@@ -267,29 +290,6 @@ export const MonacoEditorCore = forwardRef<MonacoEditorCoreRef, MonacoEditorCore
         setIsReady(false);
       };
     }, [filePath, createExtensionContext, registerEventListeners]);
-    
-    const registerEventListeners = useCallback((
-      editor: monaco.editor.IStandaloneCodeEditor,
-      model: monaco.editor.ITextModel
-    ) => {
-      const contentDisposable = model.onDidChangeContent((event) => {
-        onContentChangeRef.current?.(model.getValue(), event);
-        
-        const context = createExtensionContext();
-        editorExtensionManager.notifyContentChanged(editor, model, event, context);
-      });
-      disposablesRef.current.push(contentDisposable);
-      
-      const cursorDisposable = editor.onDidChangeCursorPosition((e) => {
-        onCursorChangeRef.current?.(e.position);
-      });
-      disposablesRef.current.push(cursorDisposable);
-      
-      const selectionDisposable = editor.onDidChangeCursorSelection((e) => {
-        onSelectionChangeRef.current?.(e.selection);
-      });
-      disposablesRef.current.push(selectionDisposable);
-    }, [createExtensionContext]);
     
     useEffect(() => {
       if (!isReady || !editorRef.current || hasJumpedRef.current) return;

@@ -350,13 +350,6 @@ function createSourceBackedBlock(
           setEditing(false);
         };
 
-        const enterEditing = () => {
-          setEditing(true, { focus: true });
-          const end = textarea.value.length;
-          textarea.setSelectionRange(end, end);
-          sync();
-        };
-
         const renderPreview = (markdown: string) => {
           const kind = typeof currentNode.attrs.kind === 'string' ? currentNode.attrs.kind : null;
           const detailsSource = kind === 'details' ? parseDetailsSource(markdown) : null;
@@ -475,6 +468,13 @@ function createSourceBackedBlock(
 
           lastSyncedValue = value;
           lastEditableState = editable;
+        };
+
+        const enterEditing = () => {
+          setEditing(true, { focus: true });
+          const end = textarea.value.length;
+          textarea.setSelectionRange(end, end);
+          sync();
         };
 
         const stopPropagation = (event: Event) => {

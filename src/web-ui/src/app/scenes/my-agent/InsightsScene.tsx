@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-use-before-define */
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import {
   ExternalLink, Copy, Check, ArrowLeft, Loader2, AlertTriangle,

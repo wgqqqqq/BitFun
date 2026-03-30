@@ -200,6 +200,30 @@ export const RemoteFileBrowser: React.FC<RemoteFileBrowserProps> = ({
     });
   };
 
+  const handleDownloadEntry = async (entry: RemoteFileEntry) => {
+    if (entry.isDir) return;
+    if (!isTauriDesktop()) {
+      setError(t('ssh.remote.transferNeedsDesktop'));
+      return;
+    }
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const localPath = await save({
+      title: t('ssh.remote.downloadDialogTitle'),
+      defaultPath: entry.name,
+    });
+    if (localPath === null) return;
+
+    setTransferBusy(true);
+    setError(null);
+    try {
+      await sshApi.downloadToLocalPath(connectionId, entry.path, localPath);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('ssh.remote.transferFailed'));
+    } finally {
+      setTransferBusy(false);
+    }
+  };
+
   const handleContextMenuAction = async (action: string) => {
     if (!contextMenu.entry) return;
 
@@ -263,30 +287,6 @@ export const RemoteFileBrowser: React.FC<RemoteFileBrowserProps> = ({
       loadDirectory(currentPath);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to rename');
-    }
-  };
-
-  const handleDownloadEntry = async (entry: RemoteFileEntry) => {
-    if (entry.isDir) return;
-    if (!isTauriDesktop()) {
-      setError(t('ssh.remote.transferNeedsDesktop'));
-      return;
-    }
-    const { save } = await import('@tauri-apps/plugin-dialog');
-    const localPath = await save({
-      title: t('ssh.remote.downloadDialogTitle'),
-      defaultPath: entry.name,
-    });
-    if (localPath === null) return;
-
-    setTransferBusy(true);
-    setError(null);
-    try {
-      await sshApi.downloadToLocalPath(connectionId, entry.path, localPath);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t('ssh.remote.transferFailed'));
-    } finally {
-      setTransferBusy(false);
     }
   };
 

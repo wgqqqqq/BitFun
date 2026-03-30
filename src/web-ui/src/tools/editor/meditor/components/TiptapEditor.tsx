@@ -785,6 +785,9 @@ export const TiptapEditor = React.forwardRef<TiptapEditorHandle, TiptapEditorPro
 
     let responseText = '';
     let isCleanedUp = false;
+    let unlistenChunk: () => void = () => {};
+    let unlistenCompleted: () => void = () => {};
+    let unlistenFailed: () => void = () => {};
 
     const cleanup = () => {
       if (isCleanedUp) {
@@ -809,7 +812,7 @@ export const TiptapEditor = React.forwardRef<TiptapEditorHandle, TiptapEditorPro
       }
     };
 
-    const unlistenChunk = editorAiAPI.onTextChunk(event => {
+    unlistenChunk = editorAiAPI.onTextChunk(event => {
       if (event.requestId !== requestId) {
         return;
       }
@@ -827,7 +830,7 @@ export const TiptapEditor = React.forwardRef<TiptapEditorHandle, TiptapEditorPro
       } : current);
     });
 
-    const unlistenCompleted = editorAiAPI.onCompleted(event => {
+    unlistenCompleted = editorAiAPI.onCompleted(event => {
       if (event.requestId !== requestId) {
         return;
       }
@@ -857,7 +860,7 @@ export const TiptapEditor = React.forwardRef<TiptapEditorHandle, TiptapEditorPro
       } : current);
     });
 
-    const unlistenFailed = editorAiAPI.onError(event => {
+    unlistenFailed = editorAiAPI.onError(event => {
       if (event.requestId !== requestId) {
         return;
       }
