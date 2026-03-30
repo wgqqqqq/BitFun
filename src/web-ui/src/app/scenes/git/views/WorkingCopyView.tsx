@@ -52,9 +52,13 @@ const FILE_LIST_WIDTH_MAX = 560;
 
 interface WorkingCopyViewProps {
   workspacePath?: string;
+  isActive?: boolean;
 }
 
-const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({ workspacePath }) => {
+const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({
+  workspacePath,
+  isActive = true,
+}) => {
   const { t } = useTranslation('panels/git');
   const notification = useNotification();
 
@@ -76,7 +80,7 @@ const WorkingCopyView: React.FC<WorkingCopyViewProps> = ({ workspacePath }) => {
     refresh,
   } = useGitState({
     repositoryPath: workspacePath ?? '',
-    isActive: true,
+    isActive,
     refreshOnMount: true,
     layers: ['basic', 'status'],
   });

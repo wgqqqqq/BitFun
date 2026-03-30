@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useWorkspaceContext } from '../../infrastructure/contexts/WorkspaceContext';
 import { notificationService } from '@/shared/notification-system';
 import { createLogger } from '@/shared/utils/logger';
+import { sendDebugProbe } from '@/shared/utils/debugProbe';
 import { useI18n } from '@/infrastructure/i18n';
 
 const log = createLogger('useWindowControls');
@@ -90,15 +91,54 @@ export const useWindowControls = (options?: { isToolbarMode?: boolean }) => {
       }
       
       if (document.visibilityState === 'visible') {
+        sendDebugProbe(
+          'useWindowControls.ts:handleVisibilityChange',
+          'Window became visible',
+          {
+            isToolbarMode,
+          }
+        );
         try {
           const appWindow = getCurrentWindow();
           // Delay update until window fully restores
           setTimeout(async () => {
-            await updateWindowState(appWindow);
-            await restoreMacOSOverlayTitlebar(appWindow);
+            const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+            try {
+              await updateWindowState(appWindow);
+              await restoreMacOSOverlayTitlebar(appWindow);
+              sendDebugProbe(
+                'useWindowControls.ts:handleVisibilityChange',
+                'Window restore sync completed',
+                {
+                  durationMs:
+                    Math.round(
+                      ((typeof performance !== 'undefined' ? performance.now() : Date.now()) -
+                        startedAt) *
+                        10
+                    ) / 10,
+                  isToolbarMode,
+                }
+              );
+            } catch (error) {
+              sendDebugProbe(
+                'useWindowControls.ts:handleVisibilityChange',
+                'Window restore sync failed',
+                {
+                  error: formatErrorMessage(error),
+                  isToolbarMode,
+                }
+              );
+            }
           }, 300);
-        } catch (_error) {
-          // Ignore errors
+        } catch (error) {
+          sendDebugProbe(
+            'useWindowControls.ts:handleVisibilityChange',
+            'Window restore setup failed',
+            {
+              error: formatErrorMessage(error),
+              isToolbarMode,
+            }
+          );
         }
       }
     };

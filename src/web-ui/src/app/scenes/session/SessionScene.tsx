@@ -36,11 +36,13 @@ import './SessionScene.scss';
 interface SessionSceneProps {
   workspacePath?: string;
   isEntering?: boolean;
+  isActive?: boolean;
 }
 
 const SessionScene: React.FC<SessionSceneProps> = ({
   workspacePath,
   isEntering = false,
+  isActive = true,
 }) => {
   const { t } = useTranslation('flow-chat');
   const { state, updateRightPanelWidth, toggleRightPanel } = useApp();
@@ -296,6 +298,7 @@ const SessionScene: React.FC<SessionSceneProps> = ({
         <AuxPane
           ref={auxPaneRef}
           workspacePath={workspacePath}
+          isSceneActive={isActive}
         />
       </div>
     </div>

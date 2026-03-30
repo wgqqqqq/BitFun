@@ -11,6 +11,7 @@ import type {
 import './EditorArea.scss';
 export interface EditorAreaProps {
   workspacePath?: string;
+  isSceneActive?: boolean;
   onOpenMissionControl?: () => void;
   onInteraction?: (itemId: string, userInput: string) => Promise<void>;
   onTabCloseWithDirtyCheck?: (tabId: string, groupId: EditorGroupId) => Promise<boolean>;
@@ -20,6 +21,7 @@ export interface EditorAreaProps {
 
 export const EditorArea: React.FC<EditorAreaProps> = ({
   workspacePath,
+  isSceneActive = true,
   onOpenMissionControl,
   onInteraction,
   onTabCloseWithDirtyCheck,
@@ -125,6 +127,7 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
       groupId={groupId}
       group={group}
       isActive={activeGroupId === groupId}
+      isSceneActive={isSceneActive}
       draggingTabId={draggingTabId}
       draggingFromGroupId={draggingFromGroupId}
       splitMode={layout.splitMode}

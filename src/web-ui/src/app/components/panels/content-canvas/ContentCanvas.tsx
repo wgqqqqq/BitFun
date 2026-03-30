@@ -18,6 +18,8 @@ export interface ContentCanvasProps {
   workspacePath?: string;
   /** App mode */
   mode?: 'agent' | 'project' | 'git';
+  /** Whether the containing scene is currently visible */
+  isSceneActive?: boolean;
   /** Interaction callback */
   onInteraction?: (itemId: string, userInput: string) => Promise<void>;
   /** Before-close callback */
@@ -29,6 +31,7 @@ export interface ContentCanvasProps {
 export const ContentCanvas: React.FC<ContentCanvasProps> = ({
   workspacePath,
   mode = 'agent',
+  isSceneActive = true,
   onInteraction,
   disablePopOut = false,
 }) => {
@@ -114,6 +117,7 @@ export const ContentCanvas: React.FC<ContentCanvasProps> = ({
         <div className="canvas-content-canvas__editor">
           <EditorArea
             workspacePath={workspacePath}
+            isSceneActive={isSceneActive}
             onOpenMissionControl={handleOpenMissionControl}
             onInteraction={onInteraction}
             onTabCloseWithDirtyCheck={handleCloseWithDirtyCheck}
