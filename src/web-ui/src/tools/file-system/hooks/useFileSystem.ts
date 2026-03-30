@@ -13,6 +13,38 @@ const EMPTY_FILE_TREE: FileSystemNode[] = [];
 /** Polling keeps remote workspaces and lazy-loaded trees in sync when OS/file watch is unreliable. */
 const FILE_TREE_POLL_INTERVAL_MS = 1000;
 
+function areStringArraysEqual(left: string[] = [], right: string[] = []): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
+function cloneOptions(options: FileSystemOptions): FileSystemOptions {
+  return {
+    ...options,
+    excludePatterns: [...(options.excludePatterns ?? [])],
+  };
+}
+
+function didReloadRelevantOptionsChange(
+  previous: FileSystemOptions | null,
+  current: FileSystemOptions
+): boolean {
+  if (!previous) {
+    return false;
+  }
+
+  return (
+    previous.showHiddenFiles !== current.showHiddenFiles ||
+    previous.sortBy !== current.sortBy ||
+    previous.sortOrder !== current.sortOrder ||
+    previous.maxDepth !== current.maxDepth ||
+    !areStringArraysEqual(previous.excludePatterns, current.excludePatterns)
+  );
+}
+
 function findNodeByPath(nodes: FileSystemNode[], targetPath: string): FileSystemNode | undefined {
   for (const node of nodes) {
     if (node.path === targetPath) return node;
@@ -89,6 +121,8 @@ export function useFileSystem(options: UseFileSystemOptions = {}): UseFileSystem
   const isLoadingRef = useRef(false);
   const optionsRef = useRef(state.options);
   const expandedFoldersRef = useRef(state.expandedFolders);
+  const lastReloadOptionsRef = useRef<FileSystemOptions | null>(cloneOptions(state.options));
+  const lastReloadRootPathRef = useRef<string | undefined>(rootPath);
   
   useEffect(() => {
     optionsRef.current = state.options;
@@ -509,10 +543,34 @@ export function useFileSystem(options: UseFileSystemOptions = {}): UseFileSystem
   }, [autoLoad, rootPath, enableLazyLoad, loadFileTree, loadFileTreeLazy]);
 
   useEffect(() => {
-    if (rootPath && state.fileTree.length > 0) {
-      void loadFileTree();
+    const rootChanged = lastReloadRootPathRef.current !== rootPath;
+    const optionsChanged = didReloadRelevantOptionsChange(lastReloadOptionsRef.current, state.options);
+
+    lastReloadRootPathRef.current = rootPath;
+    lastReloadOptionsRef.current = cloneOptions(state.options);
+
+    if (!rootPath || rootChanged || !optionsChanged || state.fileTree.length === 0) {
+      return;
     }
-  }, [state.fileTree.length, state.options.showHiddenFiles, state.options.excludePatterns, rootPath, loadFileTree]);
+
+    if (enableLazyLoad) {
+      void loadFileTreeLazy(rootPath);
+      return;
+    }
+
+    void loadFileTree(rootPath);
+  }, [
+    enableLazyLoad,
+    loadFileTree,
+    loadFileTreeLazy,
+    rootPath,
+    state.fileTree.length,
+    state.options.excludePatterns,
+    state.options.maxDepth,
+    state.options.showHiddenFiles,
+    state.options.sortBy,
+    state.options.sortOrder,
+  ]);
 
   useEffect(() => {
     if (!rootPath) {
