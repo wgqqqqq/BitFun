@@ -26,10 +26,11 @@ export interface AuxPaneRef {
 
 interface AuxPaneProps {
   workspacePath?: string;
+  isSceneActive?: boolean;
 }
 
 const AuxPane = forwardRef<AuxPaneRef, AuxPaneProps>(
-  ({ workspacePath }, ref) => {
+  ({ workspacePath, isSceneActive = true }, ref) => {
     const {
       addTab,
       switchToTab,
@@ -124,6 +125,7 @@ const AuxPane = forwardRef<AuxPaneRef, AuxPaneProps>(
         <ContentCanvas
           workspacePath={workspacePath}
           mode="agent"
+          isSceneActive={isSceneActive}
           onInteraction={handleInteraction}
           onBeforeClose={handleBeforeClose}
         />

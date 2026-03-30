@@ -11,6 +11,7 @@ import type { EditorInstance } from '../meditor';
 import { analyzeMarkdownEditability, type MarkdownEditabilityAnalysis } from '../meditor/utils/tiptapMarkdown';
 import { AlertCircle } from 'lucide-react';
 import { createLogger } from '@/shared/utils/logger';
+import { sendDebugProbe } from '@/shared/utils/debugProbe';
 import { globalEventBus } from '@/infrastructure/event-bus';
 import { CubeLoading, Button } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n';
@@ -34,6 +35,14 @@ import 'highlight.js/styles/github-dark.css';
 const log = createLogger('MarkdownEditor');
 
 const FILE_SYNC_POLL_INTERVAL_MS = 1000;
+
+function getPollOffsetMs(filePath: string): number {
+  let hash = 0;
+  for (let i = 0; i < filePath.length; i++) {
+    hash = ((hash << 5) - hash + filePath.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % 400;
+}
 
 export interface MarkdownEditorProps {
   /** File path - loads from file if provided, otherwise uses initialContent */
@@ -267,6 +276,9 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     }
 
     isCheckingDiskRef.current = true;
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    let outcome = 'started';
+    let probeError: string | null = null;
     try {
       const { workspaceAPI } = await import('@/infrastructure/api');
       const { invoke } = await import('@tauri-apps/api/core');
@@ -274,31 +286,37 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         request: { path: filePath },
       });
       if (isFileMissingFromMetadata(fileInfo)) {
+        outcome = 'missing-on-disk';
         reportFileMissingFromDisk(true);
         return;
       }
       reportFileMissingFromDisk(false);
       const currentVersion = diskVersionFromMetadata(fileInfo);
       if (!currentVersion) {
+        outcome = 'missing-version';
         return;
       }
       const baseline = diskVersionRef.current;
       if (!baseline) {
         diskVersionRef.current = currentVersion;
+        outcome = 'initialized-baseline';
         return;
       }
       if (!diskVersionsDiffer(currentVersion, baseline)) {
+        outcome = 'no-change';
         return;
       }
 
       const localBefore = contentRef.current;
       const raw = await workspaceAPI.readFileContent(filePath);
       if (localBefore !== contentRef.current) {
+        outcome = 'editor-changed-before-read';
         return;
       }
       const { nextEditability, nextContent } = toNormalizedMarkdown(raw);
       if (nextContent === contentRef.current) {
         diskVersionRef.current = currentVersion;
+        outcome = 'content-match';
         return;
       }
 
@@ -313,6 +331,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
         });
         if (!shouldReload) {
           diskVersionRef.current = currentVersion;
+          outcome = 'kept-local-changes';
           return;
         }
       }
@@ -340,12 +359,31 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           diskVersionRef.current = vAfter;
         }
       }
+      outcome = 'reloaded-from-disk';
     } catch (e) {
+      outcome = 'error';
+      probeError = e instanceof Error ? e.message : String(e);
       if (isLikelyFileNotFoundError(e)) {
         reportFileMissingFromDisk(true);
       }
       log.error('Markdown disk sync check failed', e);
     } finally {
+      const durationMs =
+        Math.round(
+          ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt) * 10
+        ) / 10;
+      if (probeError || outcome !== 'no-change' || durationMs >= 80) {
+        sendDebugProbe(
+          'MarkdownEditor.tsx:checkMarkdownDisk',
+          'Markdown editor disk sync completed',
+          {
+            filePath,
+            outcome,
+            durationMs,
+            error: probeError,
+          }
+        );
+      }
       isCheckingDiskRef.current = false;
     }
   }, [filePath, isActiveTab, reportFileMissingFromDisk, t, toNormalizedMarkdown]);
@@ -364,11 +402,17 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     const tick = () => {
       void checkMarkdownDisk();
     };
-    const intervalId = window.setInterval(tick, FILE_SYNC_POLL_INTERVAL_MS);
-    document.addEventListener('visibilitychange', tick);
+    const pollOffsetMs = getPollOffsetMs(filePath);
+    let intervalId: number | null = null;
+    const timeoutId = window.setTimeout(() => {
+      tick();
+      intervalId = window.setInterval(tick, FILE_SYNC_POLL_INTERVAL_MS + pollOffsetMs);
+    }, 250 + pollOffsetMs);
     return () => {
-      window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', tick);
+      window.clearTimeout(timeoutId);
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
     };
   }, [checkMarkdownDisk, filePath, isActiveTab, pollMarkdownDisk]);
 

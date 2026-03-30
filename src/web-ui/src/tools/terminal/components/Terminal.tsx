@@ -18,6 +18,7 @@ import {
 import { systemAPI } from '@/infrastructure/api/service-api/SystemAPI';
 import { themeService } from '@/infrastructure/theme/core/ThemeService';
 import { createLogger } from '@/shared/utils/logger';
+import { sendDebugProbe } from '@/shared/utils/debugProbe';
 import '@xterm/xterm/css/xterm.css';
 import './Terminal.scss';
 
@@ -560,6 +561,7 @@ const Terminal = forwardRef<TerminalRef, TerminalProps>(({
       isVisibleRef.current = isVisible;
 
       if (isVisible && !wasVisibleRef.current) {
+        const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
         requestAnimationFrame(() => {
           resizeDebouncerRef.current?.flush();
           
@@ -575,6 +577,23 @@ const Terminal = forwardRef<TerminalRef, TerminalProps>(({
                 term.focus();
               }
             }
+            sendDebugProbe(
+              'Terminal.tsx:intersectionObserver',
+              'Terminal visibility restore completed',
+              {
+                terminalId,
+                sessionId,
+                autoFocus,
+                durationMs:
+                  Math.round(
+                    ((typeof performance !== 'undefined' ? performance.now() : Date.now()) -
+                      startedAt) *
+                      10
+                  ) / 10,
+                cols: term?.cols ?? null,
+                rows: term?.rows ?? null,
+              }
+            );
           });
         });
       }

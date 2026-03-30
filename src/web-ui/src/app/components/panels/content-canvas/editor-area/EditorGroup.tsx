@@ -24,6 +24,7 @@ export interface EditorGroupProps {
   groupId: EditorGroupId;
   group: EditorGroupState;
   isActive: boolean;
+  isSceneActive?: boolean;
   draggingTabId: string | null;
   draggingFromGroupId: EditorGroupId | null;
   splitMode: SplitMode;
@@ -50,6 +51,7 @@ export const EditorGroup: React.FC<EditorGroupProps> = ({
   groupId,
   group,
   isActive,
+  isSceneActive = true,
   draggingTabId,
   draggingFromGroupId,
   splitMode,
@@ -174,7 +176,7 @@ export const EditorGroup: React.FC<EditorGroupProps> = ({
               >
                 <FlexiblePanel
                   content={tab.content as any}
-                  isActive={group.activeTabId === tab.id}
+                  isActive={isSceneActive && group.activeTabId === tab.id}
                   onContentChange={group.activeTabId === tab.id ? handleContentChange : undefined}
                   onDirtyStateChange={group.activeTabId === tab.id ? handleDirtyStateChange : undefined}
                   onFileMissingFromDiskChange={

@@ -13,7 +13,11 @@ import { useTerminalSceneStore } from '../../stores/terminalSceneStore';
 import ConnectedTerminal from '../../../tools/terminal/components/ConnectedTerminal';
 import './TerminalScene.scss';
 
-const TerminalScene: React.FC = () => {
+interface TerminalSceneProps {
+  isActive?: boolean;
+}
+
+const TerminalScene: React.FC<TerminalSceneProps> = ({ isActive = true }) => {
   const { activeSessionId, setActiveSession } = useTerminalSceneStore();
   const { t } = useTranslation('panels/terminal');
 
@@ -24,6 +28,10 @@ const TerminalScene: React.FC = () => {
   const handleClose = useCallback(() => {
     setActiveSession(null);
   }, [setActiveSession]);
+
+  if (!isActive) {
+    return <div className="bitfun-terminal-scene" aria-hidden="true" />;
+  }
 
   return (
     <div className="bitfun-terminal-scene">
