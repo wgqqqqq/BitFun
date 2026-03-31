@@ -274,6 +274,7 @@ mod tests {
 }
 
 /// Whether an element's global bounds fall within any visible display.
+#[allow(dead_code)]
 pub fn is_element_on_screen(gx: f64, gy: f64, width: f64, height: f64) -> bool {
     // Element must have reasonable size (not a giant container)
     if width > 3000.0 || height > 2000.0 {

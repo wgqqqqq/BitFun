@@ -30,6 +30,7 @@ import { useMessageSender } from '../hooks/useMessageSender';
 import { useChatInputState } from '../store/chatInputStateStore';
 import { useInputHistoryStore } from '../store/inputHistoryStore';
 import { startBtwThread } from '../services/BtwThreadService';
+import { FlowChatManager } from '../services/FlowChatManager';
 import { createLogger } from '@/shared/utils/logger';
 import { Tooltip, IconButton } from '@/component-library';
 import { useAgentCanvasStore } from '@/app/components/panels/content-canvas/stores';
@@ -950,6 +951,74 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     setQueuedInput,
     t,
   ]);
+
+  const submitInitFromInput = useCallback(async () => {
+    if (!effectiveTargetSessionId || !effectiveTargetSession) {
+      notificationService.error(
+        t('chatInput.initNoSession', { defaultValue: 'No active session for /init' })
+      );
+      return;
+    }
+
+    if (derivedState?.isProcessing) {
+      notificationService.warning(
+        t('chatInput.initBusy', {
+          defaultValue: 'Wait until the session is idle before using /init.',
+        })
+      );
+      return;
+    }
+
+    const message = inputState.value.trim();
+    if (!/^\/init\s*$/i.test(message)) {
+      notificationService.warning(
+        t('chatInput.initUsage', { defaultValue: 'Use /init without extra arguments.' })
+      );
+      return;
+    }
+
+    const initInstruction = t('chatInput.initPrompt', {
+      defaultValue: 'Please generate or update AGENTS.md so it matches the current project. Write it in English and keep the English version complete.',
+    });
+
+    dispatchInput({ type: 'CLEAR_VALUE' });
+    setQueuedInput(null);
+    setSlashCommandState({ isActive: false, kind: 'modes', query: '', selectedIndex: 0 });
+
+    try {
+      const flowChatManager = FlowChatManager.getInstance();
+      await flowChatManager.sendMessage(
+        initInstruction,
+        effectiveTargetSessionId,
+        initInstruction,
+        'Init'
+      );
+      onSendMessage?.(initInstruction);
+      dispatchInput({ type: 'DEACTIVATE' });
+    } catch (error) {
+      log.error('Failed to trigger /init', {
+        error,
+        sessionId: effectiveTargetSessionId,
+      });
+      dispatchInput({ type: 'ACTIVATE' });
+      dispatchInput({ type: 'SET_VALUE', payload: message });
+      notificationService.error(
+        error instanceof Error ? error.message : t('error.unknown'),
+        {
+          title: t('chatInput.initFailed', { defaultValue: 'Session init failed' }),
+          duration: 5000,
+        }
+      );
+    }
+  }, [
+    derivedState?.isProcessing,
+    effectiveTargetSession,
+    effectiveTargetSessionId,
+    inputState.value,
+    onSendMessage,
+    setQueuedInput,
+    t,
+  ]);
   
   const handleSendOrCancel = useCallback(async () => {
     if (!derivedState) return;
@@ -986,9 +1055,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       return;
     }
 
+    if (/^\/init\s*$/i.test(message)) {
+      await submitInitFromInput();
+      return;
+    }
+
     if (message.toLowerCase().startsWith('/compact')) {
       notificationService.warning(
         t('chatInput.compactUsage', { defaultValue: 'Use /compact without extra arguments.' })
+      );
+      return;
+    }
+
+    if (message.toLowerCase().startsWith('/init')) {
+      notificationService.warning(
+        t('chatInput.initUsage', { defaultValue: 'Use /init without extra arguments.' })
       );
       return;
     }
@@ -1046,6 +1127,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     setQueuedInput,
     submitBtwFromInput,
     submitCompactFromInput,
+    submitInitFromInput,
     t,
   ]);
   
@@ -1124,6 +1206,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         command: '/compact',
         label: t('chatInput.compactAction', { defaultValue: 'Compact session' }),
       },
+      {
+        kind: 'action',
+        id: 'init',
+        command: '/init',
+        label: t('chatInput.initAction', { defaultValue: 'Generate AGENTS.md' }),
+      },
     ];
 
     const q = (slashCommandState.query || '').trim().toLowerCase();
@@ -1179,6 +1267,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       }
     } else if (actionId === 'compact') {
       next = '/compact';
+    } else if (actionId === 'init') {
+      next = '/init';
     } else {
       return;
     }

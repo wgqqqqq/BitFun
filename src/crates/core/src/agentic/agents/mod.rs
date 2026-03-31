@@ -17,6 +17,7 @@ mod file_finder_agent;
 // Hidden agents
 mod code_review_agent;
 mod generate_doc_agent;
+mod init_agent;
 
 use crate::util::errors::{BitFunError, BitFunResult};
 pub use agentic_mode::AgenticMode;
@@ -29,6 +30,7 @@ pub use debug_mode::DebugMode;
 pub use explore_agent::ExploreAgent;
 pub use file_finder_agent::FileFinderAgent;
 pub use generate_doc_agent::GenerateDocAgent;
+pub use init_agent::InitAgent;
 pub use plan_mode::PlanMode;
 pub use prompt_builder::{PromptBuilder, PromptBuilderContext, RemoteExecutionHints};
 pub use registry::{

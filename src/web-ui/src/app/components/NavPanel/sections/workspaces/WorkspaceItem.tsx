@@ -1,8 +1,9 @@
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Folder, FolderOpen, MoreHorizontal, GitBranch, FolderSearch, Plus, ChevronDown, Trash2, RotateCcw, Copy } from 'lucide-react';
+import { Folder, FolderOpen, MoreHorizontal, GitBranch, FolderSearch, Plus, ChevronDown, Trash2, RotateCcw, Copy, FileText } from 'lucide-react';
 import { ConfirmDialog, Tooltip } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n';
+import { i18nService } from '@/infrastructure/i18n';
 import { useWorkspaceContext } from '@/infrastructure/contexts/WorkspaceContext';
 import {
   createWorktreeWorkspace,
@@ -284,6 +285,41 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
   const handleCreateCoworkSession = useCallback(() => {
     void handleCreateSession('Cowork');
   }, [handleCreateSession]);
+
+  const handleCreateInitSession = useCallback(async () => {
+    setMenuOpen(false);
+
+    try {
+      const sessionId = await flowChatManager.createChatSession(
+        {
+          workspacePath: workspace.rootPath,
+          ...(isRemoteWorkspace(workspace) && workspace.connectionId
+            ? { remoteConnectionId: workspace.connectionId }
+            : {}),
+          ...(isRemoteWorkspace(workspace) && workspace.sshHost
+            ? { remoteSshHost: workspace.sshHost }
+            : {}),
+        },
+        'Init'
+      );
+
+      await openMainSession(sessionId, {
+        workspaceId: workspace.id,
+        activateWorkspace: setActiveWorkspace,
+      });
+
+      const initPrompt = i18nService.t('flow-chat:chatInput.initPrompt', {
+        defaultValue: 'Please generate or update AGENTS.md so it matches the current project. Write it in English and keep the English version complete.',
+      });
+
+      await flowChatManager.sendMessage(initPrompt, sessionId, initPrompt, 'Init');
+    } catch (error) {
+      notificationService.error(
+        error instanceof Error ? error.message : t('nav.workspaces.initSessionFailed'),
+        { duration: 4000 }
+      );
+    }
+  }, [setActiveWorkspace, t, workspace]);
 
   const handleCreateWorktree = useCallback(async (result: BranchSelectResult) => {
     try {
@@ -608,6 +644,10 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
               <button type="button" className="bitfun-nav-panel__workspace-item-menu-item" onClick={handleCreateCoworkSession}>
                 <Plus size={13} />
                 <span className="bitfun-nav-panel__workspace-item-menu-label">{t('nav.sessions.newCoworkSessionShort')}</span>
+              </button>
+              <button type="button" className="bitfun-nav-panel__workspace-item-menu-item" onClick={() => { void handleCreateInitSession(); }}>
+                <FileText size={13} />
+                <span className="bitfun-nav-panel__workspace-item-menu-label">{t('nav.workspaces.actions.initAgents')}</span>
               </button>
               {isLinkedWorktree ? (
                 <button
