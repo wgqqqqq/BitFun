@@ -102,13 +102,6 @@ impl MCPServerManager {
             )));
         }
 
-        if config.oauth.is_none() {
-            return Err(BitFunError::Validation(format!(
-                "MCP server '{}' does not have OAuth configured",
-                server_id
-            )));
-        }
-
         if let Some(existing) = self.oauth_sessions.write().await.remove(server_id) {
             Self::shutdown_oauth_session(&existing).await;
         }

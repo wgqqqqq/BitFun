@@ -236,7 +236,7 @@ impl MCPServerProcess {
                 &self.id,
                 url.to_string(),
                 merged_headers,
-                config.oauth.is_some(),
+                true,
             )
             .await?,
         );

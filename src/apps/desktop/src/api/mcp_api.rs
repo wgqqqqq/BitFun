@@ -96,7 +96,7 @@ pub async fn get_mcp_servers(state: State<'_, AppState>) -> Result<Vec<MCPServer
             false
         };
         let oauth_enabled = if matches!(config.server_type, MCPServerType::Remote) {
-            MCPConfigService::has_remote_oauth(&config)
+            true
         } else {
             false
         };
@@ -176,7 +176,7 @@ pub async fn get_mcp_servers(state: State<'_, AppState>) -> Result<Vec<MCPServer
                 if static_auth_configured {
                     MCPConfigService::get_remote_authorization_source(&config)
                         .map(|source| source.to_string())
-                } else if oauth_enabled {
+                } else if oauth_auth_configured {
                     Some("oauth".to_string())
                 } else {
                     None

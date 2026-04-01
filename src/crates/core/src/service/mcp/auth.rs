@@ -353,15 +353,18 @@ fn normalize_callback_path(config: &MCPServerOAuthConfig) -> String {
     }
 }
 
+fn effective_oauth_config(config: &MCPServerConfig) -> MCPServerOAuthConfig {
+    let mut oauth = config.oauth.clone().unwrap_or_default();
+    if oauth.client_name.is_none() {
+        oauth.client_name = Some(format!("BitFun MCP Client ({})", config.name));
+    }
+    oauth
+}
+
 pub async fn prepare_remote_oauth_authorization(
     config: &MCPServerConfig,
 ) -> BitFunResult<PreparedMCPRemoteOAuthAuthorization> {
-    let oauth = config.oauth.as_ref().ok_or_else(|| {
-        BitFunError::Validation(format!(
-            "MCP server '{}' does not have OAuth configured",
-            config.id
-        ))
-    })?;
+    let oauth = effective_oauth_config(config);
     let server_url = config.url.as_deref().ok_or_else(|| {
         BitFunError::Configuration(format!(
             "Remote MCP server '{}' must have a URL for OAuth",
@@ -369,7 +372,7 @@ pub async fn prepare_remote_oauth_authorization(
         ))
     })?;
 
-    let host = normalize_callback_host(oauth);
+    let host = normalize_callback_host(&oauth);
     let listener = TcpListener::bind((host.as_str(), oauth.callback_port.unwrap_or(0)))
         .await
         .map_err(|error| {
@@ -387,7 +390,7 @@ pub async fn prepare_remote_oauth_authorization(
             ))
         })?
         .port();
-    let redirect_uri = format!("http://{}:{}{}", host, port, normalize_callback_path(oauth));
+    let redirect_uri = format!("http://{}:{}{}", host, port, normalize_callback_path(&oauth));
 
     let scopes = oauth.scopes.iter().map(String::as_str).collect::<Vec<_>>();
     let mut state = OAuthState::new(server_url, None)

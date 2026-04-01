@@ -513,6 +513,23 @@ const McpToolsConfig: React.FC = () => {
     return server.commandAvailable !== false;
   };
 
+  const getErrorMessage = (error: unknown) =>
+    error instanceof Error ? error.message : String(error);
+
+  const isLikelyRemoteAuthError = (error: unknown) => {
+    const message = getErrorMessage(error).toLowerCase();
+    return [
+      'auth required',
+      'authorization required',
+      'authentication required',
+      'www-authenticate',
+      'status code: 401',
+      'status code: 403',
+      'unauthorized',
+      'forbidden',
+    ].some((pattern) => message.includes(pattern));
+  };
+
   const notifyCommandUnavailable = (server: MCPServerInfo) => {
     notification.warning(
       tMcp('messages.commandUnavailable', {
@@ -541,10 +558,16 @@ const McpToolsConfig: React.FC = () => {
       });
       await loadServers();
     } catch (error) {
+      if (isRemoteServer(server) && isLikelyRemoteAuthError(error)) {
+        handleOpenAuthDialog(server);
+        if (server.oauthEnabled) {
+          void startRemoteOAuthFlow(server);
+        }
+      }
       notification.error(
         tMcp('messages.startFailed', { serverId }) +
           ': ' +
-          (error instanceof Error ? error.message : String(error)),
+          getErrorMessage(error),
         { title: tMcp('notifications.startFailed'), duration: 5000 }
       );
     }
@@ -583,10 +606,16 @@ const McpToolsConfig: React.FC = () => {
       });
       await loadServers();
     } catch (error) {
+      if (isRemoteServer(server) && isLikelyRemoteAuthError(error)) {
+        handleOpenAuthDialog(server);
+        if (server.oauthEnabled) {
+          void startRemoteOAuthFlow(server);
+        }
+      }
       notification.error(
         tMcp('messages.restartFailed', { serverId }) +
           ': ' +
-          (error instanceof Error ? error.message : String(error)),
+          getErrorMessage(error),
         { title: tMcp('notifications.restartFailed'), duration: 5000 }
       );
     }
@@ -724,22 +753,20 @@ const McpToolsConfig: React.FC = () => {
     }
   };
 
-  const handleStartRemoteOAuth = async () => {
-    if (!authDialogServer || oauthStarting || authSubmitting) return;
-
+  const startRemoteOAuthFlow = async (server: MCPServerInfo) => {
     setOauthStarting(true);
     try {
-      const session = await MCPAPI.startRemoteOAuth({ serverId: authDialogServer.id });
+      const session = await MCPAPI.startRemoteOAuth({ serverId: server.id });
       setOauthSession(session);
       if (session.authorizationUrl) {
         await systemAPI.openExternal(session.authorizationUrl);
       }
-      pollOAuthSession(authDialogServer.id);
+      pollOAuthSession(server.id);
       notification.success(
         session.message ||
           tMcp('messages.remoteOAuthStarted', {
-            serverId: authDialogServer.id,
-            defaultValue: `Opened OAuth sign-in for "${authDialogServer.id}".`,
+            serverId: server.id,
+            defaultValue: `Opened OAuth sign-in for "${server.id}".`,
           }),
         {
           title: tMcp('notifications.startSuccess'),
@@ -755,6 +782,11 @@ const McpToolsConfig: React.FC = () => {
     } finally {
       setOauthStarting(false);
     }
+  };
+
+  const handleStartRemoteOAuth = async () => {
+    if (!authDialogServer || oauthStarting || authSubmitting) return;
+    await startRemoteOAuthFlow(authDialogServer);
   };
 
   const getStatusClass = (status: string): string => {
