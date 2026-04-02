@@ -5,9 +5,9 @@
 use crate::infrastructure::ai::providers::anthropic::AnthropicMessageConverter;
 use crate::infrastructure::ai::providers::gemini::GeminiMessageConverter;
 use crate::infrastructure::ai::providers::openai::OpenAIMessageConverter;
+use crate::infrastructure::ai::tool_call_accumulator::{PendingToolCall, ToolCallBoundary};
 use crate::service::config::ProxyConfig;
 use crate::util::types::*;
-use crate::util::JsonChecker;
 use ai_stream_handlers::{
     handle_anthropic_stream, handle_gemini_stream, handle_openai_stream, handle_responses_stream,
     UnifiedResponse,
@@ -17,7 +17,6 @@ use futures::StreamExt;
 use log::{debug, error, info, warn};
 use reqwest::{Client, Proxy};
 use serde::Deserialize;
-use std::collections::HashMap;
 use tokio::sync::mpsc;
 
 /// Streamed response result with the parsed stream and optional raw SSE receiver
@@ -616,10 +615,7 @@ impl AIClient {
         builder = builder
             .header("Content-Type", "application/json")
             .header("x-goog-api-key", &self.config.api_key)
-            .header(
-                "Authorization",
-                format!("Bearer {}", self.config.api_key),
-            );
+            .header("Authorization", format!("Bearer {}", self.config.api_key));
 
         if self.config.base_url.contains("openbitfun.com") {
             builder = builder.header("X-Verification-Code", "from_bitfun");
@@ -1809,30 +1805,106 @@ impl AIClient {
         let mut provider_metadata: Option<serde_json::Value> = None;
 
         let mut tool_calls: Vec<ToolCall> = Vec::new();
-        let mut cur_tool_call_id = String::new();
-        let mut cur_tool_call_name = String::new();
-        let mut json_checker = JsonChecker::new();
+        let mut pending_tool_call = PendingToolCall::default();
 
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
                 Ok(chunk) => {
-                    if let Some(text) = chunk.text {
+                    let UnifiedResponse {
+                        text,
+                        reasoning_content,
+                        thinking_signature: _,
+                        tool_call,
+                        usage: chunk_usage,
+                        finish_reason: chunk_finish_reason,
+                        provider_metadata: chunk_provider_metadata,
+                    } = chunk;
+
+                    if let Some(text) = text {
                         full_text.push_str(&text);
                     }
 
-                    if let Some(reasoning_content) = chunk.reasoning_content {
+                    if let Some(reasoning_content) = reasoning_content {
                         full_reasoning.push_str(&reasoning_content);
                     }
 
-                    if let Some(finish_reason_) = chunk.finish_reason {
+                    if let Some(tool_call) = tool_call {
+                        let ai_stream_handlers::UnifiedToolCall {
+                            id,
+                            name,
+                            arguments,
+                        } = tool_call;
+
+                        if let Some(tool_call_id) = id {
+                            if !tool_call_id.is_empty() {
+                                // Some providers repeat the tool id on every delta. Only switch when the id changes.
+                                let is_new_tool = pending_tool_call.tool_id() != tool_call_id;
+                                if is_new_tool {
+                                    if let Some(finalized) =
+                                        pending_tool_call.finalize(ToolCallBoundary::NewTool)
+                                    {
+                                        if finalized.is_error {
+                                            warn!(
+                                                "[send_message] Dropping invalid tool call at boundary=new_tool: tool_id={}, tool_name={}, raw_len={}",
+                                                finalized.tool_id,
+                                                finalized.tool_name,
+                                                finalized.raw_arguments.len()
+                                            );
+                                        } else {
+                                            let arguments = finalized.arguments_as_object_map();
+                                            tool_calls.push(ToolCall {
+                                                id: finalized.tool_id,
+                                                name: finalized.tool_name,
+                                                arguments,
+                                            });
+                                        }
+                                    }
+                                    pending_tool_call.start_new(tool_call_id, name.clone());
+                                    debug!(
+                                        "[send_message] Detected tool call: {}",
+                                        pending_tool_call.tool_name()
+                                    );
+                                } else {
+                                    pending_tool_call.update_tool_name_if_missing(name.clone());
+                                }
+                            }
+                        }
+
+                        if let Some(tool_call_arguments) = arguments {
+                            if pending_tool_call.has_pending() {
+                                pending_tool_call.append_arguments(&tool_call_arguments);
+                            }
+                        }
+                    }
+
+                    if let Some(finish_reason_) = chunk_finish_reason {
+                        if let Some(finalized) =
+                            pending_tool_call.finalize(ToolCallBoundary::FinishReason)
+                        {
+                            if finalized.is_error {
+                                warn!(
+                                    "[send_message] Dropping invalid tool call at boundary=finish_reason: tool_id={}, tool_name={}, raw_len={}",
+                                    finalized.tool_id,
+                                    finalized.tool_name,
+                                    finalized.raw_arguments.len()
+                                );
+                            } else {
+                                let arguments = finalized.arguments_as_object_map();
+                                tool_calls.push(ToolCall {
+                                    id: finalized.tool_id,
+                                    name: finalized.tool_name,
+                                    arguments,
+                                });
+                            }
+                        }
                         finish_reason = Some(finish_reason_);
                     }
 
-                    if let Some(chunk_usage) = chunk.usage {
+                    if let Some(chunk_usage) = chunk_usage {
                         usage = Some(Self::unified_usage_to_gemini_usage(chunk_usage));
                     }
 
-                    if let Some(chunk_provider_metadata) = chunk.provider_metadata {
+                    if let Some(chunk_provider_metadata) = chunk_provider_metadata {
                         match provider_metadata.as_mut() {
                             Some(existing) => {
                                 Self::merge_json_value(existing, chunk_provider_metadata);
@@ -1840,56 +1912,26 @@ impl AIClient {
                             None => provider_metadata = Some(chunk_provider_metadata),
                         }
                     }
-
-                    if let Some(tool_call) = chunk.tool_call {
-                        if let Some(tool_call_id) = tool_call.id {
-                            if !tool_call_id.is_empty() {
-                                // Some providers repeat the tool id on every delta. Only reset when the id changes.
-                                let is_new_tool = cur_tool_call_id != tool_call_id;
-                                if is_new_tool {
-                                    cur_tool_call_id = tool_call_id;
-                                    cur_tool_call_name = tool_call.name.unwrap_or_default();
-                                    json_checker.reset();
-                                    debug!(
-                                        "[send_message] Detected tool call: {}",
-                                        cur_tool_call_name
-                                    );
-                                } else if cur_tool_call_name.is_empty() {
-                                    // Best-effort: keep name if provider repeats it.
-                                    cur_tool_call_name = tool_call.name.unwrap_or_default();
-                                }
-                            }
-                        }
-
-                        if let Some(ref tool_call_arguments) = tool_call.arguments {
-                            json_checker.append(tool_call_arguments);
-                        }
-
-                        if json_checker.is_valid() {
-                            let arguments_string = json_checker.get_buffer();
-                            let arguments: HashMap<String, serde_json::Value> =
-                                serde_json::from_str(&arguments_string).unwrap_or_else(|e| {
-                                    error!(
-                                        "[send_message] Failed to parse tool arguments: {}, arguments: {}",
-                                        e,
-                                        arguments_string
-                                    );
-                                    HashMap::new()
-                                });
-                            tool_calls.push(ToolCall {
-                                id: cur_tool_call_id.clone(),
-                                name: cur_tool_call_name.clone(),
-                                arguments,
-                            });
-                            debug!(
-                                "[send_message] Tool call arguments complete: {}",
-                                cur_tool_call_name
-                            );
-                            json_checker.reset();
-                        }
-                    }
                 }
                 Err(e) => return Err(e),
+            }
+        }
+
+        if let Some(finalized) = pending_tool_call.finalize(ToolCallBoundary::EndOfAggregation) {
+            if finalized.is_error {
+                warn!(
+                    "[send_message] Dropping invalid tool call at boundary=end_of_aggregation: tool_id={}, tool_name={}, raw_len={}",
+                    finalized.tool_id,
+                    finalized.tool_name,
+                    finalized.raw_arguments.len()
+                );
+            } else {
+                let arguments = finalized.arguments_as_object_map();
+                tool_calls.push(ToolCall {
+                    id: finalized.tool_id,
+                    name: finalized.tool_name,
+                    arguments,
+                });
             }
         }
 

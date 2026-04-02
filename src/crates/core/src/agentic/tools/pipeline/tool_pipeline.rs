@@ -7,10 +7,10 @@ use super::state_manager::ToolStateManager;
 use super::types::*;
 use crate::agentic::core::{ToolCall, ToolExecutionState, ToolResult as ModelToolResult};
 use crate::agentic::events::types::ToolEventData;
+use crate::agentic::tools::computer_use_host::ComputerUseHostRef;
 use crate::agentic::tools::framework::{
     ToolOptions, ToolResult as FrameworkToolResult, ToolUseContext,
 };
-use crate::agentic::tools::computer_use_host::ComputerUseHostRef;
 use crate::agentic::tools::image_context::ImageContextProviderRef;
 use crate::agentic::tools::registry::ToolRegistry;
 use crate::util::errors::{BitFunError, BitFunResult};
@@ -400,11 +400,13 @@ impl ToolPipeline {
         );
 
         if tool_name.is_empty() || tool_is_error {
-            let error_msg = format!(
-                "Missing tool name or tool arguments are invalid. \
-                This may be caused by network errors (packet loss, connection issues) or model output anomalies. \
-                Please regenerate the tool call with valid tool name and arguments."
-            );
+            let error_msg = if tool_name.is_empty() && tool_is_error {
+                "Missing valid tool name and arguments are invalid JSON.".to_string()
+            } else if tool_name.is_empty() {
+                "Missing valid tool name.".to_string()
+            } else {
+                "Arguments are invalid JSON.".to_string()
+            };
             self.state_manager
                 .update_state(
                     &tool_id,

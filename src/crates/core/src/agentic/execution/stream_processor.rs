@@ -8,13 +8,15 @@ use crate::agentic::events::{
     ToolEventData,
 };
 use crate::agentic::tools::SubagentParentInfo;
+use crate::infrastructure::ai::tool_call_accumulator::{
+    FinalizedToolCall, PendingToolCall, ToolCallBoundary,
+};
 use crate::util::errors::BitFunError;
 use crate::util::types::ai::GeminiUsage;
-use crate::util::JsonChecker;
 use ai_stream_handlers::UnifiedResponse;
 use futures::StreamExt;
 use log::{debug, error, trace};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -107,48 +109,6 @@ impl SseLogCollector {
     }
 }
 
-#[derive(Debug)]
-struct ToolCallBuffer {
-    tool_id: String,
-    tool_name: String,
-    json_checker: JsonChecker,
-}
-
-impl ToolCallBuffer {
-    fn new() -> Self {
-        Self {
-            tool_id: String::new(),
-            tool_name: String::new(),
-            json_checker: JsonChecker::new(),
-        }
-    }
-
-    fn reset(&mut self) {
-        self.tool_id.clear();
-        self.tool_name.clear();
-        self.json_checker.reset();
-    }
-
-    fn append(&mut self, s: &str) {
-        self.json_checker.append(s);
-    }
-
-    fn is_valid(&self) -> bool {
-        self.json_checker.is_valid()
-    }
-
-    fn to_tool_call(&self) -> ToolCall {
-        let arguments = serde_json::from_str(&self.json_checker.get_buffer());
-        let is_error = arguments.is_err();
-        ToolCall {
-            tool_id: self.tool_id.clone(),
-            tool_name: self.tool_name.clone(),
-            arguments: arguments.unwrap_or(json!({})),
-            is_error,
-        }
-    }
-}
-
 /// Stream processing result
 #[derive(Debug, Clone)]
 pub struct StreamResult {
@@ -199,7 +159,7 @@ struct StreamContext {
     provider_metadata: Option<Value>,
 
     // Current tool call state
-    tool_call_buffer: ToolCallBuffer,
+    pending_tool_call: PendingToolCall,
 
     // Counters and flags
     text_chunks_count: usize,
@@ -228,7 +188,7 @@ impl StreamContext {
             tool_calls: Vec::new(),
             usage: None,
             provider_metadata: None,
-            tool_call_buffer: ToolCallBuffer::new(),
+            pending_tool_call: PendingToolCall::default(),
             text_chunks_count: 0,
             thinking_chunks_count: 0,
             thinking_completed_sent: false,
@@ -252,18 +212,34 @@ impl StreamContext {
         self.has_effective_output
             && !self.full_text.is_empty()
             && self.tool_calls.is_empty()
-            && self.tool_call_buffer.tool_id.is_empty()
+            && !self.pending_tool_call.has_pending()
     }
 
-    /// Force finish tool_call_buffer, used to handle cases where toolcall parameters are not fully closed
-    /// E.g., when new toolcall arrives and before returning results
-    fn force_finish_tool_call_buffer(&mut self) {
-        if !self.tool_call_buffer.tool_id.is_empty() {
-            error!("force finish tool_call_buffer: {:?}", self.tool_call_buffer);
-            // Add to results even if parameters are incomplete, to avoid dialog turn interruption due to no tool calls
-            // Caller can detect is_error=true to mark tool execution error
-            self.tool_calls.push(self.tool_call_buffer.to_tool_call());
-            self.tool_call_buffer.reset();
+    fn finalize_pending_tool_call(
+        &mut self,
+        boundary: ToolCallBoundary,
+    ) -> Option<FinalizedToolCall> {
+        let finalized = self.pending_tool_call.finalize(boundary)?;
+        self.tool_calls.push(ToolCall {
+            tool_id: finalized.tool_id.clone(),
+            tool_name: finalized.tool_name.clone(),
+            arguments: finalized.arguments.clone(),
+            is_error: finalized.is_error,
+        });
+        Some(finalized)
+    }
+
+    /// Force finish pending_tool_call, used when the stream is shutting down before a natural tool boundary.
+    fn force_finish_pending_tool_call(&mut self) {
+        if let Some(finalized) = self.finalize_pending_tool_call(ToolCallBoundary::GracefulShutdown)
+        {
+            error!(
+                "force finish pending tool call: tool_id={}, tool_name={}, raw_len={}, is_error={}",
+                finalized.tool_id,
+                finalized.tool_name,
+                finalized.raw_arguments.len(),
+                finalized.is_error
+            );
         }
     }
 }
@@ -341,7 +317,7 @@ impl StreamProcessor {
 
     /// Execute graceful shutdown from context
     async fn graceful_shutdown_from_ctx(&self, ctx: &mut StreamContext, reason: String) {
-        ctx.force_finish_tool_call_buffer();
+        ctx.force_finish_pending_tool_call();
         self.graceful_shutdown(
             ctx.session_id.clone(),
             ctx.dialog_turn_id.clone(),
@@ -461,22 +437,26 @@ impl StreamProcessor {
         ctx: &mut StreamContext,
         tool_call: ai_stream_handlers::UnifiedToolCall,
     ) {
+        let ai_stream_handlers::UnifiedToolCall {
+            id,
+            name,
+            arguments,
+        } = tool_call;
+
         // Handle tool ID and name
-        if let Some(tool_id) = tool_call.id {
+        if let Some(tool_id) = id {
             if !tool_id.is_empty() {
                 ctx.has_effective_output = true;
                 // Some providers repeat the tool id on every delta; only treat a new id as a new tool call.
-                let is_new_tool = ctx.tool_call_buffer.tool_id != tool_id;
+                let is_new_tool = ctx.pending_tool_call.tool_id() != tool_id;
                 if is_new_tool {
-                    // Clear previous tool_call state
-                    ctx.force_finish_tool_call_buffer();
+                    let _ = ctx.finalize_pending_tool_call(ToolCallBoundary::NewTool);
 
                     // Normally tool_name should not be empty
-                    let tool_name = tool_call.name.unwrap_or_default();
+                    let tool_name = name.clone().unwrap_or_default();
                     debug!("Tool detected: {}", tool_name);
-                    ctx.tool_call_buffer.tool_id = tool_id.clone();
-                    ctx.tool_call_buffer.tool_name = tool_name.clone();
-                    ctx.tool_call_buffer.json_checker.reset();
+                    ctx.pending_tool_call
+                        .start_new(tool_id.clone(), name.clone());
 
                     // Send early detection event
                     let _ = self
@@ -494,19 +474,21 @@ impl StreamProcessor {
                             None,
                         )
                         .await;
-                } else if ctx.tool_call_buffer.tool_name.is_empty() {
+                } else if ctx.pending_tool_call.tool_name().is_empty() {
                     // Best-effort: keep name if provider repeats it.
-                    ctx.tool_call_buffer.tool_name = tool_call.name.unwrap_or_default();
+                    ctx.pending_tool_call
+                        .update_tool_name_if_missing(name.clone());
                 }
             }
         }
 
         // Handle tool parameters
-        if let Some(tool_call_arguments) = tool_call.arguments {
-            // Empty tool_id indicates abnormal premature closure, stop processing subsequent data for this tool_call
-            if !ctx.tool_call_buffer.tool_id.is_empty() {
+        if let Some(tool_call_arguments) = arguments {
+            // Providers often omit tool_id on follow-up argument deltas. Append as long as we already
+            // have a pending tool call; otherwise treat this as an orphaned delta and ignore it.
+            if ctx.pending_tool_call.has_pending() {
                 ctx.has_effective_output = true;
-                ctx.tool_call_buffer.append(&tool_call_arguments);
+                ctx.pending_tool_call.append_arguments(&tool_call_arguments);
 
                 // Send partial parameters event
                 let _ = self
@@ -516,8 +498,8 @@ impl StreamProcessor {
                             session_id: ctx.session_id.clone(),
                             turn_id: ctx.dialog_turn_id.clone(),
                             tool_event: ToolEventData::ParamsPartial {
-                                tool_id: ctx.tool_call_buffer.tool_id.clone(),
-                                tool_name: ctx.tool_call_buffer.tool_name.clone(),
+                                tool_id: ctx.pending_tool_call.tool_id().to_string(),
+                                tool_name: ctx.pending_tool_call.tool_name().to_string(),
                                 params: tool_call_arguments,
                             },
                             subagent_parent_info: ctx.event_subagent_parent_info.clone(),
@@ -526,17 +508,6 @@ impl StreamProcessor {
                     )
                     .await;
             }
-        }
-
-        // Check if JSON is complete
-        if ctx.tool_call_buffer.is_valid() {
-            let tool_call = ctx.tool_call_buffer.to_tool_call();
-            ctx.tool_calls.push(tool_call);
-
-            // Clear buffer
-            // Normally there should be no delta data after parameters are complete, but this has been triggered in practice, possibly due to network issues or model output anomalies
-            // reset clears the id, subsequent data for this tool_call will not be processed
-            ctx.tool_call_buffer.reset();
         }
     }
 
@@ -743,20 +714,18 @@ impl StreamProcessor {
                         }
                     };
 
-                    // Handle usage
-                    if let Some(ref response_usage) = response.usage {
-                        self.handle_usage(&mut ctx, response_usage);
-                    }
-
-                    if let Some(provider_metadata) = response.provider_metadata {
-                        match ctx.provider_metadata.as_mut() {
-                            Some(existing) => Self::merge_json_value(existing, provider_metadata),
-                            None => ctx.provider_metadata = Some(provider_metadata),
-                        }
-                    }
+                    let UnifiedResponse {
+                        text,
+                        reasoning_content,
+                        thinking_signature,
+                        tool_call,
+                        usage,
+                        finish_reason,
+                        provider_metadata,
+                    } = response;
 
                     // Handle thinking_signature
-                    if let Some(signature) = response.thinking_signature {
+                    if let Some(signature) = thinking_signature {
                         if !signature.is_empty() {
                             ctx.thinking_signature = Some(signature);
                             trace!("Received thinking_signature");
@@ -766,8 +735,8 @@ impl StreamProcessor {
                     // Handle different types of response content
                     // Normalize empty strings to None
                     //  (some models send empty text alongside reasoning content)
-                    let text = response.text.filter(|t| !t.is_empty());
-                    let reasoning_content = response.reasoning_content.filter(|t| !t.is_empty());
+                    let text = text.filter(|t| !t.is_empty());
+                    let reasoning_content = reasoning_content.filter(|t| !t.is_empty());
 
                     if let Some(thinking_content) = reasoning_content {
                         self.handle_thinking_chunk(&mut ctx, thinking_content).await;
@@ -784,12 +753,27 @@ impl StreamProcessor {
                         }
                     }
 
-                    if let Some(tool_call) = response.tool_call {
+                    if let Some(tool_call) = tool_call {
                         self.send_thinking_end_if_needed(&mut ctx).await;
                         self.handle_tool_call_chunk(&mut ctx, tool_call).await;
                         if let Some(err) = self.check_cancellation(&mut ctx, cancellation_token, "processing tool call").await {
                             return err;
                         }
+                    }
+
+                    if let Some(ref response_usage) = usage {
+                        self.handle_usage(&mut ctx, response_usage);
+                    }
+
+                    if let Some(provider_metadata) = provider_metadata {
+                        match ctx.provider_metadata.as_mut() {
+                            Some(existing) => Self::merge_json_value(existing, provider_metadata),
+                            None => ctx.provider_metadata = Some(provider_metadata),
+                        }
+                    }
+
+                    if finish_reason.is_some() {
+                        let _ = ctx.finalize_pending_tool_call(ToolCallBoundary::FinishReason);
                     }
                 }
             }
@@ -798,16 +782,154 @@ impl StreamProcessor {
         // Ensure thinking end marker is sent
         self.send_thinking_end_if_needed(&mut ctx).await;
 
-        // Check if tool parameters are complete, flush SSE logs if incomplete
-        // Incomplete parameters that still occur under normal network conditions need detailed logging for problem diagnosis
-        let has_incomplete_tool = ctx.tool_calls.iter().any(|tc| !tc.is_valid());
-        if has_incomplete_tool {
-            flush_sse_on_error(&sse_collector, "Has incomplete tool calls").await;
+        let _ = ctx.finalize_pending_tool_call(ToolCallBoundary::StreamEnd);
+
+        // Invalid tool payloads that survive to finalization still need detailed SSE logs for diagnosis.
+        if ctx.tool_calls.iter().any(|tc| !tc.is_valid()) {
+            flush_sse_on_error(&sse_collector, "Has invalid tool calls").await;
         }
 
-        ctx.force_finish_tool_call_buffer();
         self.log_stream_result(&ctx);
 
         Ok(ctx.into_result())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StreamProcessor;
+    use crate::agentic::events::{EventQueue, EventQueueConfig};
+    use ai_stream_handlers::{UnifiedResponse, UnifiedTokenUsage, UnifiedToolCall};
+    use futures::StreamExt;
+    use serde_json::json;
+    use std::sync::Arc;
+    use tokio_stream::iter;
+    use tokio_util::sync::CancellationToken;
+
+    fn build_processor() -> StreamProcessor {
+        StreamProcessor::new(Arc::new(EventQueue::new(EventQueueConfig::default())))
+    }
+
+    fn sample_usage(total_tokens: u32) -> UnifiedTokenUsage {
+        UnifiedTokenUsage {
+            prompt_token_count: 1,
+            candidates_token_count: total_tokens.saturating_sub(1),
+            total_token_count: total_tokens,
+            reasoning_token_count: None,
+            cached_content_token_count: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn keeps_collecting_tool_args_across_usage_chunks() {
+        let processor = build_processor();
+        let stream = iter(vec![
+            Ok(UnifiedResponse {
+                tool_call: Some(UnifiedToolCall {
+                    id: Some("call_1".to_string()),
+                    name: Some("tool_a".to_string()),
+                    arguments: Some("{\"a\":".to_string()),
+                }),
+                usage: Some(sample_usage(5)),
+                ..Default::default()
+            }),
+            Ok(UnifiedResponse {
+                tool_call: Some(UnifiedToolCall {
+                    id: None,
+                    name: None,
+                    arguments: Some("1}".to_string()),
+                }),
+                usage: Some(sample_usage(7)),
+                ..Default::default()
+            }),
+        ])
+        .boxed();
+
+        let result = processor
+            .process_stream(
+                stream,
+                None,
+                "session_1".to_string(),
+                "turn_1".to_string(),
+                "round_1".to_string(),
+                None,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("stream result");
+
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(result.tool_calls[0].tool_id, "call_1");
+        assert_eq!(result.tool_calls[0].tool_name, "tool_a");
+        assert_eq!(result.tool_calls[0].arguments, json!({"a": 1}));
+        assert!(!result.tool_calls[0].is_error);
+        assert_eq!(result.usage.as_ref().map(|u| u.total_token_count), Some(7));
+    }
+
+    #[tokio::test]
+    async fn finalizes_tool_after_same_chunk_finish_reason() {
+        let processor = build_processor();
+        let stream = iter(vec![Ok(UnifiedResponse {
+            tool_call: Some(UnifiedToolCall {
+                id: Some("call_1".to_string()),
+                name: Some("tool_a".to_string()),
+                arguments: Some("{\"a\":1}".to_string()),
+            }),
+            usage: Some(sample_usage(9)),
+            finish_reason: Some("tool_calls".to_string()),
+            ..Default::default()
+        })])
+        .boxed();
+
+        let result = processor
+            .process_stream(
+                stream,
+                None,
+                "session_1".to_string(),
+                "turn_1".to_string(),
+                "round_1".to_string(),
+                None,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("stream result");
+
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(result.tool_calls[0].arguments, json!({"a": 1}));
+        assert_eq!(result.usage.as_ref().map(|u| u.total_token_count), Some(9));
+    }
+
+    #[tokio::test]
+    async fn repairs_tool_args_with_one_extra_trailing_right_brace() {
+        let processor = build_processor();
+        let stream = iter(vec![Ok(UnifiedResponse {
+            tool_call: Some(UnifiedToolCall {
+                id: Some("call_1".to_string()),
+                name: Some("tool_a".to_string()),
+                arguments: Some("{\"a\":1}}".to_string()),
+            }),
+            finish_reason: Some("tool_calls".to_string()),
+            ..Default::default()
+        })])
+        .boxed();
+
+        let result = processor
+            .process_stream(
+                stream,
+                None,
+                "session_1".to_string(),
+                "turn_1".to_string(),
+                "round_1".to_string(),
+                None,
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("stream result");
+
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(result.tool_calls[0].tool_id, "call_1");
+        assert_eq!(result.tool_calls[0].tool_name, "tool_a");
+        assert_eq!(result.tool_calls[0].arguments, json!({"a": 1}));
+        assert!(!result.tool_calls[0].is_error);
     }
 }

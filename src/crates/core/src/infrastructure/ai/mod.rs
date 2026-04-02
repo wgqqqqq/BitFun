@@ -5,6 +5,7 @@
 pub mod client;
 pub mod client_factory;
 pub mod providers;
+pub mod tool_call_accumulator;
 
 pub use ai_stream_handlers;
 
