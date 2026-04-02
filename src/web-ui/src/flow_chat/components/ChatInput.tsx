@@ -362,6 +362,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     currentAgentType: effectiveTargetSession?.mode || modeState.current,
   });
 
+  const [mcpPromptCommands, setMcpPromptCommands] = useState<SlashMcpPromptItem[]>([]);
+  const [mcpPromptCommandsLoading, setMcpPromptCommandsLoading] = useState(false);
+
   const loadMcpPromptCommands = useCallback(async () => {
     setMcpPromptCommandsLoading(true);
 
@@ -439,8 +442,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     query: '',
     selectedIndex: 0,
   });
-  const [mcpPromptCommands, setMcpPromptCommands] = useState<SlashMcpPromptItem[]>([]);
-  const [mcpPromptCommandsLoading, setMcpPromptCommandsLoading] = useState(false);
 
   const clearPendingLargePastes = useCallback(() => {
     pendingLargePastesRef.current = {};

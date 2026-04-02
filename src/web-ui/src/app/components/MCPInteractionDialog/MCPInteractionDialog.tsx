@@ -67,7 +67,7 @@ export const MCPInteractionDialog: React.FC = () => {
       return;
     }
     setEditorValue(buildDefaultResult(currentRequest.method));
-  }, [currentRequest?.interactionId, currentRequest?.method]);
+  }, [currentRequest]);
 
   const popCurrentRequest = useCallback(() => {
     setQueue((prev) => prev.slice(1));

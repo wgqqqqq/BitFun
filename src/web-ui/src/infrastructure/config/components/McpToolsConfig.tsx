@@ -223,12 +223,12 @@ const McpToolsConfig: React.FC = () => {
     }
   };
 
-  const stopOAuthPolling = () => {
+  function stopOAuthPolling() {
     if (oauthPollTimerRef.current !== null) {
       window.clearInterval(oauthPollTimerRef.current);
       oauthPollTimerRef.current = null;
     }
-  };
+  }
 
   const handleOAuthSessionUpdate = async (
     serverId: string,
@@ -613,7 +613,7 @@ const McpToolsConfig: React.FC = () => {
     }
   };
 
-  const handleOpenAuthDialog = (server: MCPServerInfo) => {
+  function handleOpenAuthDialog(server: MCPServerInfo) {
     setAuthDialogServer(server);
     setAuthValue('');
     setOauthSession(null);
@@ -634,16 +634,16 @@ const McpToolsConfig: React.FC = () => {
         }
       })();
     }
-  };
+  }
 
-  const closeAuthDialog = () => {
+  function closeAuthDialog() {
     stopOAuthPolling();
     setAuthDialogServer(null);
     setAuthValue('');
     setOauthSession(null);
     setOauthStarting(false);
     setOauthCancelling(false);
-  };
+  }
 
   const handleCloseAuthDialog = () => {
     if (authSubmitting || oauthCancelling) return;
@@ -740,7 +740,7 @@ const McpToolsConfig: React.FC = () => {
     }
   };
 
-  const startRemoteOAuthFlow = async (server: MCPServerInfo) => {
+  async function startRemoteOAuthFlow(server: MCPServerInfo) {
     setOauthStarting(true);
     try {
       const session = await MCPAPI.startRemoteOAuth({ serverId: server.id });
@@ -765,7 +765,7 @@ const McpToolsConfig: React.FC = () => {
     } finally {
       setOauthStarting(false);
     }
-  };
+  }
 
   const handleStartRemoteOAuth = async () => {
     if (!authDialogServer || oauthStarting || authSubmitting) return;
@@ -893,13 +893,13 @@ const McpToolsConfig: React.FC = () => {
     return tMcp('server.remoteAuthMethodXaa');
   };
 
-  const getStartDisabledReasonLabel = (server: MCPServerInfo) => {
+  function getStartDisabledReasonLabel(server: MCPServerInfo) {
     if (server.transport.toLowerCase() === 'sse' && server.startSupported === false) {
       return tMcp('server.runtime.unsupportedRemoteSse');
     }
 
     return server.startDisabledReason || '';
-  };
+  }
 
   const isOAuthFlowActive = !!oauthSession && !['authorized', 'failed', 'cancelled'].includes(oauthSession.status);
 
