@@ -254,7 +254,7 @@
 }
 
 // ── Trigger button (NavPanel brand-header) ───────────────────────────────────
-// Opens the search dialog — compact surface (not a text field): bg distinguishes from nav strip.
+// Opens the search dialog — capsule + scene surface (matches .bitfun-scene-viewport / dialog search).
 
 .bitfun-nav-panel__search-trigger {
   display: flex;
@@ -265,9 +265,9 @@
   min-height: 32px;
   padding: 0 $size-gap-2;
   border: none;
-  border-radius: $size-radius-base;
-  background: var(--element-bg-soft);
-  box-shadow: none;
+  border-radius: $size-radius-full;
+  background: var(--color-bg-scene);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-subtle) 65%, transparent);
   cursor: text;
   color: var(--color-text-primary);
   font-size: var(--font-size-sm);
@@ -276,15 +276,18 @@
   box-sizing: border-box;
   transition:
     background $motion-fast $easing-standard,
+    box-shadow $motion-fast $easing-standard,
     color $motion-fast $easing-standard;
 
   &:hover {
-    background: var(--element-bg-medium);
+    background: color-mix(in srgb, var(--color-bg-scene) 88%, var(--element-bg-medium));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-medium) 55%, transparent);
     color: var(--color-text-primary);
   }
 
   &:active {
-    background: var(--element-bg-strong);
+    background: color-mix(in srgb, var(--color-bg-scene) 82%, var(--element-bg-medium));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-medium) 68%, transparent);
   }
 
   &:focus-visible {
