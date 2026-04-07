@@ -3,7 +3,6 @@ use super::*;
 impl MCPServerManager {
     /// Initializes all servers.
     pub async fn initialize_all(&self) -> BitFunResult<()> {
-        self.start_reconnect_monitor_if_needed();
         info!("Initializing all MCP servers");
 
         let existing_server_ids = self.registry.get_all_server_ids().await;
@@ -19,9 +18,11 @@ impl MCPServerManager {
         info!("Loaded {} MCP server configs", configs.len());
 
         if configs.is_empty() {
-            warn!("No MCP server configurations found");
+            debug!("No MCP server configurations found, skipping initialization");
             return Ok(());
         }
+
+        self.start_reconnect_monitor_if_needed();
 
         let mut registered_count = 0;
         for config in &configs {
@@ -81,13 +82,14 @@ impl MCPServerManager {
     ///
     /// This is safe to call multiple times (e.g., from multiple frontend windows).
     pub async fn initialize_non_destructive(&self) -> BitFunResult<()> {
-        self.start_reconnect_monitor_if_needed();
         info!("Initializing MCP servers (non-destructive)");
 
         let configs = self.config_service.load_all_configs().await?;
         if configs.is_empty() {
             return Ok(());
         }
+
+        self.start_reconnect_monitor_if_needed();
 
         for config in &configs {
             if !config.enabled {
