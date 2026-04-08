@@ -21,7 +21,6 @@ use std::sync::{
 #[cfg(target_os = "macos")]
 use tauri::Emitter;
 use tauri::Manager;
-use tauri_plugin_log::{RotationStrategy, TimezoneStrategy};
 
 // Re-export API
 pub use api::*;
@@ -148,27 +147,7 @@ pub async fn run() {
     setup_panic_hook();
 
     let run_result = tauri::Builder::default()
-        .plugin(
-            tauri_plugin_log::Builder::new()
-                .level(log::LevelFilter::Trace)
-                .level_for("ignore", log::LevelFilter::Off)
-                .level_for("ignore::walk", log::LevelFilter::Off)
-                .level_for("globset", log::LevelFilter::Off)
-                .level_for("tracing", log::LevelFilter::Off)
-                .level_for("opentelemetry_sdk", log::LevelFilter::Off)
-                .level_for("opentelemetry-otlp", log::LevelFilter::Off)
-                .level_for("notify", log::LevelFilter::Off)
-                .level_for("hyper_util", log::LevelFilter::Info)
-                .level_for("h2", log::LevelFilter::Info)
-                .level_for("portable_pty", log::LevelFilter::Info)
-                .level_for("russh", log::LevelFilter::Info)
-                .targets(log_targets)
-                .rotation_strategy(RotationStrategy::KeepSome(2)) // 1 active + 2 backups
-                .max_file_size(10 * 1024 * 1024)
-                .timezone_strategy(TimezoneStrategy::UseLocal)
-                .clear_format()
-                .build(),
-        )
+        .plugin(logging::build_log_plugin(log_targets))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -771,7 +750,6 @@ async fn init_agentic_system() -> anyhow::Result<(
 
     let tool_registry = tools::registry::get_global_tool_registry();
     let tool_state_manager = Arc::new(tools::pipeline::ToolStateManager::new(event_queue.clone()));
-    let image_context_provider = Arc::new(api::context_upload_api::create_image_context_provider());
 
     let computer_use_host: ComputerUseHostRef =
         Arc::new(computer_use::DesktopComputerUseHost::new());
@@ -780,7 +758,6 @@ async fn init_agentic_system() -> anyhow::Result<(
     let tool_pipeline = Arc::new(tools::pipeline::ToolPipeline::new(
         tool_registry,
         tool_state_manager,
-        Some(image_context_provider),
         Some(computer_use_host),
     ));
 
@@ -958,7 +935,7 @@ fn init_services(app_handle: tauri::AppHandle, default_log_level: log::LevelFilt
 
         service::snapshot::initialize_snapshot_event_emitter(emitter.clone());
 
-        infrastructure::initialize_file_watcher(emitter.clone());
+        bitfun_core::service::initialize_file_watch_service(emitter.clone());
 
         if let Err(e) = workspace_identity_watch_service
             .set_event_emitter(emitter.clone())

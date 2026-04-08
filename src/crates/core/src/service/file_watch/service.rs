@@ -1,32 +1,12 @@
-//! File watcher service
-//!
-//! Uses the notify crate to watch filesystem changes and send them to the frontend via Tauri events
-
 use crate::infrastructure::events::EventEmitter;
 use log::{debug, error};
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::{Mutex, RwLock};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FileWatchEvent {
-    pub path: String,
-    pub kind: FileWatchEventKind,
-    pub timestamp: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FileWatchEventKind {
-    Create,
-    Modify,
-    Remove,
-    Rename { from: String, to: String },
-    Other,
-}
+use super::types::{FileWatchEvent, FileWatchEventKind, FileWatcherConfig};
 
 impl From<&EventKind> for FileWatchEventKind {
     fn from(kind: &EventKind) -> Self {
@@ -40,26 +20,7 @@ impl From<&EventKind> for FileWatchEventKind {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct FileWatcherConfig {
-    pub watch_recursively: bool,
-    pub ignore_hidden_files: bool,
-    pub debounce_interval_ms: u64,
-    pub max_events_per_interval: usize,
-}
-
-impl Default for FileWatcherConfig {
-    fn default() -> Self {
-        Self {
-            watch_recursively: true,
-            ignore_hidden_files: true,
-            debounce_interval_ms: 500,
-            max_events_per_interval: 100,
-        }
-    }
-}
-
-pub struct FileWatcher {
+pub struct FileWatchService {
     emitter: Arc<Mutex<Option<Arc<dyn EventEmitter>>>>,
     watcher: Arc<Mutex<Option<RecommendedWatcher>>>,
     watched_paths: Arc<RwLock<HashMap<PathBuf, FileWatcherConfig>>>,
@@ -79,7 +40,7 @@ fn lock_event_buffer(
     }
 }
 
-impl FileWatcher {
+impl FileWatchService {
     pub fn new(config: FileWatcherConfig) -> Self {
         Self {
             emitter: Arc::new(Mutex::new(None)),
@@ -167,10 +128,6 @@ impl FileWatcher {
         let config = self.config.clone();
         let watched_paths = self.watched_paths.clone();
 
-        // Run on a dedicated blocking thread to avoid starving the async runtime.
-        // True debounce: accumulate events, then flush once the stream goes quiet for
-        // `debounce_interval_ms`. A 50 ms poll interval keeps latency low even for
-        // single-event bursts (e.g. one `fs::write` from an agentic tool).
         tokio::task::spawn_blocking(move || {
             let rt = tokio::runtime::Handle::current();
             let debounce = std::time::Duration::from_millis(config.debounce_interval_ms);
@@ -193,7 +150,6 @@ impl FileWatcher {
                     Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
                 }
 
-                // Flush only after events have been quiet for the debounce window.
                 if let Some(t) = last_event_time {
                     if t.elapsed() >= debounce {
                         rt.block_on(Self::flush_events_static(&event_buffer, &emitter_arc));
@@ -306,7 +262,7 @@ impl FileWatcher {
                     || name_str.ends_with(".temp")
                     || name_str.ends_with(".bak")
                     || name_str.ends_with(".old")
-                    || name_str.starts_with("#") && name_str.ends_with("#")
+                    || name_str.starts_with('#') && name_str.ends_with('#')
                     || name_str == ".DS_Store"
                     || name_str == "Thumbs.db"
                     || name_str == "desktop.ini"
@@ -401,17 +357,17 @@ impl FileWatcher {
     }
 }
 
-static GLOBAL_FILE_WATCHER: std::sync::OnceLock<Arc<FileWatcher>> = std::sync::OnceLock::new();
+static GLOBAL_FILE_WATCH_SERVICE: std::sync::OnceLock<Arc<FileWatchService>> =
+    std::sync::OnceLock::new();
 
-pub fn get_global_file_watcher() -> Arc<FileWatcher> {
-    GLOBAL_FILE_WATCHER
-        .get_or_init(|| Arc::new(FileWatcher::new(FileWatcherConfig::default())))
+pub fn get_global_file_watch_service() -> Arc<FileWatchService> {
+    GLOBAL_FILE_WATCH_SERVICE
+        .get_or_init(|| Arc::new(FileWatchService::new(FileWatcherConfig::default())))
         .clone()
 }
 
-// Note: This function is called by the Tauri API layer; tauri::command is declared in the API layer.
 pub async fn start_file_watch(path: String, recursive: Option<bool>) -> Result<(), String> {
-    let watcher = get_global_file_watcher();
+    let watcher = get_global_file_watch_service();
     let mut config = FileWatcherConfig::default();
     if let Some(rec) = recursive {
         config.watch_recursively = rec;
@@ -420,20 +376,18 @@ pub async fn start_file_watch(path: String, recursive: Option<bool>) -> Result<(
     watcher.watch_path(&path, Some(config)).await
 }
 
-// Note: This function is called by the Tauri API layer, but is not directly marked #[tauri::command].
 pub async fn stop_file_watch(path: String) -> Result<(), String> {
-    let watcher = get_global_file_watcher();
+    let watcher = get_global_file_watch_service();
     watcher.unwatch_path(&path).await
 }
 
-// Note: This function is called by the Tauri API layer, but is not directly marked #[tauri::command].
 pub async fn get_watched_paths() -> Result<Vec<String>, String> {
-    let watcher = get_global_file_watcher();
+    let watcher = get_global_file_watch_service();
     Ok(watcher.get_watched_paths().await)
 }
 
-pub fn initialize_file_watcher(emitter: Arc<dyn EventEmitter>) {
-    let watcher = get_global_file_watcher();
+pub fn initialize_file_watch_service(emitter: Arc<dyn EventEmitter>) {
+    let watcher = get_global_file_watch_service();
 
     tokio::spawn(async move {
         watcher.set_emitter(emitter).await;

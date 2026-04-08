@@ -9,7 +9,8 @@ use std::sync::{
     OnceLock,
 };
 use std::thread;
-use tauri_plugin_log::{fern, Target, TargetKind};
+use tauri::{plugin::TauriPlugin, Runtime};
+use tauri_plugin_log::{fern, RotationStrategy, Target, TargetKind, TimezoneStrategy};
 
 const SESSION_DIR_PATTERN: &str = r"^\d{8}T\d{6}$";
 const MAX_LOG_SESSIONS: usize = 10;
@@ -272,6 +273,28 @@ pub fn build_log_targets(config: &LogConfig) -> Vec<Target> {
     }
 
     targets
+}
+
+pub fn build_log_plugin<R: Runtime>(log_targets: Vec<Target>) -> TauriPlugin<R> {
+    tauri_plugin_log::Builder::new()
+        .level(log::LevelFilter::Trace)
+        .level_for("ignore", log::LevelFilter::Off)
+        .level_for("ignore::walk", log::LevelFilter::Off)
+        .level_for("globset", log::LevelFilter::Off)
+        .level_for("tracing", log::LevelFilter::Off)
+        .level_for("opentelemetry_sdk", log::LevelFilter::Off)
+        .level_for("opentelemetry-otlp", log::LevelFilter::Off)
+        .level_for("notify", log::LevelFilter::Off)
+        .level_for("hyper_util", log::LevelFilter::Info)
+        .level_for("h2", log::LevelFilter::Info)
+        .level_for("portable_pty", log::LevelFilter::Info)
+        .level_for("russh", log::LevelFilter::Info)
+        .targets(log_targets)
+        .rotation_strategy(RotationStrategy::KeepSome(2)) // 1 active + 2 backups
+        .max_file_size(10 * 1024 * 1024)
+        .timezone_strategy(TimezoneStrategy::UseLocal)
+        .clear_format()
+        .build()
 }
 
 fn format_log_plain(

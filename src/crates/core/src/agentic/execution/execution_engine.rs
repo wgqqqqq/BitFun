@@ -12,7 +12,6 @@ use crate::agentic::image_analysis::{
     ImageLimits,
 };
 use crate::agentic::session::{CompressionTailPolicy, ContextCompressor, SessionManager};
-use crate::agentic::tools::framework::ToolOptions;
 use crate::agentic::tools::{get_all_registered_tools, SubagentParentInfo};
 use crate::agentic::util::build_remote_workspace_layout_preview;
 use crate::agentic::{WorkspaceBackend, WorkspaceBinding};
@@ -1480,32 +1479,12 @@ impl ExecutionEngine {
         );
         let description_context = crate::agentic::tools::framework::ToolUseContext {
             tool_call_id: None,
-            message_id: None,
             agent_type: Some(agent_type.to_string()),
             session_id: None,
             dialog_turn_id: None,
             workspace: workspace.cloned(),
-            safe_mode: None,
-            abort_controller: None,
-            read_file_timestamps: Default::default(),
-            options: Some(ToolOptions {
-                commands: vec![],
-                tools: vec![],
-                verbose: None,
-                slow_and_capable_model: None,
-                safe_mode: None,
-                fork_number: None,
-                message_log_name: None,
-                max_thinking_tokens: None,
-                is_koding_request: None,
-                koding_context: None,
-                is_custom_command: None,
-                custom_data: Some(tool_opts_custom),
-            }),
-            response_state: None,
-            image_context_provider: None,
+            custom_data: tool_opts_custom,
             computer_use_host: None,
-            subagent_parent_info: None,
             cancellation_token: None,
             workspace_services: None,
         };

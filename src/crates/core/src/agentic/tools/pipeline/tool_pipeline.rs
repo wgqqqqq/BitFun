@@ -8,10 +8,7 @@ use super::types::*;
 use crate::agentic::core::{ToolCall, ToolExecutionState, ToolResult as ModelToolResult};
 use crate::agentic::events::types::ToolEventData;
 use crate::agentic::tools::computer_use_host::ComputerUseHostRef;
-use crate::agentic::tools::framework::{
-    ToolOptions, ToolResult as FrameworkToolResult, ToolUseContext,
-};
-use crate::agentic::tools::image_context::ImageContextProviderRef;
+use crate::agentic::tools::framework::{ToolResult as FrameworkToolResult, ToolUseContext};
 use crate::agentic::tools::registry::ToolRegistry;
 use crate::util::errors::{BitFunError, BitFunResult};
 use dashmap::DashMap;
@@ -208,8 +205,6 @@ pub struct ToolPipeline {
     confirmation_channels: Arc<DashMap<String, oneshot::Sender<ConfirmationResponse>>>,
     /// Cancellation token management (tool_id -> CancellationToken)
     cancellation_tokens: Arc<DashMap<String, CancellationToken>>,
-    /// Image context provider (dependency injection)
-    image_context_provider: Option<ImageContextProviderRef>,
     computer_use_host: Option<ComputerUseHostRef>,
 }
 
@@ -217,7 +212,6 @@ impl ToolPipeline {
     pub fn new(
         tool_registry: Arc<TokioRwLock<ToolRegistry>>,
         state_manager: Arc<ToolStateManager>,
-        image_context_provider: Option<ImageContextProviderRef>,
         computer_use_host: Option<ComputerUseHostRef>,
     ) -> Self {
         Self {
@@ -225,7 +219,6 @@ impl ToolPipeline {
             state_manager,
             confirmation_channels: Arc::new(DashMap::new()),
             cancellation_tokens: Arc::new(DashMap::new()),
-            image_context_provider,
             computer_use_host,
         }
     }
@@ -719,88 +712,43 @@ impl ToolPipeline {
         // Build tool context (pass all resource IDs)
         let tool_context = ToolUseContext {
             tool_call_id: Some(task.tool_call.tool_id.clone()),
-            message_id: None,
             agent_type: Some(task.context.agent_type.clone()),
             session_id: Some(task.context.session_id.clone()),
             dialog_turn_id: Some(task.context.dialog_turn_id.clone()),
             workspace: task.context.workspace.clone(),
-            safe_mode: None,
-            abort_controller: None,
-            read_file_timestamps: Default::default(),
-            options: Some(ToolOptions {
-                commands: vec![],
-                tools: vec![],
-                verbose: None,
-                slow_and_capable_model: None,
-                safe_mode: None,
-                fork_number: None,
-                message_log_name: None,
-                max_thinking_tokens: None,
-                is_koding_request: None,
-                koding_context: None,
-                is_custom_command: None,
-                custom_data: Some({
-                    let mut map = HashMap::new();
+            custom_data: {
+                let mut map = HashMap::new();
 
-                    if let Some(snapshot_id) = task
-                        .context
-                        .context_vars
-                        .get("snapshot_session_id")
-                        .or_else(|| task.context.context_vars.get("sandbox_session_id"))
-                    {
+                if let Some(turn_index) = task.context.context_vars.get("turn_index") {
+                    if let Ok(n) = turn_index.parse::<u64>() {
+                        map.insert("turn_index".to_string(), serde_json::json!(n));
+                    }
+                }
+
+                if let Some(provider) = task.context.context_vars.get("primary_model_provider") {
+                    if !provider.is_empty() {
                         map.insert(
-                            "snapshot_session_id".to_string(),
-                            serde_json::json!(snapshot_id),
+                            "primary_model_provider".to_string(),
+                            serde_json::json!(provider),
                         );
                     }
-                    if let Some(turn_index) = task.context.context_vars.get("turn_index") {
-                        if let Ok(n) = turn_index.parse::<u64>() {
-                            map.insert("turn_index".to_string(), serde_json::json!(n));
-                        }
+                }
+                if let Some(supports_images) = task
+                    .context
+                    .context_vars
+                    .get("primary_model_supports_image_understanding")
+                {
+                    if let Ok(flag) = supports_images.parse::<bool>() {
+                        map.insert(
+                            "primary_model_supports_image_understanding".to_string(),
+                            serde_json::json!(flag),
+                        );
                     }
+                }
 
-                    if let Some(provider) = task.context.context_vars.get("primary_model_provider")
-                    {
-                        if !provider.is_empty() {
-                            map.insert(
-                                "primary_model_provider".to_string(),
-                                serde_json::json!(provider),
-                            );
-                        }
-                    }
-                    if let Some(model_id) = task.context.context_vars.get("primary_model_id") {
-                        if !model_id.is_empty() {
-                            map.insert("primary_model_id".to_string(), serde_json::json!(model_id));
-                        }
-                    }
-                    if let Some(model_name) = task.context.context_vars.get("primary_model_name") {
-                        if !model_name.is_empty() {
-                            map.insert(
-                                "primary_model_name".to_string(),
-                                serde_json::json!(model_name),
-                            );
-                        }
-                    }
-                    if let Some(supports_images) = task
-                        .context
-                        .context_vars
-                        .get("primary_model_supports_image_understanding")
-                    {
-                        if let Ok(flag) = supports_images.parse::<bool>() {
-                            map.insert(
-                                "primary_model_supports_image_understanding".to_string(),
-                                serde_json::json!(flag),
-                            );
-                        }
-                    }
-
-                    map
-                }),
-            }),
-            response_state: None,
-            image_context_provider: self.image_context_provider.clone(),
+                map
+            },
             computer_use_host: self.computer_use_host.clone(),
-            subagent_parent_info: task.context.subagent_parent_info.clone(),
             cancellation_token: Some(cancellation_token),
             workspace_services: task.context.workspace_services.clone(),
         };

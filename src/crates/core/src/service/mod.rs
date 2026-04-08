@@ -9,6 +9,7 @@ pub(crate) mod bootstrap; // Workspace persona bootstrap helpers
 pub mod config; // Config management
 pub mod cron; // Scheduled jobs
 pub mod diff;
+pub mod file_watch;
 pub mod filesystem; // FileSystem management
 pub mod git; // Git service
 pub mod i18n; // I18n service
@@ -37,6 +38,11 @@ pub use cron::{
 };
 pub use diff::{
     DiffConfig, DiffHunk, DiffLine, DiffLineType, DiffOptions, DiffResult, DiffService,
+};
+pub use file_watch::{
+    get_global_file_watch_service, get_watched_paths, initialize_file_watch_service,
+    start_file_watch, stop_file_watch, FileWatchEvent, FileWatchEventKind, FileWatchService,
+    FileWatcherConfig,
 };
 pub use filesystem::{DirectoryStats, FileSystemService, FileSystemServiceFactory};
 pub use git::GitService;

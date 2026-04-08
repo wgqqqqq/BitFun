@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 
-use crate::infrastructure::filesystem::path_manager::try_get_path_manager_arc;
+use crate::infrastructure::try_get_path_manager_arc;
 use crate::service::mcp::server::{MCPServerConfig, MCPServerOAuthConfig};
 use crate::util::errors::{BitFunError, BitFunResult};
 

@@ -555,7 +555,6 @@ mod tests {
     use super::{WebFetchTool, WebSearchTool};
     use crate::agentic::tools::framework::{Tool, ToolResult, ToolUseContext};
     use serde_json::json;
-    use std::collections::HashMap;
     use std::io::ErrorKind;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -563,19 +562,12 @@ mod tests {
     fn empty_context() -> ToolUseContext {
         ToolUseContext {
             tool_call_id: None,
-            message_id: None,
             agent_type: None,
             session_id: None,
             dialog_turn_id: None,
             workspace: None,
-            safe_mode: None,
-            abort_controller: None,
-            read_file_timestamps: HashMap::new(),
-            options: None,
-            response_state: None,
-            image_context_provider: None,
+            custom_data: std::collections::HashMap::new(),
             computer_use_host: None,
-            subagent_parent_info: None,
             cancellation_token: None,
             workspace_services: None,
         }

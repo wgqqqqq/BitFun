@@ -4,9 +4,7 @@ use log::error;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 
-use crate::api::context_upload_api::create_image_context_provider;
 use bitfun_core::agentic::{
     tools::framework::ToolUseContext,
     tools::{get_all_tools, get_readonly_tools},
@@ -90,20 +88,13 @@ fn build_tool_context(workspace_path: Option<&str>) -> ToolUseContext {
 
     ToolUseContext {
         tool_call_id: None,
-        message_id: None,
         agent_type: None,
         session_id: None,
         dialog_turn_id: None,
         workspace: normalized_workspace_path
             .map(|path| WorkspaceBinding::new(None, PathBuf::from(path))),
-        safe_mode: Some(false),
-        abort_controller: None,
-        read_file_timestamps: HashMap::new(),
-        options: None,
-        response_state: None,
-        image_context_provider: Some(Arc::new(create_image_context_provider())),
+        custom_data: HashMap::new(),
         computer_use_host: None,
-        subagent_parent_info: None,
         cancellation_token: None,
         workspace_services: None,
     }

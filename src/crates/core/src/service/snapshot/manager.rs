@@ -567,10 +567,8 @@ impl WrappedTool {
     /// Extracts the turn index.
     fn extract_turn_index(&self, context: &ToolUseContext) -> usize {
         context
-            .options
-            .as_ref()
-            .and_then(|opts| opts.custom_data.as_ref())
-            .and_then(|data| data.get("turn_index"))
+            .custom_data
+            .get("turn_index")
             .and_then(|v| v.as_u64())
             .map(|v| v as usize)
             .unwrap_or(0)

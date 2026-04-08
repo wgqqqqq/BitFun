@@ -65,7 +65,6 @@ pub async fn initialize(workspace: Option<String>) -> anyhow::Result<Arc<ServerA
     let tool_pipeline = Arc::new(tools::pipeline::ToolPipeline::new(
         tool_registry.clone(),
         tool_state_manager,
-        None, // no image context provider in server mode for now
         None,
     ));
 

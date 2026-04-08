@@ -316,10 +316,8 @@ The **primary model cannot consume images** in tool results — **do not** use *
     }
 
     fn primary_api_format(ctx: &ToolUseContext) -> String {
-        ctx.options
-            .as_ref()
-            .and_then(|o| o.custom_data.as_ref())
-            .and_then(|m| m.get("primary_model_provider"))
+        ctx.custom_data
+            .get("primary_model_provider")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_lowercase()

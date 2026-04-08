@@ -1,11 +1,9 @@
 //! Filesystem infrastructure
 //!
-//! File operations, file tree building, file watching, and path management.
+//! File operations and file tree building.
 
 pub mod file_operations;
 pub mod file_tree;
-pub mod file_watcher;
-pub mod path_manager;
 
 pub use file_operations::{
     normalize_text_for_editor_disk_sync, FileInfo, FileOperationOptions, FileOperationService,
@@ -15,10 +13,4 @@ pub use file_tree::{
     BatchedFileSearchProgressSink, FileContentSearchOptions, FileNameSearchOptions,
     FileSearchOutcome, FileSearchProgressSink, FileSearchResult, FileSearchResultGroup,
     FileTreeNode, FileTreeOptions, FileTreeService, FileTreeStatistics, SearchMatchType,
-};
-pub use file_watcher::initialize_file_watcher;
-#[cfg(feature = "tauri-support")]
-pub use file_watcher::{get_watched_paths, start_file_watch, stop_file_watch};
-pub use path_manager::{
-    get_path_manager_arc, try_get_path_manager_arc, CacheType, PathManager, StorageLevel,
 };

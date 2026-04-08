@@ -3,9 +3,10 @@
 use crate::api::app_state::AppState;
 use crate::api::dto::WorkspaceInfoDto;
 use bitfun_core::infrastructure::{
-    file_watcher, BatchedFileSearchProgressSink, FileOperationOptions, FileSearchResult,
-    FileSearchResultGroup, FileTreeNode, SearchMatchType,
+    BatchedFileSearchProgressSink, FileOperationOptions, FileSearchResult, FileSearchResultGroup,
+    FileTreeNode, SearchMatchType,
 };
+use bitfun_core::service::file_watch;
 use bitfun_core::service::remote_ssh::workspace_state::is_remote_path;
 use bitfun_core::service::remote_ssh::{get_remote_workspace_manager, RemoteWorkspaceEntry};
 use bitfun_core::service::workspace::{
@@ -2925,15 +2926,15 @@ pub async fn report_ide_control_result(request: IdeControlResultRequest) -> Resu
 
 #[tauri::command]
 pub async fn start_file_watch(path: String, recursive: Option<bool>) -> Result<(), String> {
-    file_watcher::start_file_watch(path, recursive).await
+    file_watch::start_file_watch(path, recursive).await
 }
 
 #[tauri::command]
 pub async fn stop_file_watch(path: String) -> Result<(), String> {
-    file_watcher::stop_file_watch(path).await
+    file_watch::stop_file_watch(path).await
 }
 
 #[tauri::command]
 pub async fn get_watched_paths() -> Result<Vec<String>, String> {
-    file_watcher::get_watched_paths().await
+    file_watch::get_watched_paths().await
 }

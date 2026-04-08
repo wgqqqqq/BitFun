@@ -1,6 +1,4 @@
 //! Tool framework - Tool interface definition and execution context
-use super::image_context::ImageContextProviderRef;
-use super::pipeline::SubagentParentInfo;
 use crate::agentic::workspace::WorkspaceServices;
 use crate::agentic::WorkspaceBinding;
 use crate::util::errors::BitFunResult;
@@ -16,21 +14,14 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug, Clone)]
 pub struct ToolUseContext {
     pub tool_call_id: Option<String>,
-    pub message_id: Option<String>,
     pub agent_type: Option<String>,
     pub session_id: Option<String>,
     pub dialog_turn_id: Option<String>,
     pub workspace: Option<WorkspaceBinding>,
-    pub safe_mode: Option<bool>,
-    pub abort_controller: Option<String>,
-    pub read_file_timestamps: HashMap<String, u64>,
-    pub options: Option<ToolOptions>,
-    pub response_state: Option<ResponseState>,
-    /// Image context provider (dependency injection)
-    pub image_context_provider: Option<ImageContextProviderRef>,
+    /// Extended context data passed from execution layer to tools.
+    pub custom_data: HashMap<String, Value>,
     /// Desktop automation (Computer use); only set in BitFun desktop.
     pub computer_use_host: Option<crate::agentic::tools::computer_use_host::ComputerUseHostRef>,
-    pub subagent_parent_info: Option<SubagentParentInfo>,
     // Cancel tool execution more timely, especially for tools like TaskTool that need to run for a long time
     pub cancellation_token: Option<CancellationToken>,
     /// Workspace I/O services (filesystem + shell) — use these instead of
@@ -61,10 +52,8 @@ impl ToolUseContext {
     /// Whether the session primary model accepts image inputs (from tool-definition / pipeline context).
     /// Defaults to **true** when unset (e.g. API listings without model metadata).
     pub fn primary_model_supports_image_understanding(&self) -> bool {
-        self.options
-            .as_ref()
-            .and_then(|o| o.custom_data.as_ref())
-            .and_then(|m| m.get("primary_model_supports_image_understanding"))
+        self.custom_data
+            .get("primary_model_supports_image_understanding")
             .and_then(|v| v.as_bool())
             .unwrap_or(true)
     }
@@ -88,31 +77,6 @@ impl ToolUseContext {
             Path::new(path).is_absolute()
         }
     }
-}
-
-/// Tool options
-#[derive(Debug, Clone)]
-pub struct ToolOptions {
-    pub commands: Vec<Value>,
-    pub tools: Vec<String>,
-    pub verbose: Option<bool>,
-    pub slow_and_capable_model: Option<String>,
-    pub safe_mode: Option<bool>,
-    pub fork_number: Option<u32>,
-    pub message_log_name: Option<String>,
-    pub max_thinking_tokens: Option<u32>,
-    pub is_koding_request: Option<bool>,
-    pub koding_context: Option<String>,
-    pub is_custom_command: Option<bool>,
-    /// Extended data fields, for passing extra context information
-    pub custom_data: Option<HashMap<String, Value>>,
-}
-
-/// Response state - for model state management like GPT-5
-#[derive(Debug, Clone)]
-pub struct ResponseState {
-    pub previous_response_id: Option<String>,
-    pub conversation_id: Option<String>,
 }
 
 /// Validation result
@@ -302,13 +266,19 @@ pub trait Tool: Send + Sync {
         format!("{} completed", self.name())
     }
 
-    /// Call tool - return async generator
+    /// Execute the tool's concrete business logic.
+    /// Implementors should put the actual tool behavior here and assume
+    /// [`call`] will wrap it with cross-cutting concerns such as cancellation.
     async fn call_impl(
         &self,
         input: &Value,
         context: &ToolUseContext,
     ) -> BitFunResult<Vec<ToolResult>>;
 
+    /// Unified tool entry point.
+    /// This method owns shared framework behavior and delegates the actual
+    /// execution to [`call_impl`], so most tools should override `call_impl`
+    /// instead of overriding this method directly.
     async fn call(&self, input: &Value, context: &ToolUseContext) -> BitFunResult<Vec<ToolResult>> {
         if let Some(cancellation_token) = context.cancellation_token.as_ref() {
             tokio::select! {

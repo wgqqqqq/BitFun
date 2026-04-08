@@ -1,11 +1,11 @@
 //! System prompts module providing main dialogue and agent dialogue prompts
-use crate::agentic::util::get_formatted_files_list;
 use crate::infrastructure::try_get_path_manager_arc;
 use crate::service::agent_memory::build_workspace_agent_memory_prompt;
 use crate::service::ai_memory::AIMemoryManager;
 use crate::service::ai_rules::get_global_ai_rules_service;
 use crate::service::bootstrap::build_workspace_persona_prompt;
 use crate::service::config::get_app_language_code;
+use crate::service::filesystem::get_formatted_directory_listing;
 use crate::service::config::global::GlobalConfigManager;
 use crate::service::project_context::ProjectContextService;
 use crate::util::errors::{BitFunError, BitFunResult};
@@ -166,20 +166,22 @@ impl PromptBuilder {
             return project_layout;
         }
 
-        let (hit_limit, formatted_files_list) = get_formatted_files_list(
+        let formatted_listing = get_formatted_directory_listing(
             &self.context.workspace_path,
             self.file_tree_max_entries,
-            None,
         )
-        .unwrap_or_else(|e| (false, format!("Error listing directory: {}", e)));
+        .unwrap_or_else(|e| crate::service::filesystem::FormattedDirectoryListing {
+            reached_limit: false,
+            text: format!("Error listing directory: {}", e),
+        });
         let mut project_layout = "# Workspace Layout\n<project_layout>\n".to_string();
-        if hit_limit {
+        if formatted_listing.reached_limit {
             project_layout.push_str(&format!("Below is a snapshot of the current workspace's file structure (showing up to {} entries).\n\n", self.file_tree_max_entries));
         } else {
             project_layout
                 .push_str("Below is a snapshot of the current workspace's file structure.\n\n");
         }
-        project_layout.push_str(&formatted_files_list);
+        project_layout.push_str(&formatted_listing.text);
         project_layout.push_str("\n</project_layout>\n\n");
         project_layout
     }
@@ -202,7 +204,6 @@ impl PromptBuilder {
                 let result = format!(
                     r#"# Project Context
 The following are project documentation that describe the project's architecture, conventions, and guidelines, etc.
-These files are maintained by the user and should NOT be modified unless explicitly requested.
 
 {}
 
