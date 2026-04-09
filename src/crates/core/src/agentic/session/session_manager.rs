@@ -71,6 +71,12 @@ pub struct SessionManager {
     /// Active sessions in memory
     sessions: Arc<DashMap<String, Session>>,
 
+    /// Persistent index of session_id -> effective workspace path.
+    /// Populated on session create/restore; NOT cleared on memory eviction.
+    /// Allows commands that only receive a session_id (e.g. update_session_model_id)
+    /// to restore an evicted session without requiring the caller to supply a path.
+    session_workspace_index: Arc<DashMap<String, PathBuf>>,
+
     /// Sub-components
     context_store: Arc<SessionContextStore>,
     persistence_manager: Arc<PersistenceManager>,
@@ -367,6 +373,7 @@ impl SessionManager {
 
         let manager = Self {
             sessions: Arc::new(DashMap::new()),
+            session_workspace_index: Arc::new(DashMap::new()),
             context_store,
             persistence_manager,
             config,
@@ -479,6 +486,8 @@ impl SessionManager {
 
         // 1. Add to memory
         self.sessions.insert(session_id.clone(), session.clone());
+        self.session_workspace_index
+            .insert(session_id.clone(), session_storage_path.clone());
 
         // 2. Initialize the in-memory context cache.
         self.context_store.create_session(&session_id);
@@ -651,6 +660,18 @@ impl SessionManager {
         session_id: &str,
         model_id: &str,
     ) -> BitFunResult<()> {
+        // If the session was evicted from memory (idle > 1h), try to restore it
+        // using the workspace path recorded when it was first created/restored.
+        if !self.sessions.contains_key(session_id) && self.config.enable_persistence {
+            if let Some(workspace_path) = self.session_workspace_index.get(session_id) {
+                debug!(
+                    "Session evicted from memory, restoring for model update: session_id={}",
+                    session_id
+                );
+                let _ = self.restore_session(&workspace_path.clone(), session_id).await;
+            }
+        }
+
         if let Some(mut session) = self.sessions.get_mut(session_id) {
             session.config.model_id = Some(model_id.to_string());
             session.updated_at = SystemTime::now();
@@ -919,6 +940,8 @@ impl SessionManager {
         // 4. Add to memory (will overwrite if already exists)
         self.sessions
             .insert(session_id.to_string(), session.clone());
+        self.session_workspace_index
+            .insert(session_id.to_string(), session_storage_path.clone());
 
         Ok(session)
     }
