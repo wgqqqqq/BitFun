@@ -227,19 +227,6 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
   );
 
   useShortcut(
-    'chat.activateInput',
-    { key: ' ', scope: 'chat' },
-    () => {
-      const root = chatScopeRef.current;
-      const el = root?.querySelector(
-        '.bitfun-chat-input textarea, .bitfun-chat-input [contenteditable="true"]'
-      ) as HTMLElement | null;
-      el?.focus();
-    },
-    { priority: 10, description: 'keyboard.shortcuts.chat.activateInput' }
-  );
-
-  useShortcut(
     'chat.newSession',
     { key: 'N', ctrl: true, scope: 'chat' },
     () => {

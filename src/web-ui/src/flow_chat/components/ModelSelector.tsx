@@ -29,6 +29,10 @@ interface ModelSelectorProps {
   className?: string;
   /** Current session ID (used to update session mode config). */
   sessionId?: string;
+  /** Current token count. */
+  currentTokens?: number;
+  /** Max token capacity. */
+  maxTokens?: number;
 }
 
 interface ModelInfo {
@@ -114,6 +118,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   currentMode,
   className = '',
   sessionId,
+  currentTokens = 0,
+  maxTokens = 0,
 }) => {
   const { t } = useTranslation('flow-chat');
   const [allModels, setAllModels] = useState<AIModelConfig[]>([]);
@@ -292,18 +298,39 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     }
   }, [currentMode, loading, sessionId]);
   
+  const tokenPercentage = useMemo(() => {
+    if (!maxTokens || maxTokens <= 0 || !currentTokens) return 0;
+    return Math.min(Math.round((currentTokens / maxTokens) * 100), 100);
+  }, [currentTokens, maxTokens]);
+
+  const tokenStatusClass = useMemo(() => {
+    if (tokenPercentage >= 90) return 'critical';
+    if (tokenPercentage >= 70) return 'warning';
+    return '';
+  }, [tokenPercentage]);
+
+  const formatTokenCount = (n: number) =>
+    n >= 1000 ? `${Math.round(n / 1000)}K` : `${n}`;
+
   if (availableModels.length === 0) {
     return null;
   }
 
   const currentModelId = getCurrentModelId();
 
+  const fallbackTooltip = t('modelSelector.autoModelDesc');
+  const baseTooltip = getModelTooltipText(currentModel, fallbackTooltip);
+  const tooltipContent =
+    currentTokens > 0 && maxTokens > 0
+      ? `${baseTooltip} · ${formatTokenCount(currentTokens)}/${formatTokenCount(maxTokens)} (${tokenPercentage}%)`
+      : baseTooltip;
+
   return (
     <div
       ref={dropdownRef}
       className={`bitfun-model-selector ${className}`}
     >
-      <Tooltip content={getModelTooltipText(currentModel, t('modelSelector.autoModelDesc'))}>
+      <Tooltip content={tooltipContent}>
         <button
           className={`bitfun-model-selector__trigger ${dropdownOpen ? 'bitfun-model-selector__trigger--open' : ''}`}
           onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -319,6 +346,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           {currentModel?.reasoningEffort && (
             <span className="bitfun-model-selector__effort-badge">
               {currentModel.reasoningEffort}
+            </span>
+          )}
+          {tokenPercentage > 0 && (
+            <span className={`bitfun-model-selector__ctx-usage${tokenStatusClass ? ` bitfun-model-selector__ctx-usage--${tokenStatusClass}` : ''}`}>
+              · {tokenPercentage}%
             </span>
           )}
           <ChevronDown size={10} className="bitfun-model-selector__chevron" />
