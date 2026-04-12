@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "src/crates/events",
+    "src/crates/ai-adapters",
     "src/crates/core",
     "src/crates/transport",
     "src/crates/api-layer",

@@ -1,9 +1,9 @@
 //! Tauri commands exposed to the frontend installer UI.
 
 use super::extract::{self, ESTIMATED_INSTALL_SIZE};
-use super::model_list;
 use super::types::{
-    ConnectionTestResult, DiskSpaceInfo, InstallOptions, InstallProgress, ModelConfig, RemoteModelInfo,
+    ConnectionTestResult, DiskSpaceInfo, InstallOptions, InstallProgress, ModelConfig,
+    RemoteModelInfo,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -235,14 +235,12 @@ pub async fn start_installation(window: Window, options: InstallOptions) -> Resu
         if embedded_payload_available() {
             checked_locations.push("embedded payload zip".to_string());
             preflight_validate_payload_zip_bytes(EMBEDDED_PAYLOAD_ZIP, "embedded payload zip")?;
-            installed_files = read_payload_manifest_from_zip_bytes(
-                EMBEDDED_PAYLOAD_ZIP,
-                "embedded payload zip",
-            )?
-            .files
-            .into_iter()
-            .map(|entry| entry.path)
-            .collect();
+            installed_files =
+                read_payload_manifest_from_zip_bytes(EMBEDDED_PAYLOAD_ZIP, "embedded payload zip")?
+                    .files
+                    .into_iter()
+                    .map(|entry| entry.path)
+                    .collect();
             extract::extract_zip_bytes_with_filter(
                 EMBEDDED_PAYLOAD_ZIP,
                 &install_path,
@@ -268,14 +266,12 @@ pub async fn start_installation(window: Window, options: InstallOptions) -> Resu
                         continue;
                     }
                     preflight_validate_payload_zip_file(&candidate.path, &candidate.label)?;
-                    installed_files = read_payload_manifest_from_zip_file(
-                        &candidate.path,
-                        &candidate.label,
-                    )?
-                    .files
-                    .into_iter()
-                    .map(|entry| entry.path)
-                    .collect();
+                    installed_files =
+                        read_payload_manifest_from_zip_file(&candidate.path, &candidate.label)?
+                            .files
+                            .into_iter()
+                            .map(|entry| entry.path)
+                            .collect();
                     extract::extract_zip_with_filter(
                         &candidate.path,
                         &install_path,
@@ -292,11 +288,12 @@ pub async fn start_installation(window: Window, options: InstallOptions) -> Resu
                     continue;
                 }
                 preflight_validate_payload_dir(&candidate.path, &candidate.label)?;
-                installed_files = read_payload_manifest_from_dir(&candidate.path, &candidate.label)?
-                    .files
-                    .into_iter()
-                    .map(|entry| entry.path)
-                    .collect();
+                installed_files =
+                    read_payload_manifest_from_dir(&candidate.path, &candidate.label)?
+                        .files
+                        .into_iter()
+                        .map(|entry| entry.path)
+                        .collect();
                 extract::copy_directory_with_filter(
                     &candidate.path,
                     &install_path,
@@ -472,7 +469,9 @@ pub async fn uninstall(install_path: String) -> Result<(), String> {
 
         if (running_uninstall_binary || running_from_install_dir)
             && current_exe_path
-                .map(|exe| windows_path_eq_case_insensitive(exe, &install_path.join("uninstall.exe")))
+                .map(|exe| {
+                    windows_path_eq_case_insensitive(exe, &install_path.join("uninstall.exe"))
+                })
                 .unwrap_or(false)
         {
             schedule_windows_self_uninstall_cleanup(current_exe_path.unwrap())?;
@@ -542,10 +541,7 @@ exit /b 1
         .spawn()
         .map_err(|e| format!("Failed to schedule uninstall cleanup: {}", e))?;
 
-    append_uninstall_runtime_log(&format!(
-        "cleanup process spawned: pid={}",
-        child.id()
-    ));
+    append_uninstall_runtime_log(&format!("cleanup process spawned: pid={}", child.id()));
 
     Ok(())
 }
@@ -646,7 +642,9 @@ pub fn set_model_config(model_config: ModelConfig) -> Result<(), String> {
 
 /// Validate model configuration connectivity from installer (same stack as desktop `test_ai_config_connection`).
 #[tauri::command]
-pub async fn test_model_config_connection(model_config: ModelConfig) -> Result<ConnectionTestResult, String> {
+pub async fn test_model_config_connection(
+    model_config: ModelConfig,
+) -> Result<ConnectionTestResult, String> {
     let required_fields = [
         ("baseUrl", model_config.base_url.trim()),
         ("apiKey", model_config.api_key.trim()),
@@ -669,16 +667,18 @@ pub async fn test_model_config_connection(model_config: ModelConfig) -> Result<C
     let model_name = ai_config.name.clone();
     let supports_image_input = super::ai_config::supports_image_input(&model_config);
 
-    let ai_client = crate::connection_test::AIClient::new(ai_config);
+    let ai_client = bitfun_ai_adapters::AIClient::new(ai_config);
 
     match ai_client.test_connection().await {
         Ok(result) => {
             if !result.success {
                 log::info!(
                     "Installer AI config connection test: model={}, success={}, response_time={}ms",
-                    model_name, result.success, result.response_time_ms
+                    model_name,
+                    result.success,
+                    result.response_time_ms
                 );
-                return Ok(result);
+                return Ok(result.into());
             }
 
             if supports_image_input {
@@ -691,29 +691,31 @@ pub async fn test_model_config_connection(model_config: ModelConfig) -> Result<C
                             let merged = ConnectionTestResult {
                                 success: false,
                                 response_time_ms,
-                                model_response: image_result.model_response.or(result.model_response),
-                                message_code: image_result.message_code,
+                                model_response: image_result
+                                    .model_response
+                                    .or(result.model_response),
+                                message_code: image_result.message_code.map(Into::into),
                                 error_details: image_result.error_details,
                             };
                             log::info!(
                                 "Installer AI config connection test: model={}, success={}, response_time={}ms",
                                 model_name, merged.success, merged.response_time_ms
                             );
-                            return Ok(merged);
+                            return Ok(merged.into());
                         }
 
                         let merged = ConnectionTestResult {
                             success: true,
                             response_time_ms,
                             model_response: image_result.model_response.or(result.model_response),
-                            message_code: result.message_code,
+                            message_code: result.message_code.map(Into::into),
                             error_details: result.error_details,
                         };
                         log::info!(
                             "Installer AI config connection test: model={}, success={}, response_time={}ms",
                             model_name, merged.success, merged.response_time_ms
                         );
-                        return Ok(merged);
+                        return Ok(merged.into());
                     }
                     Err(e) => {
                         log::error!(
@@ -727,14 +729,17 @@ pub async fn test_model_config_connection(model_config: ModelConfig) -> Result<C
 
             log::info!(
                 "Installer AI config connection test: model={}, success={}, response_time={}ms",
-                model_name, result.success, result.response_time_ms
+                model_name,
+                result.success,
+                result.response_time_ms
             );
-            Ok(result)
+            Ok(result.into())
         }
         Err(e) => {
             log::error!(
                 "Installer AI config connection test failed: model={}, error={}",
-                model_name, e
+                model_name,
+                e
             );
             Err(format!("Connection test failed: {}", e))
         }
@@ -743,14 +748,23 @@ pub async fn test_model_config_connection(model_config: ModelConfig) -> Result<C
 
 /// List remote models using the same discovery rules as the main app (installer-local HTTP).
 #[tauri::command]
-pub async fn list_model_config_models(model_config: ModelConfig) -> Result<Vec<RemoteModelInfo>, String> {
+pub async fn list_model_config_models(
+    model_config: ModelConfig,
+) -> Result<Vec<RemoteModelInfo>, String> {
     if model_config.api_key.trim().is_empty() {
         return Err("API key is required".to_string());
     }
     if model_config.base_url.trim().is_empty() {
         return Err("Base URL is required".to_string());
     }
-    model_list::list_remote_models(&model_config).await
+    let ai_config = super::ai_config::ai_config_from_installer_model(&model_config)
+        .map_err(|e| e.to_string())?;
+    let ai_client = bitfun_ai_adapters::AIClient::new(ai_config);
+    ai_client
+        .list_models()
+        .await
+        .map(|models| models.into_iter().map(Into::into).collect())
+        .map_err(|e| e.to_string())
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -815,8 +829,8 @@ fn parse_custom_request_body(raw: &Option<String>) -> Result<Option<Map<String, 
         return Ok(None);
     }
 
-    let parsed: Value =
-        serde_json::from_str(trimmed).map_err(|e| format!("customRequestBody is invalid JSON: {}", e))?;
+    let parsed: Value = serde_json::from_str(trimmed)
+        .map_err(|e| format!("customRequestBody is invalid JSON: {}", e))?;
     let obj = parsed.as_object().ok_or_else(|| {
         "customRequestBody must be a JSON object (for example: {\"temperature\": 0.7})".to_string()
     })?;
@@ -983,7 +997,9 @@ fn prepare_install_target(requested_path: &Path) -> Result<PathBuf, String> {
             let _ = std::fs::remove_file(&test_file);
             Ok(install_path)
         }
-        Err(_) if install_path.exists() => Err(format!("{}directory_not_writable", INSTALL_PATH_ERR_PREFIX)),
+        Err(_) if install_path.exists() => {
+            Err(format!("{}directory_not_writable", INSTALL_PATH_ERR_PREFIX))
+        }
         Err(_) => Err(format!("{}parent_not_writable", INSTALL_PATH_ERR_PREFIX)),
     }
 }
@@ -1137,7 +1153,11 @@ fn apply_first_launch_model(model: &ModelConfig) -> Result<(), String> {
         .as_object_mut()
         .ok_or_else(|| "Invalid ai config object".to_string())?;
 
-    let model_id = format!("installer_{}_{}", model.provider, chrono::Utc::now().timestamp());
+    let model_id = format!(
+        "installer_{}_{}",
+        model.provider,
+        chrono::Utc::now().timestamp()
+    );
     let display_name = model
         .config_name
         .as_deref()
@@ -1152,10 +1172,7 @@ fn apply_first_launch_model(model: &ModelConfig) -> Result<(), String> {
     let mut model_map = Map::new();
     model_map.insert("id".to_string(), Value::String(model_id.clone()));
     model_map.insert("name".to_string(), Value::String(display_name));
-    model_map.insert(
-        "provider".to_string(),
-        Value::String(stored_fmt),
-    );
+    model_map.insert("provider".to_string(), Value::String(stored_fmt));
     model_map.insert(
         "model_name".to_string(),
         Value::String(model.model_name.trim().to_string()),
@@ -1217,7 +1234,10 @@ fn apply_first_launch_model(model: &ModelConfig) -> Result<(), String> {
     if let Some(raw) = &model.custom_request_body {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
-            model_map.insert("custom_request_body".to_string(), Value::String(trimmed.to_string()));
+            model_map.insert(
+                "custom_request_body".to_string(),
+                Value::String(trimmed.to_string()),
+            );
         }
     }
 
@@ -1355,7 +1375,10 @@ fn read_payload_manifest_from_zip_archive<R: std::io::Read + std::io::Seek>(
     ))
 }
 
-fn read_payload_manifest_from_dir(path: &Path, source_label: &str) -> Result<PayloadManifest, String> {
+fn read_payload_manifest_from_dir(
+    path: &Path,
+    source_label: &str,
+) -> Result<PayloadManifest, String> {
     let manifest_path = path.join(PAYLOAD_MANIFEST_FILE);
     let raw = std::fs::read_to_string(&manifest_path).map_err(|e| {
         format!(
@@ -1410,8 +1433,7 @@ fn write_installed_manifest(install_path: &Path, files: Vec<String>) -> Result<(
     let path = install_path.join(INSTALL_MANIFEST_FILE);
     let body = serde_json::to_string_pretty(&manifest)
         .map_err(|e| format!("Failed to serialize install manifest: {}", e))?;
-    std::fs::write(&path, body)
-        .map_err(|e| format!("Failed to write install manifest: {}", e))
+    std::fs::write(&path, body).map_err(|e| format!("Failed to write install manifest: {}", e))
 }
 
 fn read_installed_manifest(install_path: &Path) -> Result<Option<InstalledManifest>, String> {
@@ -1464,8 +1486,9 @@ fn remove_installed_targets(
         }
 
         if path.is_file() {
-            std::fs::remove_file(path)
-                .map_err(|e| format!("Failed to remove installed file {}: {}", path.display(), e))?;
+            std::fs::remove_file(path).map_err(|e| {
+                format!("Failed to remove installed file {}: {}", path.display(), e)
+            })?;
         }
     }
 

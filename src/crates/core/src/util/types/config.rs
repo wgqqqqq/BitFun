@@ -1,107 +1,14 @@
-use crate::service::config::types::{AIModelConfig, ReasoningMode};
+use crate::service::config::types::AIModelConfig;
+pub use bitfun_ai_adapters::types::resolve_request_url;
+pub use bitfun_ai_adapters::types::AIConfig;
 use log::warn;
-use serde::{Deserialize, Serialize};
-
-fn append_endpoint(base_url: &str, endpoint: &str) -> String {
-    let base = base_url.trim();
-    if base.is_empty() {
-        return endpoint.to_string();
-    }
-    if base.ends_with(endpoint) {
-        return base.to_string();
-    }
-    format!("{}/{}", base.trim_end_matches('/'), endpoint)
-}
-
-fn gemini_base_url(url: &str) -> &str {
-    let mut u = url;
-    if let Some(pos) = u.find("/v1beta") {
-        u = &u[..pos];
-    }
-    if let Some(pos) = u.find("/models/") {
-        u = &u[..pos];
-    }
-    u.trim_end_matches('/')
-}
-
-fn resolve_gemini_request_url(base_url: &str, model_name: &str) -> String {
-    let trimmed = base_url.trim().trim_end_matches('/');
-    if trimmed.is_empty() {
-        return String::new();
-    }
-
-    if let Some(stripped) = trimmed.strip_suffix('#') {
-        return stripped.trim_end_matches('/').to_string();
-    }
-
-    let model = model_name.trim();
-    if model.is_empty() {
-        return trimmed.to_string();
-    }
-
-    let base = gemini_base_url(trimmed);
-    format!(
-        "{}/v1beta/models/{}:streamGenerateContent?alt=sse",
-        base, model
-    )
-}
-
-fn resolve_request_url(base_url: &str, provider: &str, model_name: &str) -> String {
-    let trimmed = base_url.trim().trim_end_matches('/').to_string();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-
-    if let Some(stripped) = trimmed.strip_suffix('#') {
-        return stripped.trim_end_matches('/').to_string();
-    }
-
-    match provider.trim().to_ascii_lowercase().as_str() {
-        "openai" | "nvidia" | "openrouter" => append_endpoint(&trimmed, "chat/completions"),
-        "response" | "responses" => append_endpoint(&trimmed, "responses"),
-        "anthropic" => append_endpoint(&trimmed, "v1/messages"),
-        "gemini" | "google" => resolve_gemini_request_url(&trimmed, model_name),
-        _ => trimmed,
-    }
-}
-
-/// AI client configuration (for AI requests)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AIConfig {
-    pub name: String,
-    pub base_url: String,
-    /// Actual request URL
-    /// Falls back to base_url when absent
-    pub request_url: String,
-    pub api_key: String,
-    pub model: String,
-    pub format: String,
-    pub context_window: u32,
-    pub max_tokens: Option<u32>,
-    pub temperature: Option<f64>,
-    pub top_p: Option<f64>,
-    pub reasoning_mode: ReasoningMode,
-    pub inline_think_in_text: bool,
-    pub custom_headers: Option<std::collections::HashMap<String, String>>,
-    /// "replace" (default) or "merge" (defaults first, then custom)
-    pub custom_headers_mode: Option<String>,
-    pub skip_ssl_verify: bool,
-    /// Provider-specific reasoning effort.
-    pub reasoning_effort: Option<String>,
-    /// Optional Anthropic manual thinking budget.
-    pub thinking_budget_tokens: Option<u32>,
-    /// Custom JSON overriding default request body fields
-    pub custom_request_body: Option<serde_json::Value>,
-    /// "merge" (default) or "trim" (keep only essential runtime fields, then apply custom JSON)
-    pub custom_request_body_mode: Option<String>,
-}
 
 impl TryFrom<AIModelConfig> for AIConfig {
     type Error = String;
-    fn try_from(other: AIModelConfig) -> Result<Self, <Self as TryFrom<AIModelConfig>>::Error> {
+
+    fn try_from(other: AIModelConfig) -> Result<Self, Self::Error> {
         let reasoning_mode = other.effective_reasoning_mode();
 
-        // Parse custom request body (convert JSON string to serde_json::Value)
         let custom_request_body = if let Some(body_str) = &other.custom_request_body {
             match serde_json::from_str::<serde_json::Value>(body_str) {
                 Ok(value) => Some(value),
@@ -117,11 +24,10 @@ impl TryFrom<AIModelConfig> for AIConfig {
             None
         };
 
-        // Use stored request_url if present; otherwise derive from base_url + provider for legacy configs.
         let request_url = other
             .request_url
             .clone()
-            .filter(|u| !u.is_empty())
+            .filter(|url| !url.is_empty())
             .unwrap_or_else(|| {
                 resolve_request_url(&other.base_url, &other.provider, &other.model_name)
             });
@@ -152,8 +58,7 @@ impl TryFrom<AIModelConfig> for AIConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_request_url;
-    use super::AIConfig;
+    use super::{resolve_request_url, AIConfig};
     use crate::service::config::types::{AIModelConfig, ModelCategory, ReasoningMode};
 
     #[test]

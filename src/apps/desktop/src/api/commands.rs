@@ -823,7 +823,7 @@ pub async fn test_ai_config_connection(
         }
     };
 
-    let ai_client = bitfun_core::infrastructure::ai::client::AIClient::new(ai_config);
+    let ai_client = bitfun_core::infrastructure::ai::AIClient::new(ai_config);
 
     match ai_client.test_connection().await {
         Ok(result) => {
@@ -906,7 +906,7 @@ pub async fn list_ai_models_by_config(
         .config
         .try_into()
         .map_err(|e| format!("Failed to convert configuration: {}", e))?;
-    let ai_client = bitfun_core::infrastructure::ai::client::AIClient::new(ai_config);
+    let ai_client = bitfun_core::infrastructure::ai::AIClient::new(ai_config);
 
     ai_client.list_models().await.map_err(|e| {
         error!(

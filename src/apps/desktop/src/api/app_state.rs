@@ -7,7 +7,9 @@ use bitfun_core::miniapp::{initialize_global_miniapp_manager, JsWorkerPool, Mini
 use bitfun_core::service::remote_ssh::{
     init_remote_workspace_manager, RemoteFileService, RemoteTerminalManager, SSHConnectionManager,
 };
-use bitfun_core::service::{ai_rules, announcement, config, filesystem, mcp, token_usage, workspace};
+use bitfun_core::service::{
+    ai_rules, announcement, config, filesystem, mcp, token_usage, workspace,
+};
 use bitfun_core::util::errors::*;
 
 use serde::{Deserialize, Serialize};

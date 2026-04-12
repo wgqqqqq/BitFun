@@ -8,12 +8,12 @@ use crate::agentic::events::{
     ToolEventData,
 };
 use crate::agentic::tools::SubagentParentInfo;
+use crate::infrastructure::ai::ai_stream_handlers::UnifiedResponse;
 use crate::infrastructure::ai::tool_call_accumulator::{
     FinalizedToolCall, PendingToolCall, ToolCallBoundary,
 };
 use crate::util::errors::BitFunError;
 use crate::util::types::ai::GeminiUsage;
-use ai_stream_handlers::UnifiedResponse;
 use futures::StreamExt;
 use log::{debug, error, trace};
 use serde_json::Value;
@@ -424,7 +424,7 @@ impl StreamProcessor {
     fn handle_usage(
         &self,
         ctx: &mut StreamContext,
-        response_usage: &ai_stream_handlers::UnifiedTokenUsage,
+        response_usage: &crate::infrastructure::ai::ai_stream_handlers::UnifiedTokenUsage,
     ) {
         ctx.usage = Some(GeminiUsage {
             prompt_token_count: response_usage.prompt_token_count,
@@ -445,9 +445,9 @@ impl StreamProcessor {
     async fn handle_tool_call_chunk(
         &self,
         ctx: &mut StreamContext,
-        tool_call: ai_stream_handlers::UnifiedToolCall,
+        tool_call: crate::infrastructure::ai::ai_stream_handlers::UnifiedToolCall,
     ) {
-        let ai_stream_handlers::UnifiedToolCall {
+        let crate::infrastructure::ai::ai_stream_handlers::UnifiedToolCall {
             id,
             name,
             arguments,
@@ -816,7 +816,9 @@ impl StreamProcessor {
 mod tests {
     use super::StreamProcessor;
     use crate::agentic::events::{EventQueue, EventQueueConfig};
-    use ai_stream_handlers::{UnifiedResponse, UnifiedTokenUsage, UnifiedToolCall};
+    use crate::infrastructure::ai::ai_stream_handlers::{
+        UnifiedResponse, UnifiedTokenUsage, UnifiedToolCall,
+    };
     use futures::StreamExt;
     use serde_json::json;
     use std::sync::Arc;

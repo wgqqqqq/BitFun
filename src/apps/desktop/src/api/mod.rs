@@ -1,9 +1,9 @@
 //! API layer module
 
 pub mod agentic_api;
-pub mod announcement_api;
 pub mod ai_memory_api;
 pub mod ai_rules_api;
+pub mod announcement_api;
 pub mod app_state;
 pub mod browser_api;
 pub mod btw_api;

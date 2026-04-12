@@ -80,8 +80,8 @@ rmcp = { version = "0.12.0", default-features = false, features = [
 ] }
 sse-stream = "0.2.1"
 
-# AI stream processor - local sub-crate
-ai_stream_handlers = { path = "src/infrastructure/ai/ai_stream_handlers" }
+# Shared AI protocol adapters
+bitfun-ai-adapters = { path = "../ai-adapters" }
 
 # Tool runtime
 tool-runtime = { path = "src/agentic/tools/implementations/tool-runtime" }

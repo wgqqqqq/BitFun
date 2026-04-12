@@ -366,21 +366,7 @@ pub enum ModelCategory {
     SpeechRecognition,
 }
 
-/// Provider-agnostic reasoning mode.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-#[derive(Default)]
-pub enum ReasoningMode {
-    /// Omit provider-specific reasoning fields and use the upstream API default behavior.
-    #[default]
-    Default,
-    /// Explicitly enable reasoning / thinking output when the provider supports it.
-    Enabled,
-    /// Explicitly disable reasoning / thinking output when the provider supports it.
-    Disabled,
-    /// Use provider-native adaptive reasoning when supported.
-    Adaptive,
-}
+pub use bitfun_ai_adapters::types::ReasoningMode;
 
 /// Default model configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -985,23 +971,7 @@ impl AIModelConfig {
     }
 }
 
-/// Proxy configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-#[derive(Default)]
-pub struct ProxyConfig {
-    /// Whether the proxy is enabled.
-    pub enabled: bool,
-
-    /// Proxy URL (format: http://host:port or socks5://host:port).
-    pub url: String,
-
-    /// Proxy username (optional).
-    pub username: Option<String>,
-
-    /// Proxy password (optional).
-    pub password: Option<String>,
-}
+pub use bitfun_ai_adapters::types::ProxyConfig;
 
 /// Configuration provider interface.
 #[async_trait]

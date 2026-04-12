@@ -52,7 +52,6 @@ pub struct ModelConfig {
     pub category: Option<String>,
 }
 
-/// One entry from provider model discovery (installer-local; mirrors main app shape).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteModelInfo {
@@ -61,7 +60,59 @@ pub struct RemoteModelInfo {
     pub display_name: Option<String>,
 }
 
-pub use crate::connection_test::types::ConnectionTestResult;
+impl From<bitfun_ai_adapters::types::RemoteModelInfo> for RemoteModelInfo {
+    fn from(value: bitfun_ai_adapters::types::RemoteModelInfo) -> Self {
+        Self {
+            id: value.id,
+            display_name: value.display_name,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ConnectionTestMessageCode {
+    ToolCallsNotDetected,
+    ImageInputCheckFailed,
+}
+
+impl From<bitfun_ai_adapters::types::ConnectionTestMessageCode> for ConnectionTestMessageCode {
+    fn from(value: bitfun_ai_adapters::types::ConnectionTestMessageCode) -> Self {
+        match value {
+            bitfun_ai_adapters::types::ConnectionTestMessageCode::ToolCallsNotDetected => {
+                Self::ToolCallsNotDetected
+            }
+            bitfun_ai_adapters::types::ConnectionTestMessageCode::ImageInputCheckFailed => {
+                Self::ImageInputCheckFailed
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionTestResult {
+    pub success: bool,
+    pub response_time_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_response: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_code: Option<ConnectionTestMessageCode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_details: Option<String>,
+}
+
+impl From<bitfun_ai_adapters::types::ConnectionTestResult> for ConnectionTestResult {
+    fn from(value: bitfun_ai_adapters::types::ConnectionTestResult) -> Self {
+        Self {
+            success: value.success,
+            response_time_ms: value.response_time_ms,
+            model_response: value.model_response,
+            message_code: value.message_code.map(Into::into),
+            error_details: value.error_details,
+        }
+    }
+}
 
 /// Progress update sent to the frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]

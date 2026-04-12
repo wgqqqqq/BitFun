@@ -129,7 +129,12 @@ pub async fn get_announcement_tips(
 
     let tips = cards
         .into_iter()
-        .filter(|c| matches!(c.card_type, bitfun_core::service::announcement::types::CardType::Tip))
+        .filter(|c| {
+            matches!(
+                c.card_type,
+                bitfun_core::service::announcement::types::CardType::Tip
+            )
+        })
         .collect();
 
     Ok(tips)

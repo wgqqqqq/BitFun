@@ -1,10 +1,10 @@
-//! Map installer `ModelConfig` to copied `AIConfig` (mirrors `bitfun_core` `TryFrom<AIModelConfig>`).
+//! Map installer `ModelConfig` to shared AI adapter config.
 
-use crate::connection_test::types::{resolve_request_url, AIConfig};
 use crate::installer::types::ModelConfig;
+use bitfun_ai_adapters::types::{resolve_request_url, AIConfig, ReasoningMode};
 use log::warn;
 
-/// Build `AIConfig` for the copied `AIClient`.
+/// Build `AIConfig` for the shared AI client.
 pub fn ai_config_from_installer_model(m: &ModelConfig) -> Result<AIConfig, String> {
     let custom_request_body = if let Some(body_str) = &m.custom_request_body {
         let t = body_str.trim();
@@ -47,13 +47,15 @@ pub fn ai_config_from_installer_model(m: &ModelConfig) -> Result<AIConfig, Strin
         max_tokens: None,
         temperature: None,
         top_p: None,
-        enable_thinking_process: false,
+        reasoning_mode: ReasoningMode::Default,
         inline_think_in_text: false,
         custom_headers: m.custom_headers.clone(),
         custom_headers_mode: m.custom_headers_mode.clone(),
         skip_ssl_verify: m.skip_ssl_verify.unwrap_or(false),
         reasoning_effort: None,
+        thinking_budget_tokens: None,
         custom_request_body,
+        custom_request_body_mode: None,
     })
 }
 

@@ -1,4 +1,3 @@
-mod connection_test;
 mod installer;
 
 use installer::commands;

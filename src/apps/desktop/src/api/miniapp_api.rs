@@ -691,7 +691,10 @@ fn check_rate_limit(app_id: &str, rate_limit_per_minute: u32) -> Result<(), Stri
 
 /// Validate the requested model against the app's allowed_models list.
 /// Returns the resolved model id (may be "primary" / "fast") to pass to AIClientFactory.
-fn validate_model(model: Option<&str>, ai_perms: &bitfun_core::miniapp::AiPermissions) -> Result<String, String> {
+fn validate_model(
+    model: Option<&str>,
+    ai_perms: &bitfun_core::miniapp::AiPermissions,
+) -> Result<String, String> {
     let requested = model.unwrap_or("primary");
     if let Some(ref allowed) = ai_perms.allowed_models {
         if !allowed.is_empty() && !allowed.iter().any(|m| m == requested) {
@@ -952,7 +955,9 @@ pub async fn miniapp_ai_chat(
     // Register a cancellation flag for this stream
     let cancel_flag = Arc::new(AtomicBool::new(false));
     {
-        let mut registry = ai_stream_registry().lock().unwrap_or_else(|p| p.into_inner());
+        let mut registry = ai_stream_registry()
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         registry.insert(request.stream_id.clone(), cancel_flag.clone());
     }
 
@@ -974,7 +979,11 @@ pub async fn miniapp_ai_chat(
             match chunk_result {
                 Ok(chunk) => {
                     let has_text = chunk.text.as_ref().map(|t| !t.is_empty()).unwrap_or(false);
-                    let has_reasoning = chunk.reasoning_content.as_ref().map(|t| !t.is_empty()).unwrap_or(false);
+                    let has_reasoning = chunk
+                        .reasoning_content
+                        .as_ref()
+                        .map(|t| !t.is_empty())
+                        .unwrap_or(false);
 
                     if has_text || has_reasoning {
                         if let Some(ref t) = chunk.text {
@@ -1017,7 +1026,9 @@ pub async fn miniapp_ai_chat(
                     };
                     let _ = app_handle.emit("miniapp://ai-stream", &payload);
                     // Clean up registry
-                    let mut registry = ai_stream_registry().lock().unwrap_or_else(|p| p.into_inner());
+                    let mut registry = ai_stream_registry()
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner());
                     registry.remove(&stream_id);
                     return;
                 }
@@ -1025,11 +1036,13 @@ pub async fn miniapp_ai_chat(
         }
 
         // Emit done
-        let usage_val = last_usage.map(|u| json!({
-            "promptTokens": u.prompt_tokens,
-            "completionTokens": u.completion_tokens,
-            "totalTokens": u.total_tokens,
-        }));
+        let usage_val = last_usage.map(|u| {
+            json!({
+                "promptTokens": u.prompt_tokens,
+                "completionTokens": u.completion_tokens,
+                "totalTokens": u.total_tokens,
+            })
+        });
         let done_payload = AiStreamChunkPayload {
             app_id: app_id.clone(),
             stream_id: stream_id.clone(),
@@ -1042,7 +1055,9 @@ pub async fn miniapp_ai_chat(
         let _ = app_handle.emit("miniapp://ai-stream", &done_payload);
 
         // Clean up registry
-        let mut registry = ai_stream_registry().lock().unwrap_or_else(|p| p.into_inner());
+        let mut registry = ai_stream_registry()
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         registry.remove(&stream_id);
     });
 
@@ -1057,7 +1072,9 @@ pub async fn miniapp_ai_cancel(
     _state: State<'_, AppState>,
     request: MiniAppAiCancelRequest,
 ) -> Result<(), String> {
-    let mut registry = ai_stream_registry().lock().unwrap_or_else(|p| p.into_inner());
+    let mut registry = ai_stream_registry()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
     if let Some(flag) = registry.get(&request.stream_id) {
         flag.store(true, Ordering::SeqCst);
     }

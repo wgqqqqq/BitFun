@@ -71,11 +71,12 @@ $matrix-epsilon: 0.0001%;
       $pat: list.nth($matrix-patterns, $pi);
       $op: matrix-cell-opacity($cell, $pat);
       $t0: ($pi - 1) * $matrix-step;
-      $t1: if(
-        $pi == $matrix-phase-count,
-        100% - $matrix-epsilon,
-        $pi * $matrix-step - $matrix-epsilon
-      );
+      $t1: null;
+      @if $pi == $matrix-phase-count {
+        $t1: 100% - $matrix-epsilon;
+      } @else {
+        $t1: $pi * $matrix-step - $matrix-epsilon;
+      }
       #{$t0},
       #{$t1} {
         opacity: $op;
