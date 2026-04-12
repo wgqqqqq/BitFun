@@ -7,6 +7,59 @@ interface Props {
   active: boolean;
 }
 
+interface LottieProps {
+  src: string;
+  active: boolean;
+}
+
+const LottieRenderer: React.FC<LottieProps> = ({ src, active }) => {
+  const [LottieComponent, setLottieComponent] =
+    React.useState<React.ComponentType<any> | null>(null);
+  const [loadError, setLoadError] = React.useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const pkg = '@lottiefiles/dotlottie-react';
+    import(/* @vite-ignore */ pkg)
+      .then((mod: any) => {
+        if (!cancelled) setLottieComponent(() => mod.DotLottieReact ?? mod.default);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loadError) {
+    return (
+      <div className="announcement-media">
+        <div className="announcement-media__placeholder">
+          Lottie library not available
+        </div>
+      </div>
+    );
+  }
+
+  if (!LottieComponent) {
+    return (
+      <div className="announcement-media">
+        <div className="announcement-media__placeholder">Loading…</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="announcement-media">
+      <LottieComponent
+        src={src}
+        autoplay={active}
+        loop
+        style={{ width: '100%', height: '100%' }}
+      />
+    </div>
+  );
+};
+
 /**
  * Renders a media asset inside a modal page.
  *
@@ -64,63 +117,6 @@ const MediaRenderer: React.FC<Props> = ({ media, active }) => {
       <div className="announcement-media__placeholder">
         Unsupported media type: {media.media_type}
       </div>
-    </div>
-  );
-};
-
-// ─── Lazy Lottie renderer ─────────────────────────────────────────────────────
-
-interface LottieProps {
-  src: string;
-  active: boolean;
-}
-
-const LottieRenderer: React.FC<LottieProps> = ({ src, active }) => {
-  const [LottieComponent, setLottieComponent] =
-    React.useState<React.ComponentType<any> | null>(null);
-  const [loadError, setLoadError] = React.useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    // Dynamically resolve the Lottie package name to avoid a hard static
-    // dependency when the package is not yet installed.
-    const pkg = '@lottiefiles/dotlottie-react';
-    import(/* @vite-ignore */ pkg)
-      .then((mod: any) => {
-        if (!cancelled) setLottieComponent(() => mod.DotLottieReact ?? mod.default);
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError(true);
-      });
-    return () => { cancelled = true; };
-  }, []);
-
-  if (loadError) {
-    return (
-      <div className="announcement-media">
-        <div className="announcement-media__placeholder">
-          Lottie library not available
-        </div>
-      </div>
-    );
-  }
-
-  if (!LottieComponent) {
-    return (
-      <div className="announcement-media">
-        <div className="announcement-media__placeholder">Loading…</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="announcement-media">
-      <LottieComponent
-        src={src}
-        autoplay={active}
-        loop
-        style={{ width: '100%', height: '100%' }}
-      />
     </div>
   );
 };

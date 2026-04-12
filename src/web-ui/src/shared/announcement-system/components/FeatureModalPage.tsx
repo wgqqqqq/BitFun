@@ -91,7 +91,6 @@ const FeatureModalPage: React.FC<Props> = ({ page, active }) => {
         <div className="feature-modal-page__rule" aria-hidden />
         <div
           className="feature-modal-page__body"
-          // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: renderBody(page.body) }}
         />
       </div>
