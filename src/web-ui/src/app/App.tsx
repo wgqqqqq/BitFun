@@ -162,6 +162,22 @@ function App() {
     }
   }, [aiInitialized, aiInitializing, aiError, currentConfig]);
 
+  // Block browser-native Ctrl+F (find bar) and Ctrl+R (hard reload).
+  // On macOS the equivalent modifiers are Cmd+F / Cmd+R.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const primary = e.ctrlKey || e.metaKey;
+      if (!primary) return;
+      const key = e.key.toLowerCase();
+      if (key === 'f' || key === 'r') {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+  }, []);
+
   // Escape closes preview overlay (registered via ShortcutManager)
   useShortcut(
     'app.closePreview',

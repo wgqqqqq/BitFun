@@ -17,7 +17,6 @@ import {
   useSessionStateMachineActions,
 } from '../hooks/useSessionStateMachine';
 import { SessionExecutionEvent } from '../state-machine/types';
-import TokenUsageIndicator from './TokenUsageIndicator';
 import { ModelSelector } from './ModelSelector';
 import { FlowChatStore } from '../store/FlowChatStore';
 import type { FlowChatState } from '../types/flow-chat';
@@ -2031,8 +2030,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       focusRichTextInputSoon();
     };
 
-    document.addEventListener('keydown', handleGlobalKeyDown);
-    return () => document.removeEventListener('keydown', handleGlobalKeyDown);
+    // Capture phase so activation runs before nested handlers; Space must dispatch ACTIVATE, not only focus().
+    document.addEventListener('keydown', handleGlobalKeyDown, true);
+    return () => document.removeEventListener('keydown', handleGlobalKeyDown, true);
   }, [derivedState?.canCancel, focusRichTextInputSoon, inputState.isActive, transition]);
   
   const containerRef = useRef<HTMLDivElement>(null);
@@ -2651,14 +2651,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <ModelSelector
                   currentMode={modeState.current}
                   sessionId={effectiveTargetSessionId || undefined}
+                  currentTokens={tokenUsage.current}
+                  maxTokens={tokenUsage.max}
                 />
-                
-                {tokenUsage.current > 0 && (
-                  <TokenUsageIndicator
-                    currentTokens={tokenUsage.current}
-                    maxTokens={tokenUsage.max}
-                  />
-                )}
               </div>
               <div className="bitfun-chat-input__actions-right">
                 {isCollapsedProcessing && !petReplacesStopChrome && (

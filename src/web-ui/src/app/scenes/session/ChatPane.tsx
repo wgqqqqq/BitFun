@@ -69,6 +69,7 @@ const ChatPaneInner: React.FC<ChatPaneProps> = ({
   return (
     <div
       className="bitfun-chat-pane__content"
+      data-shortcut-scope="chat"
       data-fullscreen={isFullscreen}
     >
       <FlowChatContainer

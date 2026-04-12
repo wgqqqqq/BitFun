@@ -18,7 +18,6 @@ export interface ShortcutDef {
  */
 export const NON_USER_CUSTOMIZABLE_SHORTCUT_IDS = new Set<string>([
   'scene.openSession',
-  'chat.activateInput',
 ]);
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -31,11 +30,6 @@ function mod(
   extras: Omit<ShortcutConfig, 'key' | 'ctrl' | 'meta'> = {}
 ): ShortcutConfig {
   return isMac ? { key, meta: true, ...extras } : { key, ctrl: true, ...extras };
-}
-
-/** Shortcut with no primary modifier (plain key, scope-aware). */
-function plain(key: string, scope: ShortcutScope, allowInInput = false): ShortcutConfig {
-  return { key, scope, allowInInput };
 }
 
 // ─── Global shortcuts (scope: 'app') ──────────────────────────────────────
@@ -211,11 +205,6 @@ export const CHAT_SHORTCUTS: ShortcutDef[] = [
     id: 'chat.stopGeneration',
     config: { key: 'Escape', scope: 'chat', allowInInput: true },
     descriptionKey: 'keyboard.shortcuts.chat.stopGeneration',
-  },
-  {
-    id: 'chat.activateInput',
-    config: plain(' ', 'chat', false),
-    descriptionKey: 'keyboard.shortcuts.chat.activateInput',
   },
   {
     id: 'chat.newSession',
