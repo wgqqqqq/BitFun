@@ -416,10 +416,6 @@
         "name": "Code snippet",
         "description": "Selected code snippet"
       },
-      "mermaidDiagram": {
-        "name": "Mermaid diagram",
-        "description": "Full Mermaid diagram code"
-      },
       "image": {
         "name": "Image",
         "description": "Image file (for multimodal understanding)"
@@ -594,8 +590,6 @@
       "close": "Close"
     },
     "loading": {
-      "mermaidPanel": "Loading Mermaid dual-mode panel...",
-      "mermaidEditor": "Loading Mermaid editor...",
       "gitDiff": "Loading Git diff...",
       "gitGraph": "Loading Git graph...",
       "gitBranchHistory": "Loading branch commit history...",
@@ -617,9 +611,7 @@
       "fileOperations": "File Operations"
     },
     "fallback": {
-      "noCodeContent": "No code content available",
-      "mermaidChartTitle": "Mermaid Chart",
-      "mermaidDefaultCode": "flowchart TD\n    A[Start] --> B[End]"
+      "noCodeContent": "No code content available"
     }
   }
 }

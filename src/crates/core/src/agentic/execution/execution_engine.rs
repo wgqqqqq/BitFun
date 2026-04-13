@@ -1693,8 +1693,7 @@ impl ExecutionEngine {
             ("TodoWrite", 12),
             ("Skill", 13),
             ("Log", 14),
-            ("MermaidInteractive", 15),
-            ("ComputerUse", 16),
+            ("ComputerUse", 15),
         ]
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))

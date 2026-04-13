@@ -1,5 +1,5 @@
 /**
- * Mermaid theme exports.
+ * Mermaid theme exports (Markdown diagram rendering).
  */
 
 export {

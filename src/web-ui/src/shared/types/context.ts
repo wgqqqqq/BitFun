@@ -19,8 +19,6 @@ export type ContextItem =
   | FileContext
   | DirectoryContext
   | CodeSnippetContext
-  | MermaidNodeContext
-  | MermaidDiagramContext
   | ImageContext
   | TerminalCommandContext
   | GitRefContext
@@ -55,22 +53,6 @@ export interface CodeSnippetContext extends BaseContext {
   
   beforeContext?: string; 
   afterContext?: string;  
-}
-
-export interface MermaidNodeContext extends BaseContext {
-  type: 'mermaid-node';
-  nodeId: string;
-  nodeText: string;
-  nodeType: 'flowchart' | 'sequence' | 'class' | 'state' | 'er' | 'gantt';
-  sourceCode?: string; 
-  diagramTitle?: string; 
-}
-
-export interface MermaidDiagramContext extends BaseContext {
-  type: 'mermaid-diagram';
-  diagramCode: string; 
-  diagramTitle?: string; 
-  diagramType?: 'flowchart' | 'sequence' | 'class' | 'state' | 'er' | 'gantt' | 'other';
 }
 
 export interface ImageContext extends BaseContext {
@@ -165,14 +147,6 @@ export function isDirectoryContext(context: ContextItem): context is DirectoryCo
 
 export function isCodeSnippetContext(context: ContextItem): context is CodeSnippetContext {
   return context.type === 'code-snippet';
-}
-
-export function isMermaidNodeContext(context: ContextItem): context is MermaidNodeContext {
-  return context.type === 'mermaid-node';
-}
-
-export function isMermaidDiagramContext(context: ContextItem): context is MermaidDiagramContext {
-  return context.type === 'mermaid-diagram';
 }
 
 export function isImageContext(context: ContextItem): context is ImageContext {

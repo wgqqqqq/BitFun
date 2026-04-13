@@ -14,7 +14,6 @@ import { useWorkspaceContext } from '../../infrastructure/contexts/WorkspaceCont
 import { useWindowControls } from '../hooks/useWindowControls';
 import { useAssistantBootstrap } from '../hooks/useAssistantBootstrap';
 import { useApp } from '../hooks/useApp';
-import { useSceneStore } from '../stores/sceneStore';
 import { useShortcut } from '@/infrastructure/hooks/useShortcut';
 import { configManager } from '@/infrastructure/config';
 
@@ -22,7 +21,6 @@ type TransitionDirection = 'entering' | 'returning' | null;
 import { FlowChatManager } from '../../flow_chat/services/FlowChatManager';
 import WorkspaceBody from './WorkspaceBody';
 import { ToolbarMode, useToolbarModeContext } from '../../flow_chat';
-import { FloatingMiniChat } from './FloatingMiniChat';
 import { NewProjectDialog } from '../components/NewProjectDialog';
 import { AboutDialog } from '../components/AboutDialog';
 import { MCPInteractionDialog } from '../components/MCPInteractionDialog/MCPInteractionDialog';
@@ -89,10 +87,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
 
     return () => unsubscribe();
   }, []);
-  const activeSceneId = useSceneStore(s => s.activeTabId);
-  const isAgentScene = activeSceneId === 'session';
-  const isWelcomeScene = activeSceneId === 'welcome';
-
   const isTransitioning = false;
   const transitionDir: TransitionDirection = null;
 
@@ -464,9 +458,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
             isExiting={transitionDir === 'returning'}
           />
         </main>
-
-        {/* Non-agent scenes: floating mini chat button */}
-        {!isWelcomeScene && !isAgentScene && <FloatingMiniChat />}
       </div>
 
       {/* Dialogs (previously owned by TitleBar) */}

@@ -454,7 +454,7 @@ impl WorkspaceService {
             .collect()
     }
 
-    /// All tracked workspaces with full metadata (insights, maintenance, etc.).
+    /// All tracked workspaces with full metadata (maintenance, etc.).
     pub async fn list_workspace_infos(&self) -> Vec<WorkspaceInfo> {
         let manager = self.manager.read().await;
         manager.get_workspaces().values().cloned().collect()

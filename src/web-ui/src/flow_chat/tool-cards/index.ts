@@ -15,7 +15,6 @@ import { GlobSearchDisplay } from './GlobSearchDisplay';
 import { LSDisplay } from './LSDisplay';
 import { TodoWriteDisplay } from './TodoWriteDisplay';
 import { TaskToolDisplay } from './TaskToolDisplay';
-import { MermaidInteractiveDisplay } from './MermaidInteractiveDisplay';
 import { CodeReviewToolCard } from './CodeReviewToolCard';
 import { FileOperationToolCard } from './FileOperationToolCard';
 import { DefaultToolCard } from './DefaultToolCard';
@@ -151,16 +150,6 @@ export const TOOL_CARD_CONFIGS: Record<string, ToolCardConfig> = {
     description: 'Manage task lists',
     displayMode: 'standard',
     primaryColor: '#0d9488'
-  },
-  'MermaidInteractive': {
-    toolName: 'MermaidInteractive',
-    displayName: 'Mermaid Interactive',
-    icon: 'M',
-    requiresConfirmation: false,
-    resultDisplayType: 'detailed',
-    description: 'Create interactive Mermaid diagrams',
-    displayMode: 'compact',
-    primaryColor: '#06b6d4'
   },
   'submit_code_review': {
     toolName: 'submit_code_review',
@@ -321,9 +310,6 @@ export const TOOL_CARD_COMPONENTS = {
   // Advanced tools
   'Task': TaskToolDisplay,
   'TodoWrite': TodoWriteDisplay,
-  
-  // Mermaid interactive
-  'MermaidInteractive': MermaidInteractiveDisplay,
   
   'submit_code_review': CodeReviewToolCard,
   

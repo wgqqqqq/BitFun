@@ -617,8 +617,7 @@
     "diagram": {
       "interactive": "Interactive diagram:",
       "preparing": "Preparing",
-      "creating": "Creating",
-      "mermaidInteractive": "Mermaid Interactive Chart"
+      "creating": "Creating"
     },
     "template": {
       "get": "Get Template:",

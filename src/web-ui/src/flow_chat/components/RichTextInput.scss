@@ -158,24 +158,6 @@
     }
   }
   
-  &[data-context-type="mermaid-diagram"] {
-    background: rgba(34, 197, 94, 0.12);
-    color: rgba(52, 211, 153, 0.95);
-    
-    &:hover {
-      background: rgba(34, 197, 94, 0.18);
-    }
-  }
-  
-  &[data-context-type="mermaid-node"] {
-    background: rgba(6, 182, 212, 0.12);
-    color: rgba(34, 211, 238, 0.95);
-    
-    &:hover {
-      background: rgba(6, 182, 212, 0.18);
-    }
-  }
-  
   &[data-context-type="image"] {
     background: rgba(251, 146, 60, 0.12);
     color: rgba(251, 146, 60, 0.95);

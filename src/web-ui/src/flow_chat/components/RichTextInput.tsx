@@ -42,8 +42,6 @@ function getContextDisplayName(context: ContextItem): string {
     case 'terminal-command': return context.command;
     case 'git-ref': return context.refValue;
     case 'url': return context.title || context.url;
-    case 'mermaid-node': return context.nodeText;
-    case 'mermaid-diagram': return context.diagramTitle || 'Mermaid diagram';
     case 'web-element': return context.tagName;
     default: {
       const exhaustive: never = context;
@@ -61,8 +59,6 @@ function getContextTagFormat(context: ContextItem): string {
     case 'terminal-command': return `#cmd:${context.command}`;
     case 'git-ref': return `#git:${context.refValue}`;
     case 'url': return `#link:${context.title || context.url}`;
-    case 'mermaid-node': return `#chart:${context.nodeText}`;
-    case 'mermaid-diagram': return `#mermaid:${context.diagramTitle || 'Mermaid diagram'}`;
     case 'web-element': return `#element:${context.tagName}`;
     default: {
       const exhaustive: never = context;
@@ -87,10 +83,6 @@ function getContextFullPath(context: ContextItem): string {
       return `Git ${context.refType}: ${context.refValue}`;
     case 'url':
       return context.url;
-    case 'mermaid-node':
-      return context.diagramTitle ? `${context.diagramTitle} - ${context.nodeText}` : context.nodeText;
-    case 'mermaid-diagram':
-      return `Mermaid diagram${context.diagramTitle ? ': ' + context.diagramTitle : ''} (${context.diagramCode.length} chars)`;
     case 'web-element':
       return context.path;
     default: {

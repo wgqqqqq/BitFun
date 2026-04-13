@@ -37,7 +37,6 @@ export type I18nNamespace =
   | 'components'
   | 'panels/git'
   | 'panels/terminal'
-  | 'mermaid-editor'
   | 'scenes/miniapp'
   | 'scenes/capabilities'
   | 'scenes/agents'

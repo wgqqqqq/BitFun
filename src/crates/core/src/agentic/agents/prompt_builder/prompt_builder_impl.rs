@@ -261,7 +261,7 @@ The following are project documentation that describe the project's architecture
         if enabled {
             r"# Visualizing complex logic as you explain
 Use Mermaid diagrams to visualize complex logic, workflows, architectures, and data flows whenever it helps clarify the explanation.
-Prefer MermaidInteractive tool when available, otherwise output Mermaid code blocks directly.
+Output Mermaid in fenced code blocks (```mermaid) so the UI can render them.
 ".to_string()
         } else {
             String::new()

@@ -27,9 +27,6 @@ const ProfileScene    = lazy(() => import('./profile/ProfileScene'));
 const AgentsScene       = lazy(() => import('./agents/AgentsScene'));
 const SkillsScene     = lazy(() => import('./skills/SkillsScene'));
 const MiniAppGalleryScene = lazy(() => import('./miniapps/MiniAppGalleryScene'));
-const BrowserScene    = lazy(() => import('./browser/BrowserScene'));
-const MermaidEditorScene = lazy(() => import('./mermaid/MermaidEditorScene'));
-const InsightsScene   = lazy(() => import('./my-agent/InsightsScene'));
 const ShellScene      = lazy(() => import('./shell/ShellScene'));
 const WelcomeScene    = lazy(() => import('./welcome/WelcomeScene'));
 const MiniAppScene    = lazy(() => import('./miniapps/MiniAppScene'));
@@ -120,14 +117,8 @@ function renderScene(
       return <SkillsScene />;
     case 'miniapps':
       return <MiniAppGalleryScene />;
-    case 'browser':
-      return <BrowserScene />;
-    case 'mermaid':
-      return <MermaidEditorScene />;
     case 'assistant':
       return <AssistantScene workspacePath={workspacePath} />;
-    case 'insights':
-      return <InsightsScene />;
     case 'shell':
       return <ShellScene isActive={isActive} />;
     case 'panel-view':

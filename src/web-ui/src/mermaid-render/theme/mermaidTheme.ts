@@ -244,12 +244,10 @@ export function getRuntimeColors() {
   const isDark = getThemeType() === 'dark';
   return {
     node: {
-      // Use softer light backgrounds to avoid pure white.
       fill: getCSSVar('--mermaid-node-fill', isDark ? 'rgba(28, 30, 35, 0.9)' : '#e8eaef'),
       fillHover: getCSSVar('--mermaid-node-fill-hover', isDark ? 'rgba(38, 40, 48, 0.95)' : '#dfe2e8'),
       stroke: getCSSVar('--mermaid-node-stroke', isDark ? '#5a5e6a' : '#9ca3af'),
       strokeHover: getCSSVar('--mermaid-node-stroke-hover', isDark ? '#8a8e9a' : '#6b7280'),
-      // Keep text dark in light theme.
       text: getCSSVar('--mermaid-node-text', isDark ? '#e0e2e8' : '#1f2937'),
       dashArray: getCSSVar('--mermaid-node-dash-array', '4 2'),
     },

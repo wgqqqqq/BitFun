@@ -5,8 +5,8 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useI18n } from '@/infrastructure/i18n';
-import { MermaidService, MERMAID_THEME_CHANGE_EVENT } from '../../../tools/mermaid-editor/services/MermaidService';
-import { Loader2, AlertCircle, Code2, Copy, Check, Edit } from 'lucide-react';
+import { MermaidService, MERMAID_THEME_CHANGE_EVENT } from '@/mermaid-render';
+import { Loader2, AlertCircle, Code2, Copy, Check } from 'lucide-react';
 import { createLogger } from '@/shared/utils/logger';
 import './MermaidBlock.scss';
 
@@ -56,7 +56,6 @@ export const MermaidBlock: React.FC<MermaidBlockProps> = ({
   className = ''
 }) => {
   const { t } = useI18n('components');
-  const { t: tMermaid } = useI18n('mermaid-editor');
   
   const cacheKey = getCacheKey(code);
   const cachedSvg = svgCache.get(cacheKey);
@@ -174,34 +173,6 @@ export const MermaidBlock: React.FC<MermaidBlockProps> = ({
     }
   }, [code]);
 
-  const handleOpenInEditor = useCallback(() => {
-    const duplicateCheckKey = `mermaid-md-${code.length}-${code.slice(0, 64).replace(/\s+/g, '')}`;
-    window.dispatchEvent(new CustomEvent('expand-right-panel'));
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('agent-create-tab', {
-        detail: {
-          type: 'mermaid-editor',
-          title: tMermaid('tabs.chartEdit'),
-          data: {
-            mermaid_code: code,
-            title: tMermaid('tabs.chartEdit'),
-            mode: 'editor',
-            allow_mode_switch: true,
-            editor_config: {
-              readonly: false,
-              show_preview: true,
-              auto_format: false
-            }
-          },
-          metadata: { duplicateCheckKey, fromMarkdown: true },
-          checkDuplicate: true,
-          duplicateCheckKey,
-          replaceExisting: true
-        }
-      }));
-    }, 100);
-  }, [code, tMermaid]);
-
   const renderContent = () => {
     switch (state) {
       case 'streaming':
@@ -250,13 +221,6 @@ export const MermaidBlock: React.FC<MermaidBlockProps> = ({
             />
             
             <div className="mermaid-block__actions">
-              <button
-                className="mermaid-icon-btn"
-                onClick={handleOpenInEditor}
-                title={t('mermaidBlock.openInEditor')}
-              >
-                <Edit size={14} />
-              </button>
               <button
                 className="mermaid-icon-btn"
                 onClick={() => setShowCode(!showCode)}

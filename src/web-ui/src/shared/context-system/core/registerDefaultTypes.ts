@@ -1,7 +1,7 @@
  
 
 import React from 'react';
-import { FileIcon, Code, Network, Code2 as Code2Icon } from 'lucide-react';
+import { FileIcon, Code, Code2 as Code2Icon } from 'lucide-react';
 import { contextRegistry } from '../../services/ContextRegistry';
 import { 
   FileContextTransformer, 
@@ -13,11 +13,6 @@ import {
   CodeSnippetContextValidator, 
   CodeSnippetCardRenderer 
 } from './types/CodeSnippetContextImpl';
-import { 
-  MermaidDiagramContextTransformer, 
-  MermaidDiagramContextValidator, 
-  MermaidDiagramCardRenderer 
-} from './types/MermaidDiagramContextImpl';
 import { 
   ImageContextTransformer, 
   ImageContextValidator, 
@@ -103,29 +98,6 @@ export function registerDefaultContextTypes(): void {
     registeredCount++;
   } catch (error) {
     log.error('Failed to register code-snippet type', error as Error);
-  }
-  
-  try {
-    
-    contextRegistry.register({
-      type: 'mermaid-diagram',
-      displayName: i18nService.t('components:contextSystem.contextRegistry.mermaidDiagram.name'),
-      description: i18nService.t('components:contextSystem.contextRegistry.mermaidDiagram.description'),
-      icon: React.createElement(Network, { size: 16 }),
-      color: '#22c55e', 
-      category: 'diagram',
-      transformer: new MermaidDiagramContextTransformer(),
-      validator: new MermaidDiagramContextValidator(),
-      renderer: new MermaidDiagramCardRenderer(),
-      config: {
-        maxSize: 50000, 
-        cacheable: false,
-        priority: 4
-      }
-    });
-    registeredCount++;
-  } catch (error) {
-    log.error('Failed to register mermaid-diagram type', error as Error);
   }
   
   try {

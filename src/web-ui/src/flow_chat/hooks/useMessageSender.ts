@@ -170,10 +170,6 @@ export function useMessageSender(props: UseMessageSenderProps): UseMessageSender
               return '';
             case 'terminal-command':
               return `[Command: ${ctx.command}]`;
-            case 'mermaid-node':
-              return `[Mermaid Node: ${ctx.nodeText}]`;
-            case 'mermaid-diagram':
-              return `[Mermaid Diagram${ctx.diagramTitle ? ': ' + ctx.diagramTitle : ''}]\n\`\`\`mermaid\n${ctx.diagramCode}\n\`\`\``;
             case 'git-ref':
               return `[Git Ref: ${ctx.refValue}]`;
             case 'url':

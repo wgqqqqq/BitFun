@@ -358,7 +358,6 @@ Below is a snapshot of the current workspace's file structure.
             "Glob".to_string(),
             "WebSearch".to_string(),
             "TodoWrite".to_string(),
-            "MermaidInteractive".to_string(),
             "Log".to_string(),
             "TerminalControl".to_string(),
             "ComputerUse".to_string(),

@@ -2179,7 +2179,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   return (
     <>
       <ContextDropZone
-        acceptedTypes={['file', 'directory', 'image', 'code-snippet', 'mermaid-diagram']}
+        acceptedTypes={['file', 'directory', 'image', 'code-snippet']}
         className="bitfun-chat-input-drop-zone"
         onContextAdded={(context) => {
           if (context.type === 'image' && currentImageCount >= CHAT_INPUT_CONFIG.image.maxCount) {

@@ -10,7 +10,6 @@ import { ContextItem, ContextType } from './context';
 export type DragSourceType =
   | 'file-tree'
   | 'code-editor'
-  | 'mermaid-diagram'
   | 'terminal'
   | 'image-viewer'
   | 'search-result'

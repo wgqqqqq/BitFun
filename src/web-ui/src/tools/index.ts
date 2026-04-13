@@ -18,6 +18,5 @@ export async function initializeAllTools(): Promise<void> {
 // Export all tool modules.
 export * from './editor';
 export * from './file-system';
-export * from './mermaid-editor';
 export * from './snapshot_system';
 export * from './terminal';

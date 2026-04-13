@@ -590,15 +590,6 @@ pub async fn run() {
             api::miniapp_api::miniapp_ai_chat,
             api::miniapp_api::miniapp_ai_cancel,
             api::miniapp_api::miniapp_ai_list_models,
-            // Browser API
-            api::browser_api::browser_webview_eval,
-            api::browser_api::browser_get_url,
-            // Insights API
-            api::insights_api::generate_insights,
-            api::insights_api::get_latest_insights,
-            api::insights_api::load_insights_report,
-            api::insights_api::has_insights_data,
-            api::insights_api::cancel_insights_generation,
             // SSH Remote API
             api::ssh_api::ssh_list_saved_connections,
             api::ssh_api::ssh_save_connection,

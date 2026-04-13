@@ -609,8 +609,7 @@
     "diagram": {
       "interactive": "交互图表:",
       "preparing": "准备中",
-      "creating": "创建中",
-      "mermaidInteractive": "Mermaid 交互图表"
+      "creating": "创建中"
     },
     "template": {
       "get": "获取模板:",

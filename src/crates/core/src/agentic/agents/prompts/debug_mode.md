@@ -109,7 +109,6 @@ MOST IMPORTANT: Always use the exact logfile path: `{LOG_PATH}`
 - **Delete**: clear `{LOG_PATH}` before each run
 - **Grep / Glob**: locate code, search for patterns
 - **Edit / Write**: insert instrumentation code, implement fixes
-- **MermaidInteractive**: visualize execution flow
 - **Log**: record findings for the user
 - **TodoWrite**: track hypotheses and their status
 
