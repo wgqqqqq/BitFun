@@ -6,6 +6,7 @@
  */
 
 const { execSync, spawn } = require('child_process');
+const { existsSync } = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const {
@@ -110,12 +111,16 @@ function runCommand(command, cwd = ROOT_DIR) {
 /**
  * Spawn a command with explicit args array (no shell interpolation, safe for paths with spaces)
  */
-function spawnCommand(cmd, args, cwd = ROOT_DIR) {
+function spawnCommand(cmd, args, cwd = ROOT_DIR, envOverrides = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {
       cwd,
       stdio: 'inherit',
       shell: true,
+      env: {
+        ...process.env,
+        ...envOverrides,
+      },
     });
 
     child.on('close', (code) => {
@@ -130,6 +135,36 @@ function spawnCommand(cmd, args, cwd = ROOT_DIR) {
   });
 }
 
+function codgrepBinaryName() {
+  return process.platform === 'win32' ? 'cg.exe' : 'cg';
+}
+
+function codgrepBinaryPath(profile = 'debug') {
+  return path.join(ROOT_DIR, 'target', profile, codgrepBinaryName());
+}
+
+function ensureCodgrepBinary(profile = 'debug') {
+  const cargoCommand =
+    profile === 'debug'
+      ? 'cargo build -p codgrep --bin cg'
+      : `cargo build -p codgrep --bin cg --profile ${profile}`;
+
+  const result = runInherit(cargoCommand);
+  if (!result.ok) {
+    return result;
+  }
+
+  const binaryPath = codgrepBinaryPath(profile);
+  if (!existsSync(binaryPath)) {
+    return {
+      ok: false,
+      error: new Error(`codgrep binary not found after build: ${binaryPath}`),
+    };
+  }
+
+  return { ok: true, binaryPath };
+}
+
 /**
  * Main entry
  */
@@ -141,7 +176,7 @@ async function main() {
   printHeader(`BitFun ${modeLabel} Development`);
   printBlank();
 
-  const totalSteps = mode === 'desktop' ? 4 : 3;
+  const totalSteps = mode === 'desktop' ? 5 : 3;
 
   // Step 1: Copy resources
   printStep(1, totalSteps, 'Copy resources');
@@ -181,7 +216,7 @@ async function main() {
   
   // Step 3: Build mobile-web (desktop only)
   if (mode === 'desktop') {
-    printStep(3, 4, 'Build mobile-web');
+    printStep(3, totalSteps, 'Build mobile-web');
     const mobileWebResult = buildMobileWeb({
       install: true,
       logInfo: printInfo,
@@ -189,6 +224,19 @@ async function main() {
       logError: printError,
     });
     if (!mobileWebResult.ok) {
+      process.exit(1);
+    }
+
+    printStep(4, totalSteps, 'Build workspace search daemon');
+    const codgrepResult = ensureCodgrepBinary('debug');
+    if (!codgrepResult.ok) {
+      printError('Build workspace search daemon failed');
+      if (codgrepResult.error && codgrepResult.error.message) {
+        printError(codgrepResult.error.message);
+      }
+      if (codgrepResult.error && codgrepResult.error.status !== undefined) {
+        printError(`Exit code: ${codgrepResult.error.status}`);
+      }
       process.exit(1);
     }
   }
@@ -217,7 +265,12 @@ async function main() {
       const desktopDir = path.join(ROOT_DIR, 'src/apps/desktop');
       const tauriConfig = path.join(desktopDir, 'tauri.conf.json');
       const tauriBin = path.join(ROOT_DIR, 'node_modules', '.bin', 'tauri');
-      await spawnCommand(tauriBin, ['dev', '--config', tauriConfig], desktopDir);
+      await spawnCommand(
+        tauriBin,
+        ['dev', '--config', tauriConfig],
+        desktopDir,
+        { CODGREP_DAEMON_BIN: codgrepBinaryPath('debug') }
+      );
     } else {
       await runCommand('pnpm exec vite', path.join(ROOT_DIR, 'src/web-ui'));
     }
