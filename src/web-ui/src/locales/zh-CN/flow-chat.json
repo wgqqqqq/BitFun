@@ -398,6 +398,7 @@
       "title": "Agent 调度",
       "agent": "Agent",
       "agentBadge": "Agent",
+      "headerLine": "{{agentType}} 智能体：{{session}}",
       "preparingCreate": "准备创建 {{agent}}",
       "creatingAgent": "正在创建 {{agent}}...",
       "createdAgent": "已创建 {{agent}}",

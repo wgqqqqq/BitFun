@@ -406,6 +406,7 @@
       "title": "Agent Dispatch",
       "agent": "Agent",
       "agentBadge": "Agent",
+      "headerLine": "{{agentType}} agent: {{session}}",
       "preparingCreate": "Preparing to create {{agent}}",
       "creatingAgent": "Creating {{agent}}...",
       "createdAgent": "Created {{agent}}",

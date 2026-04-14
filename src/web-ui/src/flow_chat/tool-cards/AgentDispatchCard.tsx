@@ -149,10 +149,10 @@ export const AgentDispatchCard: React.FC<ToolCardProps> = React.memo(
             </span>
           );
         case 'completed':
-          return <Check size={13} className="agent-dispatch-status-icon agent-dispatch-status-icon--done" />;
+          return <Check size={14} className="agent-dispatch-status-icon agent-dispatch-status-icon--done" />;
         case 'error':
         case 'cancelled':
-          return <X size={13} className="agent-dispatch-status-icon agent-dispatch-status-icon--error" />;
+          return <X size={14} className="agent-dispatch-status-icon agent-dispatch-status-icon--error" />;
         default:
           return null;
       }
@@ -190,18 +190,16 @@ export const AgentDispatchCard: React.FC<ToolCardProps> = React.memo(
         }
         return t('toolCards.agentDispatch.checkingStatus');
       }
-      // create
-      const label = sessionName || agentType || t('toolCards.agentDispatch.agent');
-      if (status === 'completed') {
-        return t('toolCards.agentDispatch.createdAgent', { agent: label });
-      }
-      if (status === 'running' || status === 'streaming') {
-        return t('toolCards.agentDispatch.creatingAgent', { agent: label });
-      }
+      // create — format mirrors TaskToolDisplay: "AgentType 智能体：SessionName"
+      const agentTypeLabel = agentType || t('toolCards.agentDispatch.agent');
+      const sessionLabel = sessionName || t('toolCards.agentDispatch.agent');
       if (status === 'error' || status === 'cancelled') {
         return t('toolCards.agentDispatch.actionFailed');
       }
-      return t('toolCards.agentDispatch.preparingCreate', { agent: label });
+      return t('toolCards.agentDispatch.headerLine', {
+        agentType: agentTypeLabel,
+        session: sessionLabel,
+      });
     }, [action, agentType, resultData, sessionName, status, t]);
 
     // Jump to the created session when the card is clicked (create action, completed)
@@ -249,14 +247,21 @@ export const AgentDispatchCard: React.FC<ToolCardProps> = React.memo(
         return (
           <div className="agent-dispatch-workspace-list">
             {workspaces.map((ws, i) => (
-              <div key={i} className={`agent-dispatch-workspace-item${ws.kind === 'global' ? ' agent-dispatch-workspace-item--global' : ''}`}>
+              <div
+                key={i}
+                className={`agent-dispatch-workspace-item${ws.kind === 'global' ? ' agent-dispatch-workspace-item--global' : ''}${!ws.path ? ' agent-dispatch-workspace-item--no-path' : ''}`}
+              >
                 <div className="agent-dispatch-workspace-header">
                   <span className="agent-dispatch-workspace-name">{ws.name ?? ws.path}</span>
                   {ws.kind === 'global' && (
                     <span className="agent-dispatch-global-tag">{t('toolCards.agentDispatch.globalTag')}</span>
                   )}
                 </div>
-                <span className="agent-dispatch-workspace-path">{ws.path}</span>
+                {ws.path ? (
+                  <span className="agent-dispatch-workspace-path" title={ws.path}>
+                    {ws.path}
+                  </span>
+                ) : null}
                 <span className="agent-dispatch-workspace-count">
                   {t('toolCards.agentDispatch.sessionCount', { count: ws.session_count ?? 0 })}
                 </span>
@@ -284,6 +289,11 @@ export const AgentDispatchCard: React.FC<ToolCardProps> = React.memo(
                     <span className="agent-dispatch-session-name">{s.session_name ?? s.session_id}</span>
                     {s.agent_type && <AgentBadge agentType={s.agent_type} />}
                   </div>
+                  {s.workspace ? (
+                    <span className="agent-dispatch-session-path" title={s.workspace}>
+                      {s.workspace}
+                    </span>
+                  ) : null}
                   <div className="agent-dispatch-session-item-rail">
                     {sid ? (
                       isRunning ? (
@@ -322,25 +332,22 @@ export const AgentDispatchCard: React.FC<ToolCardProps> = React.memo(
       <div className="agent-dispatch-header-wrapper">
         {/* Left icon column */}
         <div className="agent-dispatch-icon-col">
-          <Bot size={22} className="agent-dispatch-icon" />
+          <div className="agent-dispatch-icon-marks">
+            <Bot className="agent-dispatch-icon" />
+          </div>
         </div>
 
         {/* Main content */}
         <div className="agent-dispatch-body">
-          <div className="agent-dispatch-header-main">
-            <span className="agent-dispatch-label">{headerLine}</span>
-            {agentType && action === 'create' && <AgentBadge agentType={agentType} />}
-          </div>
+          <span className="agent-dispatch-label">{headerLine}</span>
           {workspace && action === 'create' && (
-            <div className="agent-dispatch-workspace-hint">
-              {workspace === 'global'
-                ? <span className="agent-dispatch-global-tag">{t('toolCards.agentDispatch.globalTag')}</span>
-                : workspace}
-            </div>
+            workspace === 'global'
+              ? <span className="agent-dispatch-global-tag agent-dispatch-global-tag--body">{t('toolCards.agentDispatch.globalTag')}</span>
+              : <span className="agent-dispatch-body-path" title={workspace}>{workspace}</span>
           )}
         </div>
 
-        {/* Right rail: status (whole card click navigates when create completed) */}
+        {/* Right rail: status icon only */}
         <div className="agent-dispatch-rail">
           {headerRailIcon}
         </div>
