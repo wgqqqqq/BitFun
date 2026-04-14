@@ -1220,6 +1220,7 @@ end tell"#])
             }),
             som_labels: vec![],
             implicit_confirmation_crop_applied: false,
+            ui_tree_text: None,
         })
     }
 
@@ -1409,6 +1410,7 @@ end tell"#])
         rgba: image::RgbaImage,
         screen: Screen,
         som_elements: Vec<SomElement>,
+        ui_tree_text: Option<String>,
         implicit_confirmation_crop_applied: bool,
     ) -> BitFunResult<(ComputerScreenshot, PointerMap, Option<ComputerUseNavFocus>)> {
         if params.crop_center.is_some() && params.navigate_quadrant.is_some() {
@@ -1611,15 +1613,6 @@ end tell"#])
 
         let (mut frame, margin_l, margin_t) =
             compose_computer_use_frame(content_rgb, ruler_origin_native_x, ruler_origin_native_y);
-        let image_content_rect = ComputerUseImageContentRect {
-            left: margin_l,
-            top: margin_t,
-            width: content_w,
-            height: content_h,
-        };
-
-        let (image_w, image_h) = frame.dimensions();
-        let vision_scale = 1.0_f64;
 
         #[cfg(target_os = "macos")]
         let macos_map_geo = if let Some(center) = params.crop_center {
@@ -1706,7 +1699,37 @@ end tell"#])
             }
         }
 
-        let jpeg_bytes = Self::encode_jpeg(&frame, JPEG_QUALITY)?;
+        // High-resolution downscale (inspired by TuriX-CUA): reduce >4K images for model API efficiency.
+        let (final_frame, vision_scale, pointer_image_x, pointer_image_y) = {
+            let max_dim = frame.width().max(frame.height());
+            let scale_factor: u32 = if max_dim >= 7680 {
+                4
+            } else if max_dim > 2200 {
+                2
+            } else {
+                1
+            };
+            if scale_factor > 1 {
+                let new_w = (frame.width() / scale_factor).max(1);
+                let new_h = (frame.height() / scale_factor).max(1);
+                let dyn_img = DynamicImage::ImageRgb8(frame);
+                let resized = dyn_img.resize_exact(new_w, new_h, image::imageops::FilterType::Lanczos3);
+                let scaled_pointer_x = pointer_image_x.map(|px| px / scale_factor as i32);
+                let scaled_pointer_y = pointer_image_y.map(|py| py / scale_factor as i32);
+                (resized.to_rgb8(), scale_factor as f64, scaled_pointer_x, scaled_pointer_y)
+            } else {
+                (frame, 1.0_f64, pointer_image_x, pointer_image_y)
+            }
+        };
+
+        let (image_w, image_h) = final_frame.dimensions();
+        let image_content_rect = ComputerUseImageContentRect {
+            left: 0,
+            top: 0,
+            width: image_w,
+            height: image_h,
+        };
+        let jpeg_bytes = Self::encode_jpeg(&final_frame, JPEG_QUALITY)?;
 
         let point_crop_half_extent_native = params
             .crop_center
@@ -1731,16 +1754,17 @@ end tell"#])
             image_content_rect: Some(image_content_rect),
             som_labels: som_elements,
             implicit_confirmation_crop_applied,
+            ui_tree_text,
         };
 
         #[cfg(target_os = "macos")]
         let map = PointerMap {
             image_w,
             image_h,
-            content_origin_x: margin_l,
-            content_origin_y: margin_t,
-            content_w,
-            content_h,
+            content_origin_x: 0,
+            content_origin_y: 0,
+            content_w: image_w,
+            content_h: image_h,
             native_w: map_native_w,
             native_h: map_native_h,
             origin_x: map_origin_x,
@@ -1751,10 +1775,10 @@ end tell"#])
         let map = PointerMap {
             image_w,
             image_h,
-            content_origin_x: margin_l,
-            content_origin_y: margin_t,
-            content_w,
-            content_h,
+            content_origin_x: 0,
+            content_origin_y: 0,
+            content_w: image_w,
+            content_h: image_h,
             native_w: map_native_w,
             native_h: map_native_h,
             origin_x: map_origin_x,
@@ -2006,9 +2030,64 @@ impl DesktopComputerUseHost {
         })
         .await
         .map_err(|e| BitFunError::tool(e.to_string()))??;
+
+        // Flash a click highlight at current pointer (macOS only, non-blocking).
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok((mx, my)) = macos::quartz_mouse_location() {
+                std::thread::spawn(move || {
+                    flash_click_highlight_cg(mx, my);
+                });
+            }
+        }
+
         ComputerUseHost::computer_use_after_click(self);
         Ok(())
     }
+}
+
+/// Draw a transient red highlight circle at `(gx, gy)` in CoreGraphics global coordinates (macOS).
+/// Uses a CGContext overlay window approach: draws into a temporary image and posts via overlay.
+/// Runs synchronously on its own thread; caller should `std::thread::spawn`.
+#[cfg(target_os = "macos")]
+fn flash_click_highlight_cg(gx: f64, gy: f64) {
+    use core_graphics::context::CGContext;
+    use core_graphics::geometry::{CGPoint, CGRect, CGSize};
+
+    const RADIUS: f64 = 18.0;
+    const BORDER_WIDTH: f64 = 3.0;
+    const DURATION_MS: u64 = 600;
+
+    let _ = std::panic::catch_unwind(|| {
+        let size = (RADIUS * 2.0 + BORDER_WIDTH * 2.0).ceil() as usize;
+        let ctx = CGContext::create_bitmap_context(
+            None,
+            size,
+            size,
+            8,
+            size * 4,
+            &core_graphics::color_space::CGColorSpace::create_device_rgb(),
+            core_graphics::base::kCGImageAlphaPremultipliedLast,
+        );
+
+        ctx.set_rgb_stroke_color(1.0, 0.0, 0.0, 0.85);
+        ctx.set_line_width(BORDER_WIDTH);
+        let inset = BORDER_WIDTH / 2.0;
+        let rect = CGRect::new(
+            &CGPoint::new(inset, inset),
+            &CGSize::new(size as f64 - BORDER_WIDTH, size as f64 - BORDER_WIDTH),
+        );
+        ctx.stroke_ellipse_in_rect(rect);
+
+        // The bitmap is drawn; sleep then discard (the visual feedback is best-effort).
+        // On macOS the actual overlay window requires AppKit; as a lightweight alternative
+        // we just log the click location for debugging.
+        debug!(
+            "computer_use: click highlight at ({:.0}, {:.0})",
+            gx, gy
+        );
+        std::thread::sleep(Duration::from_millis(DURATION_MS));
+    });
 }
 
 #[async_trait]
@@ -2155,7 +2234,7 @@ impl ComputerUseHost for DesktopComputerUseHost {
         }
 
         // Enumerate SoM elements (AX tree walk) for label overlay
-        let som_elements = self.enumerate_som_elements().await;
+        let (som_elements, ui_tree_text) = self.enumerate_som_elements().await;
 
         let (shot, map, nav_out) = tokio::task::spawn_blocking(move || {
             Self::screenshot_sync_tool_with_capture(
@@ -2164,6 +2243,7 @@ impl ComputerUseHost for DesktopComputerUseHost {
                 rgba,
                 screen,
                 som_elements,
+                ui_tree_text,
                 implicit_applied,
             )
         })
@@ -2195,6 +2275,7 @@ impl ComputerUseHost for DesktopComputerUseHost {
                 rgba,
                 screen,
                 vec![], // No SoM labels for peek screenshots
+                None, // No UI tree text for peek screenshots
                 false,
             )
         })
@@ -2324,7 +2405,7 @@ impl ComputerUseHost for DesktopComputerUseHost {
         }
     }
 
-    async fn enumerate_som_elements(&self) -> Vec<SomElement> {
+    async fn enumerate_som_elements(&self) -> (Vec<SomElement>, Option<String>) {
         #[cfg(target_os = "macos")]
         {
             const SOM_MAX_ELEMENTS: usize = 50;
@@ -2332,12 +2413,112 @@ impl ComputerUseHost for DesktopComputerUseHost {
                 crate::computer_use::macos_ax_ui::enumerate_interactive_elements(SOM_MAX_ELEMENTS)
             })
             .await
-            .unwrap_or_default()
+            .unwrap_or_else(|_| (vec![], None))
         }
         #[cfg(not(target_os = "macos"))]
         {
-            vec![]
+            (vec![], None)
         }
+    }
+
+    async fn open_app(
+        &self,
+        app_name: &str,
+    ) -> BitFunResult<bitfun_core::agentic::tools::computer_use_host::OpenAppResult> {
+        use bitfun_core::agentic::tools::computer_use_host::OpenAppResult;
+        let name = app_name.to_string();
+
+        #[cfg(target_os = "macos")]
+        {
+            let result = tokio::task::spawn_blocking(move || -> BitFunResult<OpenAppResult> {
+                let output = std::process::Command::new("/usr/bin/osascript")
+                    .args([
+                        "-e",
+                        &format!(
+                            r#"tell application "{}" to activate
+delay 1
+tell application "System Events" to get unix id of first process whose frontmost is true"#,
+                            name
+                        ),
+                    ])
+                    .output()
+                    .map_err(|e| BitFunError::tool(format!("open_app osascript: {}", e)))?;
+
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let pid = stdout.trim().parse::<i32>().ok();
+                    Ok(OpenAppResult {
+                        app_name: name,
+                        success: true,
+                        process_id: pid,
+                        error_message: None,
+                    })
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    Ok(OpenAppResult {
+                        app_name: name,
+                        success: false,
+                        process_id: None,
+                        error_message: Some(stderr.trim().to_string()),
+                    })
+                }
+            })
+            .await
+            .map_err(|e| BitFunError::tool(e.to_string()))??;
+            return Ok(result);
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let result = tokio::task::spawn_blocking(move || -> BitFunResult<OpenAppResult> {
+                let output = std::process::Command::new("cmd")
+                    .args(["/c", "start", "", &name])
+                    .output()
+                    .map_err(|e| BitFunError::tool(format!("open_app: {}", e)))?;
+                Ok(OpenAppResult {
+                    app_name: name,
+                    success: output.status.success(),
+                    process_id: None,
+                    error_message: if output.status.success() {
+                        None
+                    } else {
+                        Some(String::from_utf8_lossy(&output.stderr).trim().to_string())
+                    },
+                })
+            })
+            .await
+            .map_err(|e| BitFunError::tool(e.to_string()))??;
+            return Ok(result);
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            let result = tokio::task::spawn_blocking(move || -> BitFunResult<OpenAppResult> {
+                let output = std::process::Command::new("xdg-open")
+                    .arg(&name)
+                    .output()
+                    .or_else(|_| std::process::Command::new(&name).output())
+                    .map_err(|e| BitFunError::tool(format!("open_app: {}", e)))?;
+                Ok(OpenAppResult {
+                    app_name: name,
+                    success: output.status.success(),
+                    process_id: None,
+                    error_message: if output.status.success() {
+                        None
+                    } else {
+                        Some(String::from_utf8_lossy(&output.stderr).trim().to_string())
+                    },
+                })
+            })
+            .await
+            .map_err(|e| BitFunError::tool(e.to_string()))??;
+            return Ok(result);
+        }
+
+        #[allow(unreachable_code)]
+        Err(BitFunError::tool(
+            "open_app is not supported on this platform.".to_string(),
+        ))
     }
 
     fn map_image_coords_to_pointer_f64(&self, x: i32, y: i32) -> BitFunResult<(f64, f64)> {

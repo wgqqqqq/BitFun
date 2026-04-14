@@ -122,8 +122,8 @@ The **primary model cannot consume images** in tool results — **do not** use *
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["click_element", "move_to_text", "click", "mouse_move", "scroll", "drag", "locate", "key_chord", "type_text", "pointer_move_rel", "wait"],
-                    "description": "The action to perform. **Primary model is text-only — no `screenshot` or `click_label`.** **ACTION PRIORITY:** 1) Use Bash tool for CLI/terminal/system commands first. 2) Prefer `key_chord` for shortcuts/navigation. 3) Only when above fail: `click_element` (AX) → `move_to_text` (OCR, use `move_to_text_match_index` when multiple hits listed) → `mouse_move` (**`use_screen_coordinates`: true** with globals) + `click`. Never guess coordinates."
+                    "enum": ["click_element", "move_to_text", "click", "mouse_move", "scroll", "drag", "locate", "key_chord", "type_text", "pointer_move_rel", "wait", "open_app", "run_apple_script"],
+                    "description": "The action to perform. **Primary model is text-only — no `screenshot` or `click_label`.** **ACTION PRIORITY:** 1) Use Bash tool for CLI/terminal/system commands first. 2) **`open_app`** to launch apps. **`run_apple_script`** for AppleScript (macOS). 3) Prefer `key_chord` for shortcuts/navigation. 4) Only when above fail: `click_element` (AX) → `move_to_text` (OCR, use `move_to_text_match_index` when multiple hits listed) → `mouse_move` (**`use_screen_coordinates`: true** with globals) + `click`. Never guess coordinates."
                 },
                 "x": { "type": "integer", "description": "For `mouse_move` and `drag`: X in **global display** units when **`use_screen_coordinates`: true** (required). **Not** for `click`." },
                 "y": { "type": "integer", "description": "For `mouse_move` and `drag`: Y in **global display** units when **`use_screen_coordinates`: true** (required). **Not** for `click`." },
@@ -156,7 +156,11 @@ The **primary model cannot consume images** in tool results — **do not** use *
                 "role_substring": { "type": "string", "description": "For `locate`, `click_element`: case-insensitive substring on AXRole." },
                 "identifier_contains": { "type": "string", "description": "For `locate`, `click_element`: case-insensitive substring on AXIdentifier." },
                 "max_depth": { "type": "integer", "minimum": 1, "maximum": 200, "description": "For `locate`, `click_element`: max BFS depth (default 48)." },
-                "filter_combine": { "type": "string", "enum": ["all", "any"], "description": "For `locate`, `click_element`: `all` (default, AND) or `any` (OR) for filter combination." }
+                "filter_combine": { "type": "string", "enum": ["all", "any"], "description": "For `locate`, `click_element`: `all` (default, AND) or `any` (OR) for filter combination." },
+                "app_name": { "type": "string", "description": "For `open_app`: the application name to launch." },
+                "script": { "type": "string", "description": "For `run_apple_script`: the AppleScript code to execute. macOS only." },
+                "scroll_x": { "type": "integer", "description": "For `scroll`: optional global X coordinate to scroll at. Use with `scroll_y`." },
+                "scroll_y": { "type": "integer", "description": "For `scroll`: optional global Y coordinate to scroll at. Use with `scroll_x`." }
             },
             "required": ["action"],
             "additionalProperties": false
@@ -516,6 +520,7 @@ The **primary model cannot consume images** in tool results — **do not** use *
             "implicit_confirmation_crop_applied": shot.implicit_confirmation_crop_applied,
             "debug_screenshot_path": debug_rel,
             "som_label_note": som_note,
+            "ui_tree_text": shot.ui_tree_text,
         });
         let shortcut_policy = format!(
             "**Verify step:** after **`click`**, **`key_chord`**, **`type_text`**, **`scroll`**, or **`drag`**, check **`interaction_state.recommend_screenshot_to_verify_last_action`** — when true, call **`screenshot`** next to confirm UI state (Cowork-style). \
@@ -1034,8 +1039,8 @@ impl Tool for ComputerUseTool {
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["screenshot", "click_element", "click_label", "move_to_text", "click", "mouse_move", "scroll", "drag", "locate", "key_chord", "type_text", "pointer_move_rel", "wait"],
-                    "description": "The action to perform. **ACTION PRIORITY:** 1) Use Bash tool for CLI/terminal/system commands (most efficient). 2) Prefer **`key_chord`** for shortcuts/navigation keys over mouse. 3) Only when above fail: `click_element` (AX) → `move_to_text` (OCR, move pointer only) → `click_label` (SoM) → `mouse_move` (globals only, **`use_screen_coordinates`: true**) + `click` (last resort). **`screenshot`** is for observation/confirmation ONLY — never derive mouse coordinates from screenshots. `click` = press at **current pointer only** (no x/y params). `scroll`, `type_text`, `drag`, `pointer_move_rel`, `wait`, `locate` = standard actions."
+                    "enum": ["screenshot", "click_element", "click_label", "move_to_text", "click", "mouse_move", "scroll", "drag", "locate", "key_chord", "type_text", "pointer_move_rel", "wait", "open_app", "run_apple_script"],
+                    "description": "The action to perform. **ACTION PRIORITY:** 1) Use Bash tool for CLI/terminal/system commands (most efficient). 2) **`open_app`** to launch apps by name. **`run_apple_script`** to run AppleScript (macOS). 3) Prefer **`key_chord`** for shortcuts/navigation keys over mouse. 4) Only when above fail: `click_element` (AX) → `move_to_text` (OCR, move pointer only) → `click_label` (SoM) → `mouse_move` (globals only, **`use_screen_coordinates`: true**) + `click` (last resort). **`screenshot`** is for observation/confirmation ONLY — never derive mouse coordinates from screenshots. `click` = press at **current pointer only** (no x/y params). `scroll` supports optional position (`scroll_x`/`scroll_y`). `type_text`, `drag`, `pointer_move_rel`, `wait`, `locate` = standard actions."
                 },
                 "x": { "type": "integer", "description": "For `mouse_move` and `drag`: X in **global display** units when **`use_screen_coordinates`: true** (required). **Not** for `click`." },
                 "y": { "type": "integer", "description": "For `mouse_move` and `drag`: Y in **global display** units when **`use_screen_coordinates`: true** (required). **Not** for `click`." },
@@ -1075,7 +1080,11 @@ impl Tool for ComputerUseTool {
                 "screenshot_crop_half_extent_native": { "type": "integer", "minimum": 0, "description": "For `screenshot`: half-size of point crop in native pixels (default 250)." },
                 "screenshot_navigate_quadrant": { "type": "string", "enum": ["top_left", "top_right", "bottom_left", "bottom_right"], "description": "For `screenshot`: zoom into quadrant. Repeat until `quadrant_navigation_click_ready` is true." },
                 "screenshot_reset_navigation": { "type": "boolean", "description": "For `screenshot`: reset to full display before this capture." },
-                "screenshot_implicit_center": { "type": "string", "enum": ["mouse", "text_caret"], "description": "For `screenshot` when `requires_fresh_screenshot_before_click` / `requires_fresh_screenshot_before_enter` is true: center the implicit ~500×500 on the mouse (`mouse`, default) or on the focused text control (`text_caret`, macOS AX; falls back to mouse). Applies to the **first** confirmation capture too. Ignored when you set `screenshot_crop_center_*` / `screenshot_navigate_quadrant` / `screenshot_reset_navigation`." }
+                "screenshot_implicit_center": { "type": "string", "enum": ["mouse", "text_caret"], "description": "For `screenshot` when `requires_fresh_screenshot_before_click` / `requires_fresh_screenshot_before_enter` is true: center the implicit ~500×500 on the mouse (`mouse`, default) or on the focused text control (`text_caret`, macOS AX; falls back to mouse). Applies to the **first** confirmation capture too. Ignored when you set `screenshot_crop_center_*` / `screenshot_navigate_quadrant` / `screenshot_reset_navigation`." },
+                "app_name": { "type": "string", "description": "For `open_app`: the application name to launch (e.g. \"Safari\", \"WeChat\", \"Visual Studio Code\")." },
+                "script": { "type": "string", "description": "For `run_apple_script`: the AppleScript code to execute via `osascript`. macOS only." },
+                "scroll_x": { "type": "integer", "description": "For `scroll`: optional global X coordinate to move pointer before scrolling. Use with `scroll_y`. Requires `use_screen_coordinates`: true." },
+                "scroll_y": { "type": "integer", "description": "For `scroll`: optional global Y coordinate to move pointer before scrolling. Use with `scroll_x`. Requires `use_screen_coordinates`: true." }
             },
             "required": ["action"],
             "additionalProperties": false
@@ -1532,6 +1541,15 @@ impl Tool for ComputerUseTool {
                         "scroll requires non-zero delta_x and/or delta_y".to_string(),
                     ));
                 }
+                // Positional scroll: move pointer to target before scrolling.
+                let scroll_pos_x = input.get("scroll_x").and_then(|v| v.as_i64());
+                let scroll_pos_y = input.get("scroll_y").and_then(|v| v.as_i64());
+                if let (Some(sx), Some(sy)) = (scroll_pos_x, scroll_pos_y) {
+                    host_ref
+                        .mouse_move_global_f64(sx as f64, sy as f64)
+                        .await?;
+                    host_ref.wait_ms(30).await?;
+                }
                 host_ref.scroll(dx, dy).await?;
                 let input_coords = json!({ "kind": "scroll", "delta_x": dx, "delta_y": dy });
                 let body = computer_use_augment_result_json(
@@ -1758,6 +1776,104 @@ impl Tool for ComputerUseTool {
                     Some(format!("Waited {} ms.", ms)),
                 )])
             }
+            "open_app" => {
+                let app_name = input
+                    .get("app_name")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        BitFunError::tool("open_app requires `app_name` parameter.".to_string())
+                    })?;
+                let result = host_ref.open_app(app_name).await?;
+                let body = computer_use_augment_result_json(
+                    host_ref,
+                    json!({
+                        "success": result.success,
+                        "action": "open_app",
+                        "app_name": result.app_name,
+                        "process_id": result.process_id,
+                        "error_message": result.error_message,
+                    }),
+                    None,
+                )
+                .await;
+                let summary = if result.success {
+                    format!(
+                        "Opened app '{}'{}.",
+                        result.app_name,
+                        result
+                            .process_id
+                            .map(|p| format!(" (PID {})", p))
+                            .unwrap_or_default()
+                    )
+                } else {
+                    format!(
+                        "Failed to open '{}': {}",
+                        result.app_name,
+                        result.error_message.as_deref().unwrap_or("unknown error")
+                    )
+                };
+                Ok(vec![ToolResult::ok(body, Some(summary))])
+            }
+
+            "run_apple_script" => {
+                let script = input
+                    .get("script")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        BitFunError::tool(
+                            "run_apple_script requires `script` parameter.".to_string(),
+                        )
+                    })?;
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = script;
+                    return Err(BitFunError::tool(
+                        "run_apple_script is only available on macOS.".to_string(),
+                    ));
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let script_owned = script.to_string();
+                    let output = tokio::task::spawn_blocking(move || {
+                        std::process::Command::new("/usr/bin/osascript")
+                            .args(["-e", &script_owned])
+                            .output()
+                    })
+                    .await
+                    .map_err(|e| BitFunError::tool(format!("spawn: {}", e)))?
+                    .map_err(|e| BitFunError::tool(format!("osascript: {}", e)))?;
+
+                    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                    let success = output.status.success();
+
+                    let body = computer_use_augment_result_json(
+                        host_ref,
+                        json!({
+                            "success": success,
+                            "action": "run_apple_script",
+                            "stdout": stdout,
+                            "stderr": stderr,
+                        }),
+                        None,
+                    )
+                    .await;
+                    let summary = if success {
+                        format!(
+                            "AppleScript executed.{}",
+                            if stdout.is_empty() {
+                                String::new()
+                            } else {
+                                format!(" Output: {}", &stdout[..stdout.len().min(200)])
+                            }
+                        )
+                    } else {
+                        format!("AppleScript error: {}", &stderr[..stderr.len().min(200)])
+                    };
+                    Ok(vec![ToolResult::ok(body, Some(summary))])
+                }
+            }
+
             _ => Err(BitFunError::tool(format!("Unknown action: {}", action))),
         }
     }

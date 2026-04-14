@@ -65,3 +65,5 @@ tests/e2e/reports/
 .cursor/rules/no-cargo.mdc
 
 ASSETS_LICENSES.md
+
+external/

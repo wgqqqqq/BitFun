@@ -98,6 +98,7 @@ mod tests {
             }),
             som_labels: vec![],
             implicit_confirmation_crop_applied: false,
+            ui_tree_text: None,
         };
         let interaction = ComputerUseInteractionState {
             click_ready: false,

@@ -26,6 +26,10 @@ unsafe extern "C" {
         attribute: CFStringRef,
         value: *mut CFTypeRef,
     ) -> i32;
+    fn AXUIElementCopyActionNames(
+        element: AXUIElementRef,
+        names: *mut CFArrayRef,
+    ) -> i32;
     fn AXUIElementCopyElementAtPosition(
         element: AXUIElementRef,
         x: f32,
@@ -118,6 +122,56 @@ unsafe fn ax_value_to_size(v: CFTypeRef) -> Option<CGSize> {
         return None;
     }
     Some(sz)
+}
+
+unsafe fn ax_copy_action_names(elem: AXUIElementRef) -> Vec<String> {
+    let mut names: CFArrayRef = std::ptr::null();
+    let st = AXUIElementCopyActionNames(elem, &mut names);
+    if st != 0 || names.is_null() {
+        return vec![];
+    }
+    let arr = CFArray::<*const c_void>::wrap_under_create_rule(names);
+    let mut res = Vec::new();
+    for i in 0..arr.len() {
+        if let Some(s) = arr.get(i) {
+            let p = *s;
+            if !p.is_null() {
+                let cf_str = CFString::wrap_under_get_rule(p as CFStringRef);
+                res.push(cf_str.to_string());
+            }
+        }
+    }
+    res
+}
+
+unsafe fn is_ax_enabled(elem: AXUIElementRef) -> bool {
+    let Some(val) = ax_copy_attr(elem, "AXEnabled") else {
+        return false;
+    };
+    let mut enabled: bool = false;
+    let type_id = core_foundation::base::CFGetTypeID(val);
+    if type_id == core_foundation::boolean::CFBooleanGetTypeID() {
+        let b = val as core_foundation::boolean::CFBooleanRef;
+        enabled = core_foundation::number::CFBooleanGetValue(b);
+    }
+    ax_release(val);
+    enabled
+}
+
+unsafe fn read_value_desc(
+    elem: AXUIElementRef,
+) -> (Option<String>, Option<String>) {
+    let value = ax_copy_attr(elem, "AXValue").and_then(|v| {
+        let s = cfstring_to_string(v);
+        ax_release(v);
+        s
+    });
+    let desc = ax_copy_attr(elem, "AXDescription").and_then(|v| {
+        let s = cfstring_to_string(v);
+        ax_release(v);
+        s
+    });
+    (value, desc)
 }
 
 unsafe fn read_role_title_id(
@@ -457,49 +511,56 @@ pub fn locate_ui_element_center(
     )
 }
 
-/// Roles considered "interactive" for Set-of-Mark labeling.
-const SOM_INTERACTIVE_ROLES: &[&str] = &[
-    "AXButton",
-    "AXTextField",
-    "AXTextArea",
-    "AXCheckBox",
-    "AXRadioButton",
-    "AXPopUpButton",
-    "AXComboBox",
-    "AXSlider",
-    "AXLink",
-    "AXMenuItem",
-    "AXMenuBarItem",
-    "AXTab",
-    "AXDisclosureTriangle",
-    "AXIncrementor",
-    "AXColorWell",
-    "AXToolbarButton",
-    "AXToggle",
-    "AXSwitch",
-    "AXSegmentedControl",
-    "AXCell",
-    "AXImage",
-    "AXStaticText",
-];
 
-fn is_interactive_role(role: &str) -> bool {
-    SOM_INTERACTIVE_ROLES
-        .iter()
-        .any(|r| role.contains(r) || r.contains(role))
+unsafe fn is_ax_interactive(elem: AXUIElementRef, role: &str) -> bool {
+    let actions = ax_copy_action_names(elem);
+    let interactive_actions = [
+        "AXPress",
+        "AXShowMenu",
+        "AXIncrement",
+        "AXDecrement",
+        "AXConfirm",
+        "AXCancel",
+        "AXRaise",
+        "AXSetValue",
+        "AXScrollLeftByPage",
+        "AXScrollRightByPage",
+        "AXScrollUpByPage",
+        "AXScrollDownByPage",
+    ];
+
+    let mut has_interactive = false;
+    for a in &actions {
+        if interactive_actions.contains(&a.as_str()) {
+            has_interactive = true;
+            break;
+        }
+    }
+
+    if actions.iter().any(|a| a == "AXSetValue") && role == "AXTextField" {
+        return is_ax_enabled(elem);
+    }
+
+    if actions.iter().any(|a| a == "AXPress") && (role == "AXButton" || role == "AXLink") {
+        return is_ax_enabled(elem);
+    }
+
+    has_interactive
 }
 
 /// Enumerate all visible interactive elements in the frontmost app's AX tree.
 /// Returns up to `max_elements` SomElement entries with 1-based label numbers.
-pub fn enumerate_interactive_elements(max_elements: usize) -> Vec<SomElement> {
+pub fn enumerate_interactive_elements(max_elements: usize) -> (Vec<SomElement>, Option<String>) {
     let pid = match frontmost_pid() {
         Ok(p) => p,
-        Err(_) => return vec![],
+        Err(_) => return (vec![], None),
     };
     let root = unsafe { AXUIElementCreateApplication(pid) };
     if root.is_null() {
-        return vec![];
+        return (vec![], None);
     }
+
+    let win_bounds = frontmost_window_bounds_global().ok();
 
     struct BfsItem {
         ax: AXUIElementRef,
@@ -537,20 +598,31 @@ pub fn enumerate_interactive_elements(max_elements: usize) -> Vec<SomElement> {
         let role = role_s.as_deref().unwrap_or("");
 
         // Check if this element is interactive and visible
-        if is_interactive_role(role) {
+        if unsafe { is_ax_interactive(cur.ax, role) } {
             let hidden = unsafe { is_ax_hidden(cur.ax) };
             if !hidden {
                 if let Some((gx, gy, bl, bt, bw, bh)) = unsafe { element_frame_global(cur.ax) } {
                     // Filter: reasonable size (not a giant container, not tiny)
                     if bw >= 4.0 && bh >= 4.0 && bw <= 2000.0 && bh <= 1000.0 {
-                        // Filter: on-screen (center must be non-negative)
-                        if gx >= 0.0 && gy >= 0.0 {
+                        // Filter: on-screen (intersect with main window bounds if available, else gx >= 0)
+                        let mut on_screen = gx >= 0.0 && gy >= 0.0;
+                        if let Some((wx, wy, ww, wh)) = win_bounds {
+                            let wx_f = wx as f64;
+                            let wy_f = wy as f64;
+                            let ww_f = ww as f64;
+                            let wh_f = wh as f64;
+                            on_screen = bl < wx_f + ww_f && bl + bw > wx_f && bt < wy_f + wh_f && bt + bh > wy_f;
+                        }
+                        if on_screen {
+                            let (val_s, desc_s) = unsafe { read_value_desc(cur.ax) };
                             let label = results.len() as u32 + 1;
                             results.push(SomElement {
                                 label,
                                 role: role.to_string(),
                                 title: title_s.clone().filter(|s| !s.is_empty()),
                                 identifier: id_s.clone().filter(|s| !s.is_empty()),
+                                value: val_s.filter(|s| !s.is_empty()),
+                                description: desc_s.filter(|s| !s.is_empty()),
                                 global_center_x: gx,
                                 global_center_y: gy,
                                 bounds_left: bl,
@@ -607,7 +679,28 @@ pub fn enumerate_interactive_elements(max_elements: usize) -> Vec<SomElement> {
         }
     }
 
-    results
+    let mut ui_tree_lines = Vec::new();
+    for el in &results {
+        let mut attrs = String::new();
+        if let Some(t) = &el.title {
+            attrs.push_str(&format!(" title: \"{}\"", t));
+        }
+        if let Some(v) = &el.value {
+            attrs.push_str(&format!(" value: \"{}\"", v));
+        }
+        if let Some(d) = &el.description {
+            attrs.push_str(&format!(" description: \"{}\"", d));
+        }
+        attrs.push_str(&format!(" (w,h): \"{}, {}\"", el.bounds_width as i32, el.bounds_height as i32));
+        ui_tree_lines.push(format!("{}[:]<{} {}>", el.label, el.role, attrs.trim_start()));
+    }
+    let ui_tree_text = if ui_tree_lines.is_empty() {
+        None
+    } else {
+        Some(ui_tree_lines.join("\n"))
+    };
+
+    (results, ui_tree_text)
 }
 
 unsafe fn ax_parent_context_line(elem: AXUIElementRef) -> Option<String> {

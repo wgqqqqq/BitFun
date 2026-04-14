@@ -175,6 +175,9 @@ pub struct ComputerScreenshot {
     /// When non-empty, the model can use `click_label` with a label number instead of coordinates.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub som_labels: Vec<SomElement>,
+    /// Condensed text representation of the UI tree, focusing on interactive elements (inspired by TuriX-CUA).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui_tree_text: Option<String>,
     /// Desktop: this JPEG was produced by implicit 500×500 confirmation crop (mouse or text focus center).
     #[serde(default, skip_serializing_if = "is_false")]
     pub implicit_confirmation_crop_applied: bool,
@@ -472,8 +475,8 @@ pub trait ComputerUseHost: Send + Sync + std::fmt::Debug {
     /// Enumerate all visible interactive UI elements for Set-of-Mark (SoM) overlay.
     /// Returns elements suitable for numbered label annotation on screenshots.
     /// Default: empty (no SoM support).
-    async fn enumerate_som_elements(&self) -> Vec<SomElement> {
-        vec![]
+    async fn enumerate_som_elements(&self) -> (Vec<SomElement>, Option<String>) {
+        (vec![], None)
     }
 
     /// Record a completed action for loop detection and history tracking.
@@ -501,6 +504,25 @@ pub trait ComputerUseHost: Send + Sync + std::fmt::Debug {
     fn get_action_history(&self) -> Vec<ActionRecord> {
         vec![]
     }
+
+    /// Launch a macOS/Windows/Linux application by name and return its PID.
+    /// Default: unsupported. Desktop host overrides with platform-specific implementation.
+    async fn open_app(&self, _app_name: &str) -> BitFunResult<OpenAppResult> {
+        Err(BitFunError::tool(
+            "open_app is not available on this host.".to_string(),
+        ))
+    }
+}
+
+/// Result of launching an application via [`ComputerUseHost::open_app`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAppResult {
+    pub app_name: String,
+    pub success: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_id: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
 }
 
 /// A visible interactive UI element discovered via the accessibility tree,
@@ -517,6 +539,12 @@ pub struct SomElement {
     /// AX identifier, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identifier: Option<String>,
+    /// AX value, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    /// AX description, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// Global screen center X (host pointer space).
     pub global_center_x: f64,
     /// Global screen center Y (host pointer space).

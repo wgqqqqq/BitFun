@@ -451,6 +451,7 @@ pub fn crop_shot_to_ocr_region(
         }),
         som_labels: vec![],
         implicit_confirmation_crop_applied: false,
+        ui_tree_text: None,
     })
 }
 
