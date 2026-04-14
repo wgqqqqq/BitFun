@@ -706,7 +706,7 @@ async fn apply_active_workspace_context(
             .await
         {
             warn!(
-                "Failed to open codgrep repository session: path={}, error={}",
+                "Failed to open workspace search repository session: path={}, error={}",
                 workspace_info.root_path.display(),
                 e
             );
@@ -2897,7 +2897,7 @@ pub async fn start_search_file_contents_stream(
 
             result.map_err(|error| {
                 bitfun_core::util::errors::BitFunError::service(format!(
-                    "Failed to search file contents via codgrep: {}",
+                    "Failed to search file contents via workspace search: {}",
                     error
                 ))
             })
