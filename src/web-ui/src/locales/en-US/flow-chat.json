@@ -325,7 +325,8 @@
     "btwBackTooltipWithTurn": "Go back to the source session: {{title}} (Turn {{turn}})",
     "btwBackTooltipWithoutTurn": "Go back to the source session: {{title}}",
     "btwCreateTooltip": "Start a quick side question",
-    "agentTypeTooltip": "{{type}}: {{path}}"
+    "agentTypeTooltip": "{{type}}: {{path}}",
+    "backToAgenticOs": "Back to Agentic OS"
   },
   "sessionFilesBadge": {
     "files": "files",
@@ -409,7 +410,6 @@
       "creatingAgent": "Creating {{agent}}...",
       "createdAgent": "Created {{agent}}",
       "actionFailed": "Agent dispatch failed",
-      "clickToSwitch": "Switch to this agent session",
       "listingWorkspaces": "Listing workspaces...",
       "foundWorkspaces": "Found {{count}} workspace(s)",
       "checkingStatus": "Checking agent status...",
@@ -419,6 +419,8 @@
       "sessionCount": "{{count}} session(s)",
       "noWorkspaces": "No recent workspaces found",
       "noSessions": "No sessions created in Agentic OS yet",
+      "sessionRunning": "Session running",
+      "sessionIdle": "Idle",
       "globalTag": "Global"
     },
     "file": {

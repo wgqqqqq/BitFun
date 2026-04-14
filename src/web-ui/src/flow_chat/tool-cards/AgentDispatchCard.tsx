@@ -6,11 +6,13 @@
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
-import { Bot, Check, ChevronRight, Loader2, X, ExternalLink } from 'lucide-react';
+import { Bot, Check, X, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { DotMatrixLoader } from '@/component-library';
 import type { ToolCardProps } from '../types/flow-chat';
 import { BaseToolCard } from './BaseToolCard';
 import { openMainSession } from '../services/openBtwSession';
+import { useSessionsExecutionRunning } from '../hooks/useSessionsExecutionRunning';
 import { useToolCardHeightContract } from './useToolCardHeightContract';
 import './AgentDispatchCard.scss';
 
@@ -97,7 +99,7 @@ function AgentBadge({ agentType }: { agentType: string }) {
 // ---------------------------------------------------------------------------
 
 export const AgentDispatchCard: React.FC<ToolCardProps> = React.memo(
-  ({ toolItem, sessionId }) => {
+  ({ toolItem }) => {
     const { t } = useTranslation('flow-chat');
     const { toolCall, toolResult, status } = toolItem;
     const toolId = toolItem.id ?? toolCall?.id;
@@ -123,12 +125,29 @@ export const AgentDispatchCard: React.FC<ToolCardProps> = React.memo(
     const workspace = resultData?.workspace ?? inputData.workspace ?? '';
     const createdSessionId = resultData?.session_id;
 
+    const trackedSessionIds = useMemo(() => {
+      const ids: string[] = [];
+      if (createdSessionId) ids.push(createdSessionId);
+      if (action === 'status') {
+        for (const s of resultData?.sessions ?? []) {
+          if (s.session_id) ids.push(s.session_id);
+        }
+      }
+      return ids;
+    }, [action, createdSessionId, resultData?.sessions]);
+
+    const runningSessionIds = useSessionsExecutionRunning(trackedSessionIds);
+
     // Status icon
     const statusIcon = useMemo(() => {
       switch (status) {
         case 'running':
         case 'streaming':
-          return <Loader2 className="animate-spin agent-dispatch-status-icon" size={13} />;
+          return (
+            <span className="agent-dispatch-dot-matrix-wrap agent-dispatch-dot-matrix-wrap--rail">
+              <DotMatrixLoader size="small" className="agent-dispatch-dot-matrix" />
+            </span>
+          );
         case 'completed':
           return <Check size={13} className="agent-dispatch-status-icon agent-dispatch-status-icon--done" />;
         case 'error':
@@ -138,6 +157,22 @@ export const AgentDispatchCard: React.FC<ToolCardProps> = React.memo(
           return null;
       }
     }, [status]);
+
+    /** After create completes, the rail reflects the child session execution state (live). */
+    const headerRailIcon = useMemo(() => {
+      if (action === 'create' && status === 'completed' && createdSessionId) {
+        if (runningSessionIds.has(createdSessionId)) {
+          const runLabel = t('toolCards.agentDispatch.sessionRunning');
+          return (
+            <span className="agent-dispatch-dot-matrix-wrap agent-dispatch-dot-matrix-wrap--rail" title={runLabel}>
+              <DotMatrixLoader size="small" className="agent-dispatch-dot-matrix" />
+            </span>
+          );
+        }
+        return <Check size={13} className="agent-dispatch-status-icon agent-dispatch-status-icon--done" />;
+      }
+      return statusIcon;
+    }, [action, createdSessionId, runningSessionIds, status, statusIcon, t]);
 
     // Header text
     const headerLine = useMemo(() => {
@@ -173,18 +208,8 @@ export const AgentDispatchCard: React.FC<ToolCardProps> = React.memo(
     const canNavigate =
       action === 'create' && status === 'completed' && !!createdSessionId;
 
-    const handleNavigate = useCallback(
-      async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!createdSessionId) return;
-        await openMainSession(createdSessionId);
-      },
-      [createdSessionId]
-    );
-
     const handleCardClick = useCallback(
       (e: React.MouseEvent) => {
-        if ((e.target as HTMLElement).closest('.agent-dispatch-nav-btn')) return;
         if (action === 'create' && status === 'completed' && createdSessionId) {
           void openMainSession(createdSessionId);
           return;
@@ -246,23 +271,49 @@ export const AgentDispatchCard: React.FC<ToolCardProps> = React.memo(
         if (!sessions.length) return <div className="agent-dispatch-empty">{t('toolCards.agentDispatch.noSessions')}</div>;
         return (
           <div className="agent-dispatch-session-list">
-            {sessions.map((s, i) => (
-              <div
-                key={i}
-                className={`agent-dispatch-session-item${s.session_id ? ' agent-dispatch-session-item--clickable' : ''}`}
-                onClick={s.session_id ? () => openMainSession(s.session_id!) : undefined}
-              >
-                <span className="agent-dispatch-session-name">{s.session_name ?? s.session_id}</span>
-                {s.agent_type && <AgentBadge agentType={s.agent_type} />}
-                {s.session_id && <ExternalLink size={11} className="agent-dispatch-session-link-icon" />}
-              </div>
-            ))}
+            {sessions.map((s, i) => {
+              const sid = s.session_id;
+              const isRunning = sid ? runningSessionIds.has(sid) : false;
+              return (
+                <div
+                  key={sid ?? `row-${i}`}
+                  className={`agent-dispatch-session-item${sid ? ' agent-dispatch-session-item--clickable' : ''}`}
+                  onClick={sid ? () => openMainSession(sid) : undefined}
+                >
+                  <div className="agent-dispatch-session-item-main">
+                    <span className="agent-dispatch-session-name">{s.session_name ?? s.session_id}</span>
+                    {s.agent_type && <AgentBadge agentType={s.agent_type} />}
+                  </div>
+                  <div className="agent-dispatch-session-item-rail">
+                    {sid ? (
+                      isRunning ? (
+                        <span
+                          className="agent-dispatch-dot-matrix-wrap"
+                          title={t('toolCards.agentDispatch.sessionRunning')}
+                        >
+                          <DotMatrixLoader size="small" className="agent-dispatch-dot-matrix" />
+                        </span>
+                      ) : (
+                        <span
+                          className="agent-dispatch-session-idle-dot"
+                          title={t('toolCards.agentDispatch.sessionIdle')}
+                          aria-label={t('toolCards.agentDispatch.sessionIdle')}
+                        />
+                      )
+                    ) : null}
+                    {sid ? (
+                      <ExternalLink size={11} className="agent-dispatch-session-link-icon" aria-hidden />
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         );
       }
 
       return null;
-    }, [action, createdSessionId, resultData, t, workspace]);
+    }, [action, createdSessionId, resultData, runningSessionIds, t, workspace]);
 
     const hasExpandedContent = !!expandedContent;
 
@@ -271,7 +322,7 @@ export const AgentDispatchCard: React.FC<ToolCardProps> = React.memo(
       <div className="agent-dispatch-header-wrapper">
         {/* Left icon column */}
         <div className="agent-dispatch-icon-col">
-          <Bot size={16} className="agent-dispatch-icon" />
+          <Bot size={22} className="agent-dispatch-icon" />
         </div>
 
         {/* Main content */}
@@ -289,19 +340,9 @@ export const AgentDispatchCard: React.FC<ToolCardProps> = React.memo(
           )}
         </div>
 
-        {/* Right rail: status + optional navigate button */}
+        {/* Right rail: status (whole card click navigates when create completed) */}
         <div className="agent-dispatch-rail">
-          {statusIcon}
-          {canNavigate && (
-            <button
-              type="button"
-              className="agent-dispatch-nav-btn"
-              onClick={handleNavigate}
-              title={t('toolCards.agentDispatch.clickToSwitch')}
-            >
-              <ChevronRight size={14} />
-            </button>
-          )}
+          {headerRailIcon}
         </div>
       </div>
     );

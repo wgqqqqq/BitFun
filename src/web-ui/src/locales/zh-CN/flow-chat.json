@@ -325,7 +325,8 @@
     "btwBackTooltipWithTurn": "返回到来源会话：{{title}}（第 {{turn}} 轮）",
     "btwBackTooltipWithoutTurn": "返回到来源会话：{{title}}",
     "btwCreateTooltip": "快速发起一个侧问",
-    "agentTypeTooltip": "{{type}}：{{path}}"
+    "agentTypeTooltip": "{{type}}：{{path}}",
+    "backToAgenticOs": "返回 Agentic OS 会话"
   },
   "sessionFilesBadge": {
     "files": "文件",
@@ -401,7 +402,6 @@
       "creatingAgent": "正在创建 {{agent}}...",
       "createdAgent": "已创建 {{agent}}",
       "actionFailed": "Agent 调度失败",
-      "clickToSwitch": "切换到此 Agent 会话",
       "listingWorkspaces": "正在列出工作区...",
       "foundWorkspaces": "找到 {{count}} 个工作区",
       "checkingStatus": "正在检查 Agent 状态...",
@@ -411,6 +411,8 @@
       "sessionCount": "{{count}} 个会话",
       "noWorkspaces": "没有最近打开的工作区",
       "noSessions": "Agentic OS 中尚未创建任何会话",
+      "sessionRunning": "会话执行中",
+      "sessionIdle": "空闲",
       "globalTag": "全局"
     },
     "file": {

@@ -1,4 +1,4 @@
-//! Dispatcher Mode - Agentic OS scheduling center
+//! Dispatcher Mode — BitFun Agentic OS scheduling center
 
 use super::Agent;
 use async_trait::async_trait;
@@ -55,7 +55,7 @@ impl Agent for DispatcherMode {
     }
 
     fn description(&self) -> &str {
-        "Agentic OS scheduling center - understands user intent and creates the right agents to execute tasks"
+        "BitFun Agentic OS Dispatcher: understands intent, selects workspaces, and creates the right agent sessions to execute tasks"
     }
 
     fn prompt_template_name(&self, _model_name: Option<&str>) -> &str {

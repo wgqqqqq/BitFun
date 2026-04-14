@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, CornerUpLeft, List, FolderOpen, Bot } from 'lucide-react';
+import { ChevronDown, ChevronUp, CornerUpLeft, List, FolderOpen, Bot, Orbit } from 'lucide-react';
 import { Tooltip, IconButton } from '@/component-library';
 import { useTranslation } from 'react-i18next';
 import { globalEventBus } from '@/infrastructure/event-bus';
@@ -35,6 +35,8 @@ export interface FlowChatHeaderProps {
   workspacePath?: string;
   /** Agent type / mode for the active session. */
   agentType?: string;
+  /** Session mode string (e.g. Dispatcher) for label/icon rules. */
+  sessionMode?: string;
   /** BTW child-session origin metadata. */
   btwOrigin?: Session['btwOrigin'] | null;
   /** BTW parent session title. */
@@ -47,21 +49,27 @@ export interface FlowChatHeaderProps {
   onJumpToPreviousTurn?: () => void;
   /** Jump to the next turn. */
   onJumpToNextTurn?: () => void;
+  /** When set with handler, show left icon to switch to Agentic OS (Dispatcher). */
+  showBackToAgenticOs?: boolean;
+  onOpenAgenticOs?: () => void;
 }
 export const FlowChatHeader: React.FC<FlowChatHeaderProps> = ({
   currentTurn,
   totalTurns,
-  currentUserMessage,
+  currentUserMessage: _currentUserMessage,
   visible,
   sessionId,
   workspacePath,
   agentType,
+  sessionMode,
   btwOrigin,
   btwParentTitle = '',
   turns = [],
   onJumpToTurn,
   onJumpToPreviousTurn,
   onJumpToNextTurn,
+  showBackToAgenticOs,
+  onOpenAgenticOs,
 }) => {
   const { t } = useTranslation('flow-chat');
   const [isTurnListOpen, setIsTurnListOpen] = useState(false);
@@ -72,6 +80,16 @@ export const FlowChatHeader: React.FC<FlowChatHeaderProps> = ({
     if (!workspacePath) return '';
     return workspacePath.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? workspacePath;
   }, [workspacePath]);
+
+  const isDispatcherSession =
+    sessionMode === 'Dispatcher' || sessionMode?.toLowerCase() === 'dispatcher';
+  const displayAgentLabel = isDispatcherSession
+    ? t('session.dispatcher')
+    : agentType;
+  const tooltipAgentLine = isDispatcherSession
+    ? t('session.dispatcher')
+    : agentType;
+  const showAgentTypeIcon = !!displayAgentLabel && !isDispatcherSession;
 
   const parentLabel = btwParentTitle || t('btw.parent', { defaultValue: 'parent session' });
   const backTooltip = btwOrigin?.parentTurnIndex
@@ -90,9 +108,8 @@ export const FlowChatHeader: React.FC<FlowChatHeaderProps> = ({
   const untitledTurnLabel = t('flowChatHeader.untitledTurn', {
     defaultValue: 'Untitled turn',
   });
-  const turnBadgeLabel = t('flowChatHeader.turnBadge', {
-    current: currentTurn,
-    defaultValue: `Turn ${currentTurn}`,
+  const backToAgenticOsTooltip = t('flowChatHeader.backToAgenticOs', {
+    defaultValue: 'Back to Agentic OS',
   });
   const previousTurnDisabled = currentTurn <= 1;
   const nextTurnDisabled = currentTurn <= 0 || currentTurn >= totalTurns;
@@ -179,21 +196,34 @@ export const FlowChatHeader: React.FC<FlowChatHeaderProps> = ({
   return (
     <div className="flowchat-header">
       <div className="flowchat-header__actions flowchat-header__actions--left">
+        {showBackToAgenticOs && onOpenAgenticOs ? (
+          <IconButton
+            className="flowchat-header__agentic-os-back"
+            variant="ghost"
+            size="xs"
+            onClick={onOpenAgenticOs}
+            tooltip={backToAgenticOsTooltip}
+            aria-label={backToAgenticOsTooltip}
+            data-testid="flowchat-header-agentic-os-back"
+          >
+            <Orbit size={14} />
+          </IconButton>
+        ) : null}
         <SessionFilesBadge sessionId={sessionId} />
       </div>
 
       <Tooltip
-        content={[agentType, workspacePath].filter(Boolean).join(': ')}
+        content={[tooltipAgentLine, workspacePath].filter(Boolean).join(': ')}
         placement="bottom"
       >
         <div className="flowchat-header__info">
-          {agentType ? (
-            <span className="flowchat-header__agent-type">
-              <Bot size={11} />
-              <span>{agentType}</span>
+          {displayAgentLabel ? (
+            <span className={`flowchat-header__agent-type${isDispatcherSession ? ' flowchat-header__agent-type--plain' : ''}`}>
+              {showAgentTypeIcon ? <Bot size={11} /> : null}
+              <span>{displayAgentLabel}</span>
             </span>
           ) : null}
-          {agentType && workspaceName ? (
+          {displayAgentLabel && workspaceName ? (
             <span className="flowchat-header__info-sep">/</span>
           ) : null}
           {workspaceName ? (

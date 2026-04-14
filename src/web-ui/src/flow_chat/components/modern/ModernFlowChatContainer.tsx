@@ -22,6 +22,7 @@ import { useVirtualItems, useActiveSession, useVisibleTurnInfo, type VisibleTurn
 import type { FlowChatConfig } from '../../types/flow-chat';
 import type { LineRange } from '@/component-library';
 import { useWorkspaceContext } from '@/infrastructure/contexts/WorkspaceContext';
+import { openDispatcherSession } from '@/flow_chat/services/openDispatcherSession';
 import './ModernFlowChatContainer.scss';
 
 interface ModernFlowChatContainerProps {
@@ -50,7 +51,11 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
   const autoPinnedSessionIdRef = useRef<string | null>(null);
   const virtualListRef = useRef<VirtualMessageListRef>(null);
   const chatScopeRef = useRef<HTMLDivElement>(null);
-  const { workspacePath } = useWorkspaceContext();
+  const { workspacePath, assistantWorkspacesList } = useWorkspaceContext();
+  const defaultAssistantWorkspace = useMemo(
+    () => assistantWorkspacesList.find(w => !w.assistantId) ?? assistantWorkspacesList[0] ?? null,
+    [assistantWorkspacesList]
+  );
   const { btwOrigin, btwParentTitle } = useFlowChatSessionRelationship(activeSession);
   const {
     exploreGroupStates,
@@ -217,6 +222,21 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
     handleJumpToTurn(nextTurn.turnId);
   }, [effectiveVisibleTurnInfo, handleJumpToTurn, turnSummaries]);
 
+  const isDispatcherSession =
+    activeSession?.mode === 'Dispatcher' || activeSession?.mode?.toLowerCase() === 'dispatcher';
+
+  const handleOpenAgenticOs = useCallback(async () => {
+    try {
+      await openDispatcherSession({
+        assistantWorkspace: defaultAssistantWorkspace
+          ? { rootPath: defaultAssistantWorkspace.rootPath, id: defaultAssistantWorkspace.id }
+          : null,
+      });
+    } catch {
+      /* ignore */
+    }
+  }, [defaultAssistantWorkspace]);
+
   useShortcut(
     'chat.stopGeneration',
     { key: 'Escape', scope: 'chat', allowInInput: true },
@@ -268,12 +288,15 @@ export const ModernFlowChatContainer: React.FC<ModernFlowChatContainerProps> = (
           sessionId={activeSession?.sessionId}
           workspacePath={activeSession?.mode === 'Dispatcher' ? undefined : activeSession?.workspacePath}
           agentType={activeSession?.mode}
+          sessionMode={activeSession?.mode}
           btwOrigin={btwOrigin}
           btwParentTitle={btwParentTitle}
           turns={turnSummaries}
           onJumpToTurn={handleJumpToTurn}
           onJumpToPreviousTurn={handleJumpToPreviousTurn}
           onJumpToNextTurn={handleJumpToNextTurn}
+          showBackToAgenticOs={!!activeSession && !isDispatcherSession}
+          onOpenAgenticOs={handleOpenAgenticOs}
         />
 
         <div className="modern-flowchat-container__messages">

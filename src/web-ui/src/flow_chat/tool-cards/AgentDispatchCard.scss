@@ -3,10 +3,17 @@
 .agent-dispatch-card {
   cursor: pointer;
 
+  /* Let left/right divider lines span the full header row (no vertical gap vs card padding) */
+  &.base-tool-card-wrapper .base-tool-card-header {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
   /* Header layout — mirrors TaskToolDisplay */
   .agent-dispatch-header-wrapper {
     display: flex;
-    align-items: center;
+    /* Stretch all columns to the same height so left/right dividers run the full header row */
+    align-items: stretch;
     gap: 8px;
     width: 100%;
     min-height: 24px;
@@ -18,38 +25,42 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    align-self: stretch;
     padding-right: 10px;
     margin-right: 4px;
     position: relative;
-    color: var(--color-text-secondary, #6b7280);
 
     &::after {
       content: '';
       position: absolute;
       right: 0;
-      top: calc(-1 * var(--tool-card-header-pad-y, 10px));
-      bottom: calc(-1 * var(--tool-card-header-pad-y, 10px));
+      top: 0;
+      bottom: 0;
       width: 0;
       border-right: 1px solid var(--border-base);
       pointer-events: none;
     }
 
     .agent-dispatch-icon {
-      width: 16px;
-      height: 16px;
+      width: 22px;
+      height: 22px;
       flex-shrink: 0;
-      color: #6366f1;
+      color: var(--border-base);
     }
   }
 
-  /* Main content area */
+  /* Main content area — vertical padding lives here so icon/rail borders run edge-to-edge */
   .agent-dispatch-body {
     display: flex;
     flex-direction: column;
     justify-content: center;
     flex: 1;
     min-width: 0;
+    min-height: 0;
     gap: 2px;
+    padding-top: var(--tool-card-header-pad-y, 10px);
+    padding-bottom: var(--tool-card-header-pad-y, 10px);
+    box-sizing: border-box;
   }
 
   .agent-dispatch-header-main {
@@ -94,17 +105,31 @@
     border: 1px solid color-mix(in srgb, var(--agent-badge-color, #6366f1) 28%, transparent);
   }
 
-  /* Right rail: status icon + nav button */
+  /* Right rail — border spans full row height (parent align-items: stretch) */
   .agent-dispatch-rail {
     display: flex;
     align-items: center;
     gap: 4px;
     flex-shrink: 0;
+    align-self: stretch;
     margin-left: 4px;
     padding-left: 8px;
     border-left: 1px solid var(--border-base);
-    align-self: stretch;
     justify-content: center;
+  }
+
+  /* DotMatrixLoader — matches ProcessingIndicator / TaskDetailPanel */
+  .agent-dispatch-dot-matrix-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-secondary, rgba(107, 114, 128, 0.85));
+
+    &--rail {
+      /* header rail: vertically align with 13px lucide icons */
+      min-height: 13px;
+    }
   }
 
   .agent-dispatch-status-icon {
@@ -116,29 +141,6 @@
 
     &--error {
       color: var(--color-danger-text, #f87171);
-    }
-  }
-
-  /* Navigate-to-session button */
-  .agent-dispatch-nav-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2px 4px;
-    border: none;
-    border-radius: 4px;
-    background: transparent;
-    color: #6366f1;
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
-
-    &:hover {
-      background: color-mix(in srgb, #6366f1 14%, transparent);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--color-accent-500, #60a5fa);
-      outline-offset: 1px;
     }
   }
 
@@ -247,7 +249,7 @@
   .agent-dispatch-session-item {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     padding: 6px 8px;
     border-radius: 5px;
     background: var(--color-bg-subtle, rgba(255, 255, 255, 0.04));
@@ -263,14 +265,39 @@
     }
   }
 
+  .agent-dispatch-session-item-main {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .agent-dispatch-session-item-rail {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
   .agent-dispatch-session-name {
     font-size: 12px;
     color: var(--color-text-primary);
-    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .agent-dispatch-session-idle-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-text-muted, #9ca3af);
+    opacity: 0.65;
+    flex-shrink: 0;
   }
 
   .agent-dispatch-session-link-icon {

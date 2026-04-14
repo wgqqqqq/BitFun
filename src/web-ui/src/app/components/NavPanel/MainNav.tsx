@@ -25,7 +25,7 @@ import { useMyAgentStore } from '../../scenes/my-agent/myAgentStore';
 import { useMiniAppCatalogSync } from '../../scenes/miniapps/hooks/useMiniAppCatalogSync';
 import { flowChatStore } from '@/flow_chat/store/FlowChatStore';
 import { flowChatManager } from '@/flow_chat/services/FlowChatManager';
-import { openMainSession } from '@/flow_chat/services/openBtwSession';
+import { openDispatcherSession } from '@/flow_chat/services/openDispatcherSession';
 import { useWorkspaceContext } from '@/infrastructure/contexts/WorkspaceContext';
 import { createLogger } from '@/shared/utils/logger';
 import { WorkspaceKind } from '@/shared/types';
@@ -100,27 +100,11 @@ const MainNav: React.FC<MainNavProps> = ({
 
   const handleOpenDispatcher = useCallback(async () => {
     try {
-      // Find an existing Dispatcher session across all loaded sessions (mode field, not config.agentType)
-      const storeState = flowChatStore.getState();
-      const existing = Array.from(storeState.sessions.values())
-        .filter((s) => s.mode === 'Dispatcher')
-        .sort((a, b) => (b.lastActiveAt ?? b.createdAt ?? 0) - (a.lastActiveAt ?? a.createdAt ?? 0))[0] ?? null;
-      if (existing) {
-        // Switch directly — no workspace change needed, Dispatcher is nav-level
-        await openMainSession(existing.sessionId);
-        return;
-      }
-      // No existing Dispatcher: create in the assistant workspace for persistence
-      // The workspace is just storage — no need to activate it
-      const globalWs = defaultAssistantWorkspace;
-      if (globalWs) {
-        await flowChatManager.createChatSession(
-          { workspacePath: globalWs.rootPath, workspaceId: globalWs.id },
-          'Dispatcher'
-        );
-      } else {
-        await flowChatManager.createChatSession({}, 'Dispatcher');
-      }
+      await openDispatcherSession({
+        assistantWorkspace: defaultAssistantWorkspace
+          ? { rootPath: defaultAssistantWorkspace.rootPath, id: defaultAssistantWorkspace.id }
+          : null,
+      });
     } catch (err) {
       log.error('Failed to open Dispatcher', err);
     }

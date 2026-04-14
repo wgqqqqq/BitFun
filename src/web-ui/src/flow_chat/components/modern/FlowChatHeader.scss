@@ -47,7 +47,8 @@
     -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
   }
 
-  &__btw-back {
+  &__btw-back,
+  &__agentic-os-back {
     flex: 0 0 auto;
 
     &:not(:disabled):hover {
@@ -194,6 +195,10 @@
   &__agent-type {
     flex-shrink: 0;
     text-transform: capitalize;
+
+    &--plain {
+      text-transform: none;
+    }
   }
 
   &__workspace {
