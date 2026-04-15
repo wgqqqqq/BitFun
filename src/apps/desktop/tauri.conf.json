@@ -18,7 +18,7 @@
     ],
     "resources": {
       "../../mobile-web/dist": "mobile-web/dist",
-      "../../../build-resources/codgrep": "codgrep"
+      "../../../resources/codgrep": "codgrep"
     },
     "linux": {
       "deb": {
