@@ -170,6 +170,21 @@ export class PanelController implements IdeController {
           },
         };
 
+      case 'generative-widget':
+        return {
+          ...baseDetail,
+          title: config.title || 'Widget Preview',
+          data: {
+            ...baseDetail.data,
+            widgetId: config.data?.widgetId,
+            title: config.title || config.data?.title,
+            widgetCode: config.data?.widgetCode,
+            width: config.data?.width,
+            height: config.data?.height,
+            isSvg: config.data?.isSvg,
+          },
+        };
+
       case 'code-editor':
       case 'file-viewer':
       case 'markdown-editor':
@@ -206,6 +221,8 @@ export class PanelController implements IdeController {
         return config.file_path || t('common:tabs.markdown');
       case 'mermaid-editor':
         return config.title || t('common:tabs.mermaidChart');
+      case 'generative-widget':
+        return config.title || 'Widget Preview';
       default:
         return panelType;
     }

@@ -55,8 +55,9 @@
 
 .user-message-item__content {
   flex: 1;
+  font-size: var(--flowchat-font-size-base);
   font-weight: 500;
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--color-text-primary, #e0e0e0);
   white-space: pre-wrap;
   display: -webkit-box;
