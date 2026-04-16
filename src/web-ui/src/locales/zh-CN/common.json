@@ -390,7 +390,12 @@
     },
     "moreOptions": "更多选项",
     "multimodalTools": "多模态工具",
-    "notifications": "通知"
+    "notifications": "通知",
+    "menuPanel": {
+      "subtitle": "今天想做些什么？",
+      "agenticOSDesc": "调度并管理 AI 任务",
+      "assistantDesc": "有个性、有记忆的对话伙伴"
+    }
   },
   "window": {
     "minimize": "最小化",
@@ -847,6 +852,31 @@
   },
   "overlay": {
     "returnToAgenticOS": "返回 Agentic OS"
+  },
+  "taskDetailScene": {
+    "pageTitle": "任务中心",
+    "pageSubtitle": "管理所有 Agentic OS 会话与已打开的工作区",
+    "searchPlaceholder": "搜索会话或工作区…",
+    "runHistoryTitle": "运行历史",
+    "openedWorkspacesTitle": "已打开工作区",
+    "workspaceSessionsTitle": "工作区会话",
+    "filterAll": "全部",
+    "allWorkspaces": "全部工作区",
+    "openWorkspace": "打开工作区",
+    "closeWorkspace": "关闭工作区",
+    "badgeCurrent": "当前",
+    "emptyRunHistoryFiltered": "无匹配的运行历史",
+    "emptyRunHistory": "暂无运行历史",
+    "emptyWorkspacesFiltered": "无匹配的工作区",
+    "emptyWorkspaces": "暂无已打开工作区",
+    "emptyWorkspaceSessions": "暂无工作区会话",
+    "emptySessionsFiltered": "无匹配的会话",
+    "runningCount": "{{count}} 运行中",
+    "relativeJustNow": "刚刚",
+    "relativeMinutesAgo": "{{count}} 分钟前",
+    "relativeHoursAgo": "{{count}} 小时前",
+    "relativeDaysAgo": "{{count}} 天前",
+    "fallbackTaskTitle": "任务 {{id}}"
   },
   "loading": {
     "scenes": "正在加载场景"

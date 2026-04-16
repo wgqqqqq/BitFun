@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import {
   SquareTerminal,
   ChevronUp,
+  ChevronRight,
   Orbit,
   RotateCcw,
   User,
@@ -30,6 +31,8 @@ import '../NavPanel.scss';
 
 const log = createLogger('PersistentFooterActions');
 
+const GREETING_KEYS = ['greetingMorning', 'greetingAfternoon', 'greetingEvening', 'greetingNight'] as const;
+
 const PersistentFooterActions: React.FC = () => {
   const { t } = useI18n('common');
   const { openOverlay, toggleOverlay } = useOverlayManager();
@@ -53,6 +56,18 @@ const PersistentFooterActions: React.FC = () => {
   );
 
   const isAssistantWorkspaceActive = currentWorkspace?.workspaceKind === WorkspaceKind.Assistant;
+
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    const key = h >= 5 && h < 12
+      ? GREETING_KEYS[0]
+      : h >= 12 && h < 18
+        ? GREETING_KEYS[1]
+        : h >= 18 && h < 22
+          ? GREETING_KEYS[2]
+          : GREETING_KEYS[3];
+                    return t(`welcome.${key}`);
+  }, [t]);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuClosing, setMenuClosing] = useState(false);
@@ -192,114 +207,163 @@ const PersistentFooterActions: React.FC = () => {
                   className={`bitfun-nav-panel__footer-menu${menuClosing ? ' is-closing' : ''}`}
                   role="menu"
                 >
-                  {/* ── 导航操作区 ── */}
-                  <button
-                    type="button"
-                    className={`bitfun-nav-panel__footer-menu-item${isAssistantActive ? ' is-active' : ''}`}
-                    role="menuitem"
-                    onClick={handleOpenAssistant}
-                  >
-                    <User size={14} />
-                    <span>{t('nav.items.persona')}</span>
-                  </button>
+                  {/* ── 左栏：导航操作区 ── */}
+                  <div className="bitfun-nav-panel__footer-menu-col-actions">
+                    <button
+                      type="button"
+                      className={`bitfun-nav-panel__footer-menu-item${isAssistantActive ? ' is-active' : ''}`}
+                      role="menuitem"
+                      onClick={handleOpenAssistant}
+                    >
+                      <User size={14} />
+                      <span>{t('nav.items.persona')}</span>
+                    </button>
 
-                  {/* ── 智能应用（二级菜单）── */}
-                  <button
-                    type="button"
-                    className={`bitfun-nav-panel__footer-menu-item bitfun-nav-panel__footer-menu-item--expandable${isAAppSubOpen ? ' is-open' : ''}`}
-                    role="menuitem"
-                    aria-expanded={isAAppSubOpen}
-                    onClick={() => setIsAAppSubOpen(v => !v)}
-                  >
-                    <AppWindow size={14} />
-                    <span>{t('nav.sections.agentApp')}</span>
-                    <ChevronDown
-                      size={13}
-                      className={`bitfun-nav-panel__footer-menu-chevron${isAAppSubOpen ? ' is-open' : ''}`}
-                      aria-hidden="true"
-                    />
-                  </button>
+                    {/* ── 智能应用（二级菜单）── */}
+                    <button
+                      type="button"
+                      className={`bitfun-nav-panel__footer-menu-item bitfun-nav-panel__footer-menu-item--expandable${isAAppSubOpen ? ' is-open' : ''}`}
+                      role="menuitem"
+                      aria-expanded={isAAppSubOpen}
+                      onClick={() => setIsAAppSubOpen(v => !v)}
+                    >
+                      <AppWindow size={14} />
+                      <span>{t('nav.sections.agentApp')}</span>
+                      <ChevronDown
+                        size={13}
+                        className={`bitfun-nav-panel__footer-menu-chevron${isAAppSubOpen ? ' is-open' : ''}`}
+                        aria-hidden="true"
+                      />
+                    </button>
 
-                  <div className={`bitfun-nav-panel__footer-menu-sublist${isAAppSubOpen ? ' is-open' : ''}`}>
-                    <div>
+                    <div className={`bitfun-nav-panel__footer-menu-sublist${isAAppSubOpen ? ' is-open' : ''}`}>
+                      <div>
+                        <button
+                          type="button"
+                          className={`bitfun-nav-panel__footer-menu-item bitfun-nav-panel__footer-menu-item--sub${isAgentsActive ? ' is-active' : ''}`}
+                          role="menuitem"
+                          onClick={handleOpenAgents}
+                        >
+                          <Users size={13} />
+                          <span>{t('nav.items.agents')}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className={`bitfun-nav-panel__footer-menu-item bitfun-nav-panel__footer-menu-item--sub${isMiniAppsActive ? ' is-active' : ''}`}
+                          role="menuitem"
+                          onClick={handleOpenMiniApps}
+                        >
+                          <AppWindow size={13} />
+                          <span>{t('nav.items.miniApps')}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="bitfun-nav-panel__footer-menu-item bitfun-nav-panel__footer-menu-item--sub is-disabled"
+                          role="menuitem"
+                          disabled
+                        >
+                          <MonitorPlay size={13} />
+                          <span>{t('nav.items.driveAApp')}</span>
+                          <span className="bitfun-nav-panel__top-action-badge">{t('nav.badges.comingSoon')}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={`bitfun-nav-panel__footer-menu-item${isSkillsActive ? ' is-active' : ''}`}
+                      role="menuitem"
+                      onClick={handleOpenSkills}
+                    >
+                      <Puzzle size={14} />
+                      <span>{t('nav.items.skills')}</span>
+                    </button>
+
+                    <div className="bitfun-nav-panel__footer-menu-divider" />
+
+                    <button
+                      type="button"
+                      className={`bitfun-nav-panel__footer-menu-item${isShellActive ? ' is-active' : ''}`}
+                      role="menuitem"
+                      aria-pressed={isShellActive}
+                      onClick={handleOpenShell}
+                    >
+                      <SquareTerminal size={14} />
+                      <span>{t('scenes.shell')}</span>
+                    </button>
+
+                    <div className="bitfun-nav-panel__footer-menu-row bitfun-nav-panel__footer-menu-row--bottom">
                       <button
                         type="button"
-                        className={`bitfun-nav-panel__footer-menu-item bitfun-nav-panel__footer-menu-item--sub${isAgentsActive ? ' is-active' : ''}`}
+                        className="bitfun-nav-panel__footer-menu-item bitfun-nav-panel__footer-menu-item--row-main"
                         role="menuitem"
-                        onClick={handleOpenAgents}
+                        onClick={handleOpenDispatcher}
                       >
-                        <Users size={13} />
-                        <span>{t('nav.items.agents')}</span>
+                        <Orbit size={14} />
+                        <span>{t('nav.sessions.dispatcherShort')}</span>
                       </button>
-
-                      <button
-                        type="button"
-                        className={`bitfun-nav-panel__footer-menu-item bitfun-nav-panel__footer-menu-item--sub${isMiniAppsActive ? ' is-active' : ''}`}
-                        role="menuitem"
-                        onClick={handleOpenMiniApps}
-                      >
-                        <AppWindow size={13} />
-                        <span>{t('nav.items.miniApps')}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="bitfun-nav-panel__footer-menu-item bitfun-nav-panel__footer-menu-item--sub is-disabled"
-                        role="menuitem"
-                        disabled
-                      >
-                        <MonitorPlay size={13} />
-                        <span>{t('nav.items.driveAApp')}</span>
-                        <span className="bitfun-nav-panel__top-action-badge">{t('nav.badges.comingSoon')}</span>
-                      </button>
+                      <Tooltip content={t('nav.tooltips.newDispatcherSession')} placement="right">
+                        <button
+                          type="button"
+                          className="bitfun-nav-panel__footer-menu-item-inline-btn"
+                          onClick={handleNewDispatcherSession}
+                          aria-label={t('nav.tooltips.newDispatcherSession')}
+                        >
+                          <RotateCcw size={12} />
+                        </button>
+                      </Tooltip>
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    className={`bitfun-nav-panel__footer-menu-item${isSkillsActive ? ' is-active' : ''}`}
-                    role="menuitem"
-                    onClick={handleOpenSkills}
-                  >
-                    <Puzzle size={14} />
-                    <span>{t('nav.items.skills')}</span>
-                  </button>
+                  {/* ── 竖向分隔线 ── */}
+                  <div className="bitfun-nav-panel__footer-menu-col-sep" aria-hidden="true" />
 
-                  <div className="bitfun-nav-panel__footer-menu-divider" />
+                  {/* ── 右栏：打招呼 / 推荐区 ── */}
+                  <div className="bitfun-nav-panel__footer-menu-greeting">
+                    <p className="bitfun-nav-panel__footer-menu-greeting-title">{greeting}</p>
+                    <p className="bitfun-nav-panel__footer-menu-greeting-sub">{t('nav.menuPanel.subtitle')}</p>
 
-                  <button
-                    type="button"
-                    className={`bitfun-nav-panel__footer-menu-item${isShellActive ? ' is-active' : ''}`}
-                    role="menuitem"
-                    aria-pressed={isShellActive}
-                    onClick={handleOpenShell}
-                  >
-                    <SquareTerminal size={14} />
-                    <span>{t('scenes.shell')}</span>
-                  </button>
-
-                  <div className="bitfun-nav-panel__footer-menu-divider" />
-
-                  <div className="bitfun-nav-panel__footer-menu-row">
-                    <button
-                      type="button"
-                      className="bitfun-nav-panel__footer-menu-item bitfun-nav-panel__footer-menu-item--row-main"
-                      role="menuitem"
-                      onClick={handleOpenDispatcher}
-                    >
-                      <Orbit size={14} />
-                      <span>{t('nav.sessions.dispatcherShort')}</span>
-                    </button>
-                    <Tooltip content={t('nav.tooltips.newDispatcherSession')} placement="right">
+                    <div className="bitfun-nav-panel__footer-menu-greeting-actions">
                       <button
                         type="button"
-                        className="bitfun-nav-panel__footer-menu-item-inline-btn"
-                        onClick={handleNewDispatcherSession}
-                        aria-label={t('nav.tooltips.newDispatcherSession')}
+                        className="bitfun-nav-panel__footer-menu-greeting-action"
+                        onClick={handleOpenDispatcher}
                       >
-                        <RotateCcw size={12} />
+                        <span className="bitfun-nav-panel__footer-menu-greeting-action-icon">
+                          <Orbit size={15} />
+                        </span>
+                        <span className="bitfun-nav-panel__footer-menu-greeting-action-body">
+                          <span className="bitfun-nav-panel__footer-menu-greeting-action-title">
+                            {t('nav.sessions.dispatcherShort')}
+                          </span>
+                          <span className="bitfun-nav-panel__footer-menu-greeting-action-desc">
+                            {t('nav.menuPanel.agenticOSDesc')}
+                          </span>
+                        </span>
+                        <ChevronRight size={12} className="bitfun-nav-panel__footer-menu-greeting-action-arrow" aria-hidden="true" />
                       </button>
-                    </Tooltip>
+
+                      <button
+                        type="button"
+                        className="bitfun-nav-panel__footer-menu-greeting-action"
+                        onClick={handleOpenAssistant}
+                      >
+                        <span className="bitfun-nav-panel__footer-menu-greeting-action-icon">
+                          <User size={15} />
+                        </span>
+                        <span className="bitfun-nav-panel__footer-menu-greeting-action-body">
+                          <span className="bitfun-nav-panel__footer-menu-greeting-action-title">
+                            {t('nav.items.persona')}
+                          </span>
+                          <span className="bitfun-nav-panel__footer-menu-greeting-action-desc">
+                            {t('nav.menuPanel.assistantDesc')}
+                          </span>
+                        </span>
+                        <ChevronRight size={12} className="bitfun-nav-panel__footer-menu-greeting-action-arrow" aria-hidden="true" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </>

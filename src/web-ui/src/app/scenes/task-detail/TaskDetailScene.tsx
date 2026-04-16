@@ -36,23 +36,12 @@ import { stateMachineManager } from '@/flow_chat/state-machine';
 import { SessionExecutionState } from '@/flow_chat/state-machine/types';
 import type { FlowChatState, Session } from '@/flow_chat/types/flow-chat';
 import { createLogger } from '@/shared/utils/logger';
+import { useI18n } from '@/infrastructure/i18n';
 import './TaskDetailScene.scss';
 
 const log = createLogger('TaskDetailScene');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-const getSessionTitle = (s: Session): string =>
-  s.title?.trim() || `Task ${s.sessionId.slice(0, 6)}`;
-
-function formatRelativeTime(ts: number): string {
-  const diff = Date.now() - ts;
-  if (diff < 60_000) return '刚刚';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`;
-  if (diff < 7 * 86_400_000) return `${Math.floor(diff / 86_400_000)} 天前`;
-  return new Date(ts).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-}
 
 type ExecMode = 'code' | 'cowork' | 'claw';
 
@@ -94,12 +83,23 @@ interface SessionRowProps {
   statusVariant: StatusVariant;
   showMode?: boolean;
   workspaceName?: string;
+  formatRelativeTime: (ts: number) => string;
   onOpen: (s: Session) => void;
 }
 
 const SessionRow: React.FC<SessionRowProps> = ({
-  session, isHighlighted, statusVariant, showMode = true, workspaceName, onOpen,
+  session,
+  isHighlighted,
+  statusVariant,
+  showMode = true,
+  workspaceName,
+  formatRelativeTime: formatRel,
+  onOpen,
 }) => {
+  const { t } = useI18n('common');
+  const rowTitle =
+    session.title?.trim() ||
+    t('taskDetailScene.fallbackTaskTitle', { id: session.sessionId.slice(0, 6) });
   const isRunning = statusVariant === 'running';
   const isDispatcher = session.mode?.toLowerCase() === 'dispatcher';
   const mode = resolveExecMode(session);
@@ -129,7 +129,7 @@ const SessionRow: React.FC<SessionRowProps> = ({
       </span>
 
       <span className="tds-row__body">
-        <span className="tds-row__title">{getSessionTitle(session)}</span>
+        <span className="tds-row__title">{rowTitle}</span>
         <span className="tds-row__meta">
           {showMode && !isDispatcher && (
             <span className={`tds-row__badge tds-row__badge--${mode}`}>{MODE_LABELS[mode]}</span>
@@ -141,7 +141,7 @@ const SessionRow: React.FC<SessionRowProps> = ({
             </span>
           )}
           <span className="tds-row__meta-dot">·</span>
-          <span className="tds-row__meta-item"><Clock size={9} />{formatRelativeTime(session.lastActiveAt)}</span>
+          <span className="tds-row__meta-item"><Clock size={9} />{formatRel(session.lastActiveAt)}</span>
           <span className="tds-row__meta-dot">·</span>
           <span className="tds-row__meta-item"><MessageSquare size={9} />{session.dialogTurns.length}</span>
         </span>
@@ -155,13 +155,6 @@ const SessionRow: React.FC<SessionRowProps> = ({
 // ── Mode filter type ──────────────────────────────────────────────────────────
 
 type ModeFilter = 'all' | ExecMode;
-
-const MODE_CHIPS: Array<{ id: ModeFilter; label: string }> = [
-  { id: 'all', label: '全部' },
-  { id: 'code', label: 'Code' },
-  { id: 'cowork', label: 'Cowork' },
-  { id: 'claw', label: 'Claw' },
-];
 
 function normalizeQuery(q: string): string {
   return q.trim().toLowerCase();
@@ -190,7 +183,9 @@ const WorkspaceRow: React.FC<WorkspaceRowProps> = ({
   isFilterSelected,
   onSelect,
   onClose,
-}) => (
+}) => {
+  const { t } = useI18n('common');
+  return (
   <div
     className={[
       'tds-ws-row',
@@ -208,7 +203,7 @@ const WorkspaceRow: React.FC<WorkspaceRowProps> = ({
     <span className="tds-ws-row__body">
       <span className="tds-ws-row__title">{workspace.name}</span>
       <span className="tds-ws-row__meta">
-        {isActiveWorkspace && <span className="tds-ws-row__badge">当前</span>}
+        {isActiveWorkspace && <span className="tds-ws-row__badge">{t('taskDetailScene.badgeCurrent')}</span>}
         <span className="tds-ws-row__meta-item">
           <MessageSquare size={9} />
           {sessionCount}
@@ -219,23 +214,59 @@ const WorkspaceRow: React.FC<WorkspaceRowProps> = ({
       size="xs"
       variant="ghost"
       className="tds-ws-row__close"
-      tooltip="关闭工作区"
+      tooltip={t('taskDetailScene.closeWorkspace')}
       onClick={e => onClose(e, workspace.id)}
-      aria-label="关闭工作区"
+      aria-label={t('taskDetailScene.closeWorkspace')}
     >
       <X size={11} />
     </IconButton>
   </div>
-);
+  );
+};
 
 // ── Main Scene ────────────────────────────────────────────────────────────────
 
 const TaskDetailScene: React.FC = () => {
+  const { t, formatDate } = useI18n('common');
   const taskDetailSessionId = useSessionCapsuleStore(s => s.taskDetailSessionId);
   const closeTaskDetail = useSessionCapsuleStore(s => s.closeTaskDetail);
   const closeOverlay = useOverlayStore(s => s.closeOverlay);
 
   const { openedWorkspacesList, setActiveWorkspace, currentWorkspace, openWorkspace, closeWorkspaceById } = useWorkspaceContext();
+
+  const formatRelativeTime = useCallback(
+    (ts: number) => {
+      const diff = Date.now() - ts;
+      if (diff < 60_000) return t('taskDetailScene.relativeJustNow');
+      if (diff < 3_600_000) {
+        return t('taskDetailScene.relativeMinutesAgo', { count: Math.floor(diff / 60_000) });
+      }
+      if (diff < 86_400_000) {
+        return t('taskDetailScene.relativeHoursAgo', { count: Math.floor(diff / 3_600_000) });
+      }
+      if (diff < 7 * 86_400_000) {
+        return t('taskDetailScene.relativeDaysAgo', { count: Math.floor(diff / 86_400_000) });
+      }
+      return formatDate(new Date(ts), { month: 'short', day: 'numeric' });
+    },
+    [t, formatDate]
+  );
+
+  const sessionDisplayTitle = useCallback(
+    (s: Session) =>
+      s.title?.trim() || t('taskDetailScene.fallbackTaskTitle', { id: s.sessionId.slice(0, 6) }),
+    [t]
+  );
+
+  const modeChips = useMemo<Array<{ id: ModeFilter; label: string }>>(
+    () => [
+      { id: 'all', label: t('taskDetailScene.filterAll') },
+      { id: 'code', label: 'Code' },
+      { id: 'cowork', label: 'Cowork' },
+      { id: 'claw', label: 'Claw' },
+    ],
+    [t]
+  );
 
   const [flowChatState, setFlowChatState] = useState<FlowChatState>(() => flowChatStore.getState());
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set());
@@ -270,9 +301,9 @@ const TaskDetailScene: React.FC = () => {
   const dispatcherSessions = useMemo(
     () => Array.from(flowChatState.sessions.values())
       .filter(s => s.mode?.toLowerCase() === 'dispatcher')
-      .filter(s => matchesQuery(getSessionTitle(s), qNorm))
+      .filter(s => matchesQuery(sessionDisplayTitle(s), qNorm))
       .sort(compareSessionsForDisplay),
-    [flowChatState.sessions, qNorm]
+    [flowChatState.sessions, qNorm, sessionDisplayTitle]
   );
 
   // Execution sessions tied to an opened workspace only
@@ -303,10 +334,10 @@ const TaskDetailScene: React.FC = () => {
 
   const wsSelectOptions = useMemo<SelectOption[]>(
     () => [
-      { label: '全部工作区', value: 'all' },
+      { label: t('taskDetailScene.allWorkspaces'), value: 'all' },
       ...openedWorkspacesList.map(ws => ({ label: ws.name, value: ws.id })),
     ],
-    [openedWorkspacesList]
+    [openedWorkspacesList, t]
   );
 
   const showWorkspaceLabelsOnSessions = openedWorkspacesList.length > 1;
@@ -318,14 +349,14 @@ const TaskDetailScene: React.FC = () => {
       if (wsFilter !== 'all' && workspace.id !== wsFilter) return false;
       if (
         qNorm &&
-        !matchesQuery(getSessionTitle(session), qNorm) &&
+        !matchesQuery(sessionDisplayTitle(session), qNorm) &&
         !matchesQuery(workspace.name, qNorm)
       ) {
         return false;
       }
       return true;
     });
-  }, [execSessions, modeFilter, wsFilter, qNorm]);
+  }, [execSessions, modeFilter, wsFilter, qNorm, sessionDisplayTitle]);
 
   const runningExecCount = useMemo(
     () => filteredExec.filter(({ session }) => runningIds.has(session.sessionId)).length,
@@ -380,12 +411,11 @@ const TaskDetailScene: React.FC = () => {
     <div className="tds">
       <div className="tds-layout">
 
-        {/* ── Left: title + search box + dual panes ───────────────────── */}
+        {/* ── Left: title + search + dual panes (2×2 grid aligns OS |工作区 headers) ─ */}
         <div className="tds-layout__left">
-
           <div className="tds-left-header">
-            <h1 className="tds-left-header__title">任务中心</h1>
-            <p className="tds-left-header__subtitle">管理所有 Agentic OS 会话与已打开的工作区</p>
+            <h1 className="tds-left-header__title">{t('taskDetailScene.pageTitle')}</h1>
+            <p className="tds-left-header__subtitle">{t('taskDetailScene.pageSubtitle')}</p>
           </div>
 
           <div className="tds-search-wrap">
@@ -394,85 +424,89 @@ const TaskDetailScene: React.FC = () => {
               size="large"
               value={listQuery}
               onChange={setListQuery}
-              placeholder="搜索会话或工作区…"
+              placeholder={t('taskDetailScene.searchPlaceholder')}
               clearable
             />
           </div>
 
           <div className="tds-left-split-wrap">
-          <div className="tds-left-split">
-            {/* Agentic OS sessions */}
-            <div className="tds-left-pane">
-              <div className="tds-pane-head">
-                <LayoutDashboard size={12} className="tds-pane-head__icon tds-pane-head__icon--dispatcher" />
-                <span className="tds-pane-head__title">Agentic OS 会话</span>
-                <span className="tds-pane-head__count">{dispatcherSessions.length}</span>
+            <div className="tds-left-split">
+              {/* Row 1 — headers share one grid row so bottom borders align */}
+              <div className="tds-left-pane tds-left-pane--os tds-left-pane--head">
+                <div className="tds-pane-head">
+                  <LayoutDashboard size={12} className="tds-pane-head__icon tds-pane-head__icon--dispatcher" />
+                  <span className="tds-pane-head__title">{t('taskDetailScene.runHistoryTitle')}</span>
+                  <span className="tds-pane-head__count">{dispatcherSessions.length}</span>
+                </div>
               </div>
-              <div className="tds-pane-list">
-                {dispatcherSessions.length === 0 ? (
-                  <div className="tds-empty tds-empty--compact">
-                    <LayoutDashboard size={26} />
-                    <p>{qNorm ? '无匹配的 OS 会话' : '暂无 Agentic OS 会话'}</p>
-                  </div>
-                ) : (
-                  dispatcherSessions.map(s => (
-                    <SessionRow
-                      key={s.sessionId}
-                      session={s}
-                      isHighlighted={s.sessionId === taskDetailSessionId}
-                      statusVariant={getStatusVariant(s, runningIds)}
-                      showMode={false}
-                      onOpen={handleOpenSession}
-                    />
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Opened workspaces */}
-            <div className="tds-left-pane">
-              <div className="tds-pane-head">
-                <FolderOpen size={12} className="tds-pane-head__icon tds-pane-head__icon--ws" />
-                <span className="tds-pane-head__title">已打开工作区</span>
-                <span className="tds-pane-head__count">{filteredWorkspaces.length}</span>
-                <FilterPill
-                  label="全部"
-                  active={wsFilter === 'all'}
-                  onClick={() => setWsFilter('all')}
-                  className="tds-pane-head__chip"
-                />
-                <IconButton
-                  size="xs"
-                  variant="ghost"
-                  tooltip="打开工作区"
-                  onClick={handleOpenNewWorkspace}
-                  aria-label="打开工作区"
-                >
-                  <FolderPlus size={12} />
-                </IconButton>
-              </div>
-              <div className="tds-pane-list">
-                {filteredWorkspaces.length === 0 ? (
-                  <div className="tds-empty tds-empty--compact">
-                    <FolderOpen size={26} />
-                    <p>{qNorm ? '无匹配的工作区' : '暂无已打开工作区'}</p>
-                  </div>
-                ) : (
-                  filteredWorkspaces.map(ws => (
-                  <WorkspaceRow
-                    key={ws.id}
-                    workspace={ws}
-                    sessionCount={sessionCountByWorkspaceId.get(ws.id) ?? 0}
-                    isActiveWorkspace={currentWorkspace?.id === ws.id}
-                    isFilterSelected={wsFilter === ws.id}
-                    onSelect={handleWorkspacePaneSelect}
-                    onClose={handleCloseWorkspace}
+              <div className="tds-left-pane tds-left-pane--ws tds-left-pane--head">
+                <div className="tds-pane-head">
+                  <FolderOpen size={12} className="tds-pane-head__icon tds-pane-head__icon--ws" />
+                  <span className="tds-pane-head__title">{t('taskDetailScene.openedWorkspacesTitle')}</span>
+                  <span className="tds-pane-head__count">{filteredWorkspaces.length}</span>
+                  <FilterPill
+                    label={t('taskDetailScene.filterAll')}
+                    active={wsFilter === 'all'}
+                    onClick={() => setWsFilter('all')}
+                    className="tds-pane-head__chip"
                   />
-                  ))
-                )}
+                  <IconButton
+                    size="xs"
+                    variant="ghost"
+                    tooltip={t('taskDetailScene.openWorkspace')}
+                    onClick={handleOpenNewWorkspace}
+                    aria-label={t('taskDetailScene.openWorkspace')}
+                  >
+                    <FolderPlus size={12} />
+                  </IconButton>
+                </div>
+              </div>
+              {/* Row 2 — scrollable lists */}
+              <div className="tds-left-pane tds-left-pane--os tds-left-pane--list">
+                <div className="tds-pane-list">
+                  {dispatcherSessions.length === 0 ? (
+                    <div className="tds-empty tds-empty--compact">
+                      <LayoutDashboard size={26} />
+                      <p>{qNorm ? t('taskDetailScene.emptyRunHistoryFiltered') : t('taskDetailScene.emptyRunHistory')}</p>
+                    </div>
+                  ) : (
+                    dispatcherSessions.map(s => (
+                      <SessionRow
+                        key={s.sessionId}
+                        session={s}
+                        isHighlighted={s.sessionId === taskDetailSessionId}
+                        statusVariant={getStatusVariant(s, runningIds)}
+                        showMode={false}
+                        formatRelativeTime={formatRelativeTime}
+                        onOpen={handleOpenSession}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+              <div className="tds-left-pane tds-left-pane--ws tds-left-pane--list">
+                <div className="tds-pane-list">
+                  {filteredWorkspaces.length === 0 ? (
+                    <div className="tds-empty tds-empty--compact">
+                      <FolderOpen size={26} />
+                      <p>{qNorm ? t('taskDetailScene.emptyWorkspacesFiltered') : t('taskDetailScene.emptyWorkspaces')}</p>
+                    </div>
+                  ) : (
+                    filteredWorkspaces.map(ws => (
+                      <WorkspaceRow
+                        key={ws.id}
+                        workspace={ws}
+                        sessionCount={sessionCountByWorkspaceId.get(ws.id) ?? 0}
+                        isActiveWorkspace={currentWorkspace?.id === ws.id}
+                        isFilterSelected={wsFilter === ws.id}
+                        onSelect={handleWorkspacePaneSelect}
+                        onClose={handleCloseWorkspace}
+                      />
+                    ))
+                  )}
+                </div>
               </div>
             </div>
-          </div>
           </div>
         </div>
 
@@ -481,13 +515,13 @@ const TaskDetailScene: React.FC = () => {
           <div className="tds-rail-shell">
             <div className="tds-rail-head">
               <Code2 size={13} className="tds-rail-head__icon" />
-              <span className="tds-rail-head__title">工作区会话</span>
+              <span className="tds-rail-head__title">{t('taskDetailScene.workspaceSessionsTitle')}</span>
               <span className="tds-rail-head__count">{filteredExec.length}</span>
 
               {runningExecCount > 0 && (
                 <span className="tds-rail-head__running">
                   <Radio size={9} />
-                  {runningExecCount} 运行中
+                  {t('taskDetailScene.runningCount', { count: runningExecCount })}
                 </span>
               )}
 
@@ -502,7 +536,7 @@ const TaskDetailScene: React.FC = () => {
                   />
                 )}
                 <FilterPillGroup>
-                  {MODE_CHIPS.map(chip => (
+                  {modeChips.map(chip => (
                     <FilterPill
                       key={chip.id}
                       label={chip.label}
@@ -518,7 +552,7 @@ const TaskDetailScene: React.FC = () => {
               {filteredExec.length === 0 ? (
                 <div className="tds-empty">
                   <Code2 size={32} />
-                  <p>{execSessions.length === 0 ? '暂无工作区会话' : '无匹配的会话'}</p>
+                  <p>{execSessions.length === 0 ? t('taskDetailScene.emptyWorkspaceSessions') : t('taskDetailScene.emptySessionsFiltered')}</p>
                 </div>
               ) : (
                 filteredExec.map(({ session, workspace }) => (
@@ -529,6 +563,7 @@ const TaskDetailScene: React.FC = () => {
                     statusVariant={getStatusVariant(session, runningIds)}
                     showMode
                     workspaceName={showWorkspaceLabelsOnSessions ? workspace.name : undefined}
+                    formatRelativeTime={formatRelativeTime}
                     onOpen={handleOpenSession}
                   />
                 ))

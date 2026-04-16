@@ -390,7 +390,12 @@
     },
     "moreOptions": "More options",
     "multimodalTools": "Multimodal Tools",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "menuPanel": {
+      "subtitle": "What do you want to work on?",
+      "agenticOSDesc": "Dispatch and manage AI tasks",
+      "assistantDesc": "A persistent, personalized AI companion"
+    }
   },
   "window": {
     "minimize": "Minimize",
@@ -847,6 +852,31 @@
   },
   "overlay": {
     "returnToAgenticOS": "Return to Agentic OS"
+  },
+  "taskDetailScene": {
+    "pageTitle": "Task Center",
+    "pageSubtitle": "Manage Agentic OS sessions and open workspaces",
+    "searchPlaceholder": "Search sessions or workspaces…",
+    "runHistoryTitle": "Run history",
+    "openedWorkspacesTitle": "Open workspaces",
+    "workspaceSessionsTitle": "Workspace sessions",
+    "filterAll": "All",
+    "allWorkspaces": "All workspaces",
+    "openWorkspace": "Open workspace",
+    "closeWorkspace": "Close workspace",
+    "badgeCurrent": "Current",
+    "emptyRunHistoryFiltered": "No matching run history",
+    "emptyRunHistory": "No run history yet",
+    "emptyWorkspacesFiltered": "No matching workspaces",
+    "emptyWorkspaces": "No open workspaces",
+    "emptyWorkspaceSessions": "No workspace sessions yet",
+    "emptySessionsFiltered": "No matching sessions",
+    "runningCount": "{{count}} running",
+    "relativeJustNow": "just now",
+    "relativeMinutesAgo": "{{count}} min ago",
+    "relativeHoursAgo": "{{count}} h ago",
+    "relativeDaysAgo": "{{count}} d ago",
+    "fallbackTaskTitle": "Task {{id}}"
   },
   "loading": {
     "scenes": "Loading scene"

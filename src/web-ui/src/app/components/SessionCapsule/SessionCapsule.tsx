@@ -160,7 +160,14 @@ const SessionCapsule: React.FC = () => {
       .sort(compareSessionsForDisplay);
   }, [runningSessionIds, flowChatState.sessions]);
 
-  const sessionCount = flowChatState.sessions.size;
+  /** Exclude Agentic OS Dispatcher sessions — same filter as SessionsSection / SessionListDialog. */
+  const sessionCount = useMemo(
+    () =>
+      Array.from(flowChatState.sessions.values()).filter(
+        (s) => s.mode?.toLowerCase() !== 'dispatcher'
+      ).length,
+    [flowChatState.sessions]
+  );
 
   const handleSwitchToSession = useCallback(
     async (sessionId: string) => {
