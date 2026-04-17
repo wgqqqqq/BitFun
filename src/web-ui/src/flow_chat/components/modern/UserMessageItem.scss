@@ -158,19 +158,22 @@
   }
 }
 
-// Expanded state: add rounded border for system / human compact rows.
+// Expanded state: show border for system / human compact rows (padding + 1px border
+// match collapsed — see --system/--human — so width does not jump on toggle).
 .user-message-item--expanded {
   &.user-message-item--system,
   &.user-message-item--human {
-    border: 1px solid var(--border-medium);
-    border-radius: 8px;
-    padding: 0.35rem 0.75rem;
     opacity: 1;
 
     .user-message-item__expanded-body {
       max-height: 40vh;
       overflow-y: auto;
     }
+  }
+
+  &.user-message-item--system:not(.user-message-item--failed),
+  &.user-message-item--human:not(.user-message-item--failed) {
+    border-color: var(--border-medium);
   }
 }
 
@@ -182,15 +185,17 @@
 // Compact rows: human (--human) + system-triggered (--system), understated
 // ────────────────────────────────────────────────────────────────────────────
 
-// Human + system-triggered: same compact inline row (no card).
+// Human + system-triggered: same compact inline row (no visible card until expand).
+// Use transparent 1px border + expanded padding always so expand/collapse does not shift width.
 .user-message-item--system,
 .user-message-item--human {
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
   margin: 1rem 3rem 0 3rem;
-  padding: 0.15rem 0;
+  padding: 0.35rem 0.75rem;
   opacity: 0.6;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s ease, border-color 0.2s ease;
 
   &:hover {
     opacity: 1;
@@ -198,6 +203,11 @@
     .user-message-item__copy-btn {
       opacity: 1;
     }
+  }
+
+  // Cancel base `.user-message-item:hover { border-color: ... }` while collapsed (keep invisible frame).
+  &:hover:not(.user-message-item--expanded) {
+    border-color: transparent;
   }
 }
 
@@ -334,9 +344,12 @@
   }
 }
 
-// Compact human row: no dashed frame; mute text only.
-.user-message-item--human.user-message-item--failed {
-  border: none;
+// Compact system / human rows: no dashed frame on failure; mute text only.
+// Keep 1px transparent border (same box as non-failed) to avoid layout jump vs expanded.
+.user-message-item--human.user-message-item--failed,
+.user-message-item--system.user-message-item--failed {
+  border: 1px solid transparent;
+  border-style: solid;
   background: transparent;
 
   .user-message-item__system-content {

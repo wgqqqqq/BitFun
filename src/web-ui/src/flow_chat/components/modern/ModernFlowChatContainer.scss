@@ -49,3 +49,69 @@
     border-top: 1px solid var(--color-border, #3a3a3a);
   }
 }
+
+.modern-flowchat-container--dispatcher {
+  .flowchat-turn-sidebar {
+    border-left: none;
+    background: transparent;
+
+    &--open {
+      border-left: none;
+    }
+
+    &__header {
+      border-bottom: none;
+      background: transparent;
+    }
+  }
+
+  .flowchat-header {
+    background: transparent;
+  }
+
+  .session-files-badge__popover {
+    background: var(--color-bg-primary);
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+
+    &::before {
+      content: none;
+    }
+  }
+
+  .session-file-modifications-bar {
+    background: transparent;
+    border-top: none;
+    border-bottom: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .bitfun-chat-input__box {
+    background: var(--color-bg-primary);
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+
+    &:focus-within,
+    &:hover {
+      background: var(--color-bg-primary);
+      border: none;
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+  }
+
+  .bitfun-chat-input__target-switcher {
+    border-bottom: none;
+  }
+
+  .modern-flowchat-container__input {
+    background: transparent;
+    border-top: none;
+  }
+}

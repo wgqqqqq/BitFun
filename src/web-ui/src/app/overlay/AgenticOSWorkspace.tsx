@@ -14,6 +14,7 @@
 
 import React from 'react';
 import { useOverlayStore } from '../stores/overlayStore';
+import { useHeaderStore } from '../stores/headerStore';
 import { useCurrentWorkspace } from '../../infrastructure/contexts/WorkspaceContext';
 import { useDialogCompletionNotify } from '../hooks/useDialogCompletionNotify';
 import SessionScene from '../scenes/session/SessionScene';
@@ -32,13 +33,17 @@ const AgenticOSWorkspace: React.FC<AgenticOSWorkspaceProps> = ({
   isEntering = false,
 }) => {
   const activeOverlay = useOverlayStore(s => s.activeOverlay);
+  const sessionMode = useHeaderStore((s) => s.sessionContext?.mode);
   const { workspace: currentWorkspace } = useCurrentWorkspace();
   const hasOverlay = activeOverlay !== null;
+  const isDispatcherSession = sessionMode?.toLowerCase() === 'dispatcher';
 
   useDialogCompletionNotify();
 
   return (
-    <div className="agentic-os-workspace">
+    <div
+      className={`agentic-os-workspace${isDispatcherSession ? ' agentic-os-workspace--dispatcher' : ''}`}
+    >
       {/* Content area — single slot visible at a time, no stacking */}
       <div className="agentic-os-workspace__content">
 

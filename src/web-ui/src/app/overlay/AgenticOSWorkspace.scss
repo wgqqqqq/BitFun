@@ -34,6 +34,14 @@
     box-shadow: 0 10px 32px -8px rgba(0, 0, 0, 0.55);
   }
 
+  &--dispatcher {
+    border-radius: 0;
+    border-width: 0;
+    border-color: transparent;
+    box-shadow: none;
+    background: var(--color-bg-primary);
+  }
+
   // ── Content area ───────────────────────────────────────
 
   &__content {
