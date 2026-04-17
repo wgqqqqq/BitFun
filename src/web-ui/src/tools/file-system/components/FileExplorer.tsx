@@ -192,7 +192,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const renderNodeContent = useCallback((node: FileSystemNode, _level: number) => {
     return (
       <div className="bitfun-file-explorer__node-wrapper">
-        <span className={`bitfun-file-explorer__node-name ${node.isCompressed ? 'bitfun-file-explorer__compressed-path' : ''}`}>
+        <span className="bitfun-file-explorer__node-name">
           {node.name}
         </span>
         

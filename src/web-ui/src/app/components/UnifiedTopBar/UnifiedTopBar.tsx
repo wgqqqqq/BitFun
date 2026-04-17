@@ -5,7 +5,7 @@
  * in the scene area) with a single bar spanning the entire window width.
  *
  * Layout (left → right):
- *   [macOS traffic-lights reserve] [Logo▼ menu: toolbar, settings, about]
+ *   [macOS traffic-lights reserve] [Logo▼ menu: toolbar, about]
  *   [Arrow back button (conditional)] [context title] ─drag─
  *   [search trigger] ─drag─ [📱远程] [_][□][×]
  *
@@ -20,7 +20,7 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Info, PictureInPicture2, Search, FolderOpen, Settings } from 'lucide-react';
+import { ArrowLeft, Info, PictureInPicture2, Search, FolderOpen } from 'lucide-react';
 import { Modal, Tooltip, WindowControls } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 import { useToolbarModeContext } from '@/flow_chat/components/toolbar-mode/ToolbarModeContext';
@@ -78,7 +78,6 @@ const UnifiedTopBar: React.FC<UnifiedTopBarProps> = ({
   const { hasWorkspace } = useCurrentWorkspace();
   const { warning } = useNotification();
   const closeOverlay = useOverlayStore((s) => s.closeOverlay);
-  const openOverlay = useOverlayStore((s) => s.openOverlay);
   const sessionContext = useHeaderStore((s) => s.sessionContext);
   const hasWindowControls = !!(onMinimize && onMaximize && onClose);
   const hasOverlay = activeOverlay !== null;
@@ -139,11 +138,6 @@ const UnifiedTopBar: React.FC<UnifiedTopBarProps> = ({
     closeLogoMenu();
     window.dispatchEvent(new CustomEvent('nav:show-about'));
   }, [closeLogoMenu]);
-
-  const handleOpenSettings = useCallback(() => {
-    closeLogoMenu();
-    openOverlay('settings');
-  }, [closeLogoMenu, openOverlay]);
 
   const handleFloatingMode = useCallback(() => {
     closeLogoMenu();
@@ -375,18 +369,6 @@ const UnifiedTopBar: React.FC<UnifiedTopBarProps> = ({
                     <PictureInPicture2 size={14} aria-hidden="true" />
                     <span>{t('header.switchToToolbar')}</span>
                   </button>
-                  <div className="unified-top-bar__menu-divider" role="separator" />
-                  <button
-                    type="button"
-                    className={`unified-top-bar__menu-item${activeOverlay === 'settings' ? ' is-active' : ''}`}
-                    role="menuitem"
-                    aria-pressed={activeOverlay === 'settings'}
-                    onClick={handleOpenSettings}
-                  >
-                    <Settings size={14} aria-hidden="true" />
-                    <span>{t('tabs.settings')}</span>
-                  </button>
-                  <div className="unified-top-bar__menu-divider" role="separator" />
                   <button
                     type="button"
                     className="unified-top-bar__menu-item"

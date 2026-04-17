@@ -358,9 +358,8 @@ const SessionCapsule: React.FC = () => {
           role="group"
           aria-label={t('nav.sessionCapsule.runningSessionsGroupLabel')}
         >
-          {/* Header row: pulsing dot + label + running count */}
+          {/* Header row: label + running count */}
           <div className="session-capsule__running-hd">
-            <span className="session-capsule__running-dot" aria-hidden />
             <span className="session-capsule__running-hd-label">
               {t('nav.sessionCapsule.runningSessionsGroupLabel')}
             </span>

@@ -18,7 +18,6 @@ function nodeToFlatNode(
     size: node.size,
     extension: node.extension,
     lastModified: node.lastModified,
-    isCompressed: node.isCompressed,
     originalNode: node,
   };
 }

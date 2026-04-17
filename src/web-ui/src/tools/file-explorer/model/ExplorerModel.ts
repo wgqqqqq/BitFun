@@ -6,7 +6,6 @@ import type { FileSystemNode, FileSystemOptions } from '@/tools/file-system/type
 import type { ExplorerControllerConfig, ExplorerNodeRecord, ExplorerSnapshot } from '../types/explorer';
 
 const DEFAULT_OPTIONS: FileSystemOptions = {
-  enablePathCompression: true,
   showHiddenFiles: false,
   sortBy: 'name',
   sortOrder: 'asc',

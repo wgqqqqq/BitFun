@@ -85,12 +85,13 @@
   width: 36px;
   min-height: 52px;
   padding: $size-gap-2 0;
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: 9999px;
-  background: var(--color-bg-elevated, var(--color-bg-primary));
+  background: var(--color-bg-primary);
   color: var(--color-text-muted);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  // Idle: flat — no drop shadow (reads as docked, not a floating chip)
+  box-shadow: none;
   transition:
     color        $motion-fast $easing-standard,
     background   $motion-fast $easing-standard,
@@ -99,7 +100,7 @@
 
   &:hover {
     color: var(--color-text-primary);
-    background: var(--element-bg-soft);
+    background: var(--color-bg-scene);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
     transform: translateX(2px);
   }
@@ -114,7 +115,7 @@
   }
 
   :root[data-theme-type='dark'] & {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    box-shadow: none;
   }
 }
 
@@ -148,39 +149,13 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-// Header: pulsing dot + label + count badge
+// Header: label + count badge
 .session-capsule__running-hd {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: $size-gap-2;
   padding: 7px 9px 5px;
   flex-shrink: 0;
-}
-
-// Pulsing activity dot
-.session-capsule__running-dot {
-  position: relative;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-success, #6eb88c);
-  flex-shrink: 0;
-
-  // Outward ripple
-  &::after {
-    content: '';
-    position: absolute;
-    inset: -2px;
-    border-radius: 50%;
-    background: inherit;
-    animation: capsule-dot-ripple 2.4s ease-out infinite;
-  }
-}
-
-@keyframes capsule-dot-ripple {
-  0%   { transform: scale(1);   opacity: 0.55; }
-  60%  { transform: scale(2.4); opacity: 0;    }
-  100% { transform: scale(2.4); opacity: 0;    }
 }
 
 .session-capsule__running-hd-label {
@@ -367,18 +342,19 @@
     }
   }
 
+  // Mix with transparent so row/card grays do not muddy the circle tint
   &.is-code {
-    background: color-mix(in srgb, var(--color-primary, #3b82f6) 20%, var(--element-bg-medium));
+    background: color-mix(in srgb, var(--color-primary, #3b82f6) 22%, transparent);
     color: var(--color-primary, #3b82f6);
   }
 
   &.is-cowork {
-    background: color-mix(in srgb, var(--color-success, #6eb88c) 20%, var(--element-bg-medium));
+    background: color-mix(in srgb, var(--color-success, #6eb88c) 22%, transparent);
     color: var(--color-success, #6eb88c);
   }
 
   &.is-claw {
-    background: color-mix(in srgb, var(--color-accent-500, #8b5cf6) 20%, var(--element-bg-medium));
+    background: color-mix(in srgb, var(--color-accent-500, #8b5cf6) 22%, transparent);
     color: var(--color-purple-500, #8b5cf6);
   }
 
@@ -573,8 +549,7 @@ $session-capsule-inline-pad: $size-gap-3;
   .session-capsule__icon-btn,
   .session-capsule__open-list-btn,
   .session-capsule__mode-avatar,
-  .session-capsule__running-row,
-  .session-capsule__running-dot::after {
+  .session-capsule__running-row {
     transition: none;
     animation: none;
   }

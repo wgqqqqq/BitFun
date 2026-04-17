@@ -11,7 +11,6 @@ const EMPTY_SNAPSHOT: ExplorerSnapshot = {
   error: undefined,
   loadingPaths: new Set(),
   options: {
-    enablePathCompression: true,
     showHiddenFiles: false,
     sortBy: 'name',
     sortOrder: 'asc',

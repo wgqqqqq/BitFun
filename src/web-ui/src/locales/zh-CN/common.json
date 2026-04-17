@@ -510,6 +510,7 @@
     "disclaimerAgree": "同意并继续"
   },
   "about": {
+    "productTitle": "BitFun Agentic OS",
     "close": "关闭",
     "copy": "复制",
     "version": "版本 {{version}}",

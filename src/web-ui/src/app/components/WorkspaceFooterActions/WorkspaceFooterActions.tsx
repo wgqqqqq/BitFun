@@ -11,6 +11,7 @@ import {
   Users,
   MonitorPlay,
   Puzzle,
+  Settings,
 } from 'lucide-react';
 import { Tooltip } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
@@ -158,6 +159,11 @@ const WorkspaceFooterActions: React.FC = () => {
     openOverlay('skills');
   }, [closeMenu, openOverlay]);
 
+  const handleOpenSettings = useCallback(() => {
+    closeMenu();
+    openOverlay('settings');
+  }, [closeMenu, openOverlay]);
+
   const handleOpenMiniApps = useCallback(() => {
     closeMenu();
     openOverlay('miniapps');
@@ -167,6 +173,7 @@ const WorkspaceFooterActions: React.FC = () => {
   const isAgentsActive = activeOverlay === 'agents';
   const isSkillsActive = activeOverlay === 'skills';
   const isMiniAppsActive = activeOverlay === 'miniapps' || (typeof activeOverlay === 'string' && activeOverlay.startsWith('miniapp:'));
+  const isSettingsActive = activeOverlay === 'settings';
   const isShellActive = activeOverlay === 'shell';
 
   return (
@@ -286,6 +293,19 @@ const WorkspaceFooterActions: React.FC = () => {
                     >
                       <SquareTerminal size={14} />
                       <span>{t('scenes.shell')}</span>
+                    </button>
+
+                    <div className="bitfun-nav-panel__footer-menu-divider" />
+
+                    <button
+                      type="button"
+                      className={`bitfun-nav-panel__footer-menu-item${isSettingsActive ? ' is-active' : ''}`}
+                      role="menuitem"
+                      aria-pressed={isSettingsActive}
+                      onClick={handleOpenSettings}
+                    >
+                      <Settings size={14} />
+                      <span>{t('tabs.settings')}</span>
                     </button>
 
                     <div className="bitfun-nav-panel__footer-menu-row bitfun-nav-panel__footer-menu-row--bottom">

@@ -91,7 +91,6 @@ export class ExplorerController {
   private config: ExplorerControllerConfig = {
     autoLoad: true,
     enableAutoWatch: true,
-    enablePathCompression: true,
     showHiddenFiles: false,
     sortBy: 'name',
     sortOrder: 'asc',

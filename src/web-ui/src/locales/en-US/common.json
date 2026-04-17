@@ -510,6 +510,7 @@
     "disclaimerAgree": "Agree and Continue"
   },
   "about": {
+    "productTitle": "BitFun Agentic OS",
     "close": "Close",
     "copy": "Copy",
     "version": "Version {{version}}",

@@ -1,6 +1,6 @@
 export { FileExplorer, FileTree, FileTreeNode } from './components';
 
-export { useFileSystem, useFileTree } from './hooks';
+export { useFileSystem } from './hooks';
 
 export type {
   FileSystemNode,
@@ -21,13 +21,6 @@ export {
   isCodeFile,
   isConfigFile
 } from './utils/fileIcons';
-
-export {
-  compressFileTree,
-  lazyCompressFileTree,
-  shouldCompressPaths,
-  getCompressionTooltip
-} from './utils/pathCompression';
 
 export { fileSystemService } from './services/FileSystemService';
 export { useExplorerController, useExplorerSnapshot } from '@/tools/file-explorer';

@@ -39,7 +39,6 @@ const VirtualFileRow = React.memo<VirtualFileRowProps>(({
     extension: node.extension,
     size: node.size,
     lastModified: node.lastModified,
-    isCompressed: node.isCompressed,
   }), [node]);
 
   return (

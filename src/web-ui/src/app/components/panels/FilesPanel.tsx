@@ -50,7 +50,6 @@ const REMOTE_REFRESH_POLL_MS = 15000;
 interface FilesPanelProps {
   workspacePath?: string;
   onFileSelect?: (filePath: string, fileName: string) => void;
-  onFileDoubleClick?: (filePath: string) => void;
   hideHeader?: boolean;
   viewMode?: 'tree' | 'search';
   onViewModeChange?: (mode: 'tree' | 'search') => void;
@@ -62,7 +61,6 @@ interface FilesPanelProps {
 const FilesPanel: React.FC<FilesPanelProps> = ({
   workspacePath,
   onFileSelect,
-  onFileDoubleClick,
   hideHeader = false,
   viewMode: externalViewMode,
   onViewModeChange,
@@ -146,7 +144,6 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
   } = useFileSystem({
     rootPath: workspacePath,
     autoLoad: true,
-    enablePathCompression: true,
     showHiddenFiles: false,
     // Local filesystem watchers are unavailable for remote SSH workspaces.
     enableAutoWatch: !isRemoteCurrentWorkspace,
@@ -683,10 +680,6 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
     }
   }, [selectFile, onFileSelect, workspacePath, fileTree, findNode]);
 
-  const handleFileDoubleClick = useCallback((filePath: string) => {
-    onFileDoubleClick?.(filePath);
-  }, [onFileDoubleClick]);
-
   const handleSearchResultSelect = useCallback((filePath: string, fileName: string) => {
     selectFile(filePath);
     onFileSelect?.(filePath, fileName);
@@ -933,9 +926,7 @@ const FilesPanel: React.FC<FilesPanelProps> = ({
               loadingPaths={loadingPaths}
               onNodeExpand={handleNodeExpandLazy}
               onFileSelect={handleFileSelect}
-              onFileDoubleClick={handleFileDoubleClick}
               className="bitfun-files-panel__explorer"
-              enablePathCompression={true}
               renamingPath={renamingPath}
               onRename={handleExecuteRename}
               onCancelRename={handleCancelRename}

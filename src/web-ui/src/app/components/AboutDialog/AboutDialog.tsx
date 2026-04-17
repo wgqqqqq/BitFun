@@ -52,20 +52,16 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({
       title={t('header.about')}
       showCloseButton={true}
       size="medium"
+      overlayClassName="bitfun-about-modal-overlay"
     >
       <div className="bitfun-about-dialog__content">
         {/* Hero section - product info */}
         <div className="bitfun-about-dialog__hero">
-          <h1 className="bitfun-about-dialog__title">{version.name}</h1>
+          <h1 className="bitfun-about-dialog__title">{t('about.productTitle')}</h1>
           <div className="bitfun-about-dialog__version-badge">
             {t('about.version', { version: formatVersion(version.version, version.isDev) })}
           </div>
           <div className="bitfun-about-dialog__divider" />
-          <div className="bitfun-about-dialog__dots">
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
         </div>
 
         {/* Scrollable area */}

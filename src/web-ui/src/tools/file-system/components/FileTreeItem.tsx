@@ -6,7 +6,6 @@ import { fileTreeDragSource } from '../../../shared/context-system/drag-drop/Fil
 import { useI18n } from '@/infrastructure/i18n';
 import { FileSystemNode } from '../types';
 import { getFileIcon, getFileIconClass } from '../utils/fileIcons';
-import { getCompressionTooltip } from '../utils/pathCompression';
 
 interface RenameInputProps {
   node: FileSystemNode;
@@ -116,8 +115,6 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
   const { t } = useI18n('tools');
   const dragImageRef = React.useRef<HTMLDivElement | null>(null);
 
-  const isCompressed = node.isCompressed;
-  const tooltip = isCompressed ? getCompressionTooltip(node as any) : node.path;
   const isRenaming = renamingPath === node.path;
 
   const handleClick = (event: React.MouseEvent) => {
@@ -174,10 +171,10 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
 
   return (
     <div 
-      className={`bitfun-file-explorer__node-content ${isSelected ? 'bitfun-file-explorer__node-content--selected' : ''} ${node.isDirectory ? 'bitfun-file-explorer__node-content--directory' : ''} ${isCompressed ? 'bitfun-file-explorer__node-content--compressed' : ''} ${className}`}
+      className={`bitfun-file-explorer__node-content ${isSelected ? 'bitfun-file-explorer__node-content--selected' : ''} ${node.isDirectory ? 'bitfun-file-explorer__node-content--directory' : ''} ${className}`}
       style={{ paddingLeft: `${indentPx}px` }}
       onClick={handleClick}
-      title={tooltip}
+      title={node.path}
       draggable={true}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
@@ -214,7 +211,7 @@ export const FileTreeItem: React.FC<FileTreeItemProps> = ({
       ) : renderContent ? (
         renderContent(node, level)
       ) : (
-        <span className={`bitfun-file-explorer__node-name ${isCompressed ? 'bitfun-file-explorer__compressed-path' : ''}`}>
+        <span className="bitfun-file-explorer__node-name">
           {node.name}
         </span>
       )}

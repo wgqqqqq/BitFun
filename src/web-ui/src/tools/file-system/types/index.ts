@@ -6,11 +6,7 @@ export interface FileSystemNode {
   children?: FileSystemNode[];
   extension?: string;
   lastModified?: Date;
-  
-  isCompressed?: boolean;
-  compressedPath?: string;
-  originalNodes?: FileSystemNode[];
-  
+
   isSelected?: boolean;
   isExpanded?: boolean;
   
@@ -24,16 +20,12 @@ export interface FileExplorerProps {
   selectedFile?: string;
   onFileSelect?: (filePath: string, fileName: string) => void;
   className?: string;
-  enablePathCompression?: boolean;
   showFileSize?: boolean;
   showLastModified?: boolean;
   
   expandedFolders?: Set<string>;
   loadingPaths?: Set<string>;
   onNodeExpand?: (path: string, expanded: boolean) => void;
-  
-  onFileDoubleClick?: (filePath: string) => void;
-  onContextMenu?: (filePath: string, event: React.MouseEvent) => void;
   
   searchQuery?: string;
   fileFilter?: (node: FileSystemNode) => boolean;
@@ -103,7 +95,6 @@ export interface FileTreeNodeProps {
 
 
 export interface FileSystemOptions {
-  enablePathCompression?: boolean;
   showHiddenFiles?: boolean;
   sortBy?: 'name' | 'size' | 'lastModified' | 'type';
   sortOrder?: 'asc' | 'desc';
@@ -188,7 +179,6 @@ export interface FlatFileNode {
   size?: number;
   extension?: string;
   lastModified?: Date;
-  isCompressed?: boolean;
   originalNode?: FileSystemNode;
 }
 

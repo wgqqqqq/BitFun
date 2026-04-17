@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { FileTreeNode } from './FileTreeNode';
 import { FileTreeProps } from '../types';
-import { lazyCompressFileTree, shouldCompressPaths, CompressedNode } from '../utils/pathCompression';
 import { useI18n } from '@/infrastructure/i18n';
 import { expandedFoldersContains } from '@/shared/utils/pathUtils';
 
@@ -43,14 +42,9 @@ export const FileTree: React.FC<FileTreeProps> = ({
     }
   }, [expandedFolders, onNodeExpand]);
 
-  const processedNodes = useMemo(() => {
-    if (!shouldCompressPaths()) {
-      return nodes;
-    }
-    return lazyCompressFileTree(nodes, expandedFolders);
-  }, [nodes, expandedFolders]);
+  const processedNodes = useMemo(() => nodes, [nodes]);
 
-  const renderNodes = (nodeList: CompressedNode[], currentLevel: number = level) => {
+  const renderNodes = (nodeList: FileTreeProps['nodes'], currentLevel: number = level) => {
     return nodeList.map(node => (
       <FileTreeNode
         key={node.path}

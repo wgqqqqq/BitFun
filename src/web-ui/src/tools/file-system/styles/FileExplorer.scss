@@ -177,14 +177,6 @@ $_indent-width: 8px;
     }
   }
 
-  &--compressed {
-    font-style: italic;
-
-    &:hover {
-      background: var(--element-bg-base);
-    }
-  }
-
   &--highlighted {
     background: $git-color-branch-bg !important;
     animation: file-node-highlight-fade 2s ease-out forwards;
@@ -391,12 +383,6 @@ $_indent-width: 8px;
       color: color-mix(in srgb, var(--color-accent-500) 85%, transparent);
     }
   }
-}
-
-.bitfun-file-explorer__compressed-path {
-  font-style: italic;
-  opacity: 0.85;
-  color: var(--color-text-muted);
 }
 
 .bitfun-file-explorer__node-size {
