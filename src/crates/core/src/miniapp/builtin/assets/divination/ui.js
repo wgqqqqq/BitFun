@@ -251,7 +251,7 @@ function paintResult(f) {
     li.innerHTML = `
       <span class="fortune__label">${item.label}</span>
       <span class="fortune__bar"><span class="fortune__fill" style="width:0"></span></span>
-      <span class="fortune__stars">${'★'.repeat(item.stars)}${'☆'.repeat(5 - item.stars)}</span>
+      <span class="fortune__stars">${'★'.repeat(item.stars)}<span class="ghost">${'★'.repeat(5 - item.stars)}</span></span>
     `;
     dom.fortunes.appendChild(li);
     requestAnimationFrame(() => {

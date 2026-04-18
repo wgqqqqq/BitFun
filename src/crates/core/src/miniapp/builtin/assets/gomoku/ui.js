@@ -441,8 +441,8 @@ function renderResult() {
     dom.resultSub.textContent = '连成五子';
   }
   dom.resultIcon.textContent = isBlack ? '●' : '○';
-  dom.resultIcon.style.color = isBlack ? '#1c1c20' : '#f5f5f7';
-  if (!isBlack) dom.resultIcon.style.textShadow = '0 0 0 1px #555';
+  dom.resultIcon.style.color = '';
+  dom.resultIcon.style.textShadow = '';
 }
 
 init();
