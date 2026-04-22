@@ -1,3 +1,5 @@
+[中文](AGENTS-CN.md) | **English**
+
 # AGENTS.md
 
 ## Overview
@@ -135,11 +137,11 @@ await api.invoke('your_command', { request: { ... } });
 
 ## Where to look first
 
-- Agent modes: `src/crates/core/src/agentic/agents/`, `src/crates/core/src/agentic/agents/prompts/`, `src/web-ui/src/locales/*/settings/modes.json`
+- Agent modes: `src/crates/core/src/agentic/agents/`, `src/crates/core/src/agentic/agents/prompts/`, `src/web-ui/src/locales/*/scenes/agents.json`
 - Tools: `src/crates/core/src/agentic/tools/implementations/`, `src/crates/core/src/agentic/tools/registry.rs`
 - MCP / LSP / remote: `src/crates/core/src/service/mcp/`, `src/crates/core/src/service/lsp/`, `src/crates/core/src/service/remote_connect/`, `src/crates/core/src/service/remote_ssh/`
 - Desktop APIs: `src/apps/desktop/src/api/`, `src/crates/api-layer/src/`, `src/crates/transport/src/adapters/tauri.rs`
-- Web/server communication: `src/web-ui/src/infrastructure/api/`, `src/crates/transport/src/adapters/websocket.rs`, `src/apps/server/src/routes/`, `src/apps/server/src/rpc_dispatcher.rs`
+- Web/server communication: `src/web-ui/src/infrastructure/api/`, `src/crates/transport/src/adapters/websocket.rs`, `src/apps/server/src/routes/`, `src/apps/server/src/main.rs`
 
 ## Verification
 
@@ -171,4 +173,3 @@ Prefer the nearest matching agent doc when present:
 - `src/crates/ai-adapters/AGENTS.md`
 - `src/crates/core/src/agentic/execution/AGENTS.md`
 
-No top-level `CLAUDE.md`, `.cursorrules`, `.cursor/rules/`, or `.github/copilot-instructions.md` were found when this file was updated.

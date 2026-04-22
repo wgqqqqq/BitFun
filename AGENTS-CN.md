@@ -1,3 +1,5 @@
+**中文** | [English](AGENTS.md)
+
 # AGENTS-CN.md
 
 ## 概览
@@ -135,11 +137,11 @@ await api.invoke('your_command', { request: { ... } });
 
 ## 先看哪里
 
-- Agent mode：`src/crates/core/src/agentic/agents/`、`src/crates/core/src/agentic/agents/prompts/`、`src/web-ui/src/locales/*/settings/modes.json`
+- Agent mode：`src/crates/core/src/agentic/agents/`、`src/crates/core/src/agentic/agents/prompts/`、`src/web-ui/src/locales/*/scenes/agents.json`
 - Tool：`src/crates/core/src/agentic/tools/implementations/`、`src/crates/core/src/agentic/tools/registry.rs`
 - MCP / LSP / remote：`src/crates/core/src/service/mcp/`、`src/crates/core/src/service/lsp/`、`src/crates/core/src/service/remote_connect/`、`src/crates/core/src/service/remote_ssh/`
 - 桌面端 API：`src/apps/desktop/src/api/`、`src/crates/api-layer/src/`、`src/crates/transport/src/adapters/tauri.rs`
-- Web/server 通信：`src/web-ui/src/infrastructure/api/`、`src/crates/transport/src/adapters/websocket.rs`、`src/apps/server/src/routes/`、`src/apps/server/src/rpc_dispatcher.rs`
+- Web/server 通信：`src/web-ui/src/infrastructure/api/`、`src/crates/transport/src/adapters/websocket.rs`、`src/apps/server/src/routes/`、`src/apps/server/src/main.rs`
 
 ## 验证
 
@@ -171,4 +173,3 @@ await api.invoke('your_command', { request: { ... } });
 - `src/crates/ai-adapters/AGENTS.md`
 - `src/crates/core/src/agentic/execution/AGENTS.md`
 
-更新时未发现顶层 `CLAUDE.md`、`.cursorrules`、`.cursor/rules/` 或 `.github/copilot-instructions.md`。

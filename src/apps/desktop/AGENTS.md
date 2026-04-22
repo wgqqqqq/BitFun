@@ -1,3 +1,5 @@
+[中文](AGENTS-CN.md) | **English**
+
 # AGENTS.md
 
 ## Scope

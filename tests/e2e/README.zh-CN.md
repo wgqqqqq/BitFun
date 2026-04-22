@@ -15,23 +15,21 @@
 cargo build -p bitfun-desktop
 
 # 安装测试依赖
-cd tests/e2e && pnpm install
+pnpm --dir tests/e2e install
 ```
 
 ### 2. 运行测试
 
 ```bash
-cd tests/e2e
-
 # L0 冒烟测试 (最快)
-pnpm run test:l0
-pnpm run test:l0:all
+pnpm --dir tests/e2e run test:l0
+pnpm --dir tests/e2e run test:l0:all
 
 # L1 功能测试
-pnpm run test:l1
+pnpm --dir tests/e2e run test:l1
 
 # 运行所有测试
-pnpm test
+pnpm --dir tests/e2e test
 ```
 
 ## 测试级别
@@ -40,7 +38,7 @@ pnpm test
 |------|------|----------|--------|
 | L0 | 冒烟测试 - 验证基本功能 | < 1分钟 | 不需要 |
 | L1 | 功能测试 - 验证功能特性 | 5-15分钟 | 不需要(mock) |
-| L2 | 集成测试 - 完整系统验证 | 15-60分钟 | 需要 |
+| L2 | 规划中，暂未实现 | N/A | N/A |
 
 ## 目录结构
 

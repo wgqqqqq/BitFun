@@ -30,7 +30,7 @@ BitFun 是一个Agentic OS，更是你亲密无间的伙伴。
 
 扫码配对，手机即刻变成桌面 Agent 的远程指挥中心。一条消息，桌面上的 AI 立刻开始工作。
 
-除手机浏览器扫码外，也支持接入 Telegram / 飞书 Bot/ 微信 Bot 远程下达指令，并实时查看 Agent 的执行进度。
+除手机浏览器扫码外，也支持接入 Telegram / 飞书 Bot / 微信 Bot 远程下达指令，并实时查看 Agent 的执行进度。
 
 ## 双模式协同
 
@@ -56,13 +56,13 @@ BitFun 提供两种模式，适配不同场景需求：
 
 > 它会自己成长。
 
-支持 Skill、MCP（包含MCP App）、自定义Agent，此外还支持即用即生的Mini App（从一句需求生成可运行界面，并可一键打包成桌面应用）
+支持 Skill、MCP（包含 MCP App）、自定义 Agent，此外还支持即用即生的 Mini App（从一句需求生成可运行界面，并可一键打包成桌面应用）。
 
 ---
 
 ## 平台支持
 
-项目采用tauri，支持Windows、macOS、Linux，同时支持移动控制手机浏览器、Telegram、飞书、微信等。
+项目采用 Tauri，支持 Windows、macOS、Linux，同时支持通过手机浏览器、Telegram、飞书、微信等方式进行移动控制。
 
 ---
 

@@ -1,3 +1,5 @@
+[中文](README.zh-CN.md) | **English**
+
 # Fonts
 
 This directory contains font assets and configuration for the web UI.

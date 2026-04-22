@@ -15,23 +15,21 @@ E2E test framework using WebDriverIO + the embedded BitFun WebDriver.
 cargo build -p bitfun-desktop
 
 # Install test dependencies
-cd tests/e2e && pnpm install
+pnpm --dir tests/e2e install
 ```
 
 ### 2. Run Tests
 
 ```bash
-cd tests/e2e
-
 # L0 smoke tests (fastest)
-pnpm run test:l0
-pnpm run test:l0:all
+pnpm --dir tests/e2e run test:l0
+pnpm --dir tests/e2e run test:l0:all
 
 # L1 functional tests
-pnpm run test:l1
+pnpm --dir tests/e2e run test:l1
 
 # Run all tests
-pnpm test
+pnpm --dir tests/e2e test
 ```
 
 ## Test Levels
@@ -40,7 +38,7 @@ pnpm test
 |-------|---------|----------|-------------|
 | L0 | Smoke tests - verify basic functionality | < 1 min | No |
 | L1 | Functional tests - validate features | 5-15 min | No (mocked) |
-| L2 | Integration tests - full system validation | 15-60 min | Yes |
+| L2 | Planned, not implemented yet | N/A | N/A |
 
 ## Directory Structure
 

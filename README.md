@@ -30,7 +30,7 @@ It will interact through phones, watches, desktop robots, and more. It is part o
 
 Pair by scanning a QR code, and your phone instantly becomes a remote command center for the desktop Agent. Send one message, and the AI on the desktop starts working right away.
 
-Besides the mobile browser scan, BitFun also supports Telegram / Feishu bots / WeChat bots for remote commands, with real-time visibility into Agent progress.
+Besides mobile browser pairing, BitFun also supports Telegram / Feishu bots / WeChat bots for remote commands, with real-time visibility into Agent progress.
 
 ---
 
@@ -39,7 +39,7 @@ Besides the mobile browser scan, BitFun also supports Telegram / Feishu bots / W
 BitFun offers two modes for different scenarios:
 
 - **Assistant Mode**: warm, remembers your preferences, with long-term memory. Best for ongoing collaboration—maintaining a project, continuing your aesthetic and working habits.
-- **Professional Mode**: saves tokens, execution-first, clean context. Best for immediate tasks—fixing a bug, tweaking a style.
+- **Expert Mode**: saves tokens, execution-first, clean context. Best for immediate tasks—fixing a bug, tweaking a style.
 
 ---
 
@@ -98,7 +98,7 @@ pnpm run desktop:dev
 pnpm run desktop:build
 ```
 
-For more details, see the [Contributing guide](./CONTRIBUTING_CN.md).
+For more details, see the [Contributing guide](./CONTRIBUTING.md).
 
 ---
 

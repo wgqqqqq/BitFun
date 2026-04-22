@@ -1,3 +1,5 @@
+**中文** | [English](AGENTS.md)
+
 # AGENTS-CN.md
 
 ## 适用范围
