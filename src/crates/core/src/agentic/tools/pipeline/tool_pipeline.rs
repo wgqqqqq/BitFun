@@ -10,6 +10,7 @@ use crate::agentic::events::types::ToolEventData;
 use crate::agentic::tools::computer_use_host::ComputerUseHostRef;
 use crate::agentic::tools::framework::{ToolResult as FrameworkToolResult, ToolUseContext};
 use crate::agentic::tools::registry::ToolRegistry;
+use crate::util::elapsed_ms_u64;
 use crate::util::errors::{BitFunError, BitFunResult};
 use dashmap::DashMap;
 use futures::future::join_all;
@@ -679,7 +680,7 @@ impl ToolPipeline {
 
         match result {
             Ok(tool_result) => {
-                let duration_ms = start_time.elapsed().as_millis() as u64;
+                let duration_ms = elapsed_ms_u64(start_time);
 
                 self.state_manager
                     .update_state(

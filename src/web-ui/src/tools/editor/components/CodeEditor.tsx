@@ -25,6 +25,7 @@ import { CubeLoading } from '@/component-library';
 import { getMonacoLanguage } from '@/infrastructure/language-detection';
 import { createLogger } from '@/shared/utils/logger';
 import { sendDebugProbe } from '@/shared/utils/debugProbe';
+import { elapsedMs, nowMs } from '@/shared/utils/timing';
 import { isSamePath } from '@/shared/utils/pathUtils';
 import {
   diskContentMatchesEditorForExternalSync,
@@ -1565,7 +1566,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     }
 
     isCheckingFileRef.current = true;
-    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const startedAt = nowMs();
     let outcome = 'started';
     let usedHashFallback = false;
     let probeError: string | null = null;
@@ -1684,10 +1685,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       }
       log.error('Failed to check file modification', err);
     } finally {
-      const durationMs =
-        Math.round(
-          ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt) * 10
-        ) / 10;
+      const durationMs = elapsedMs(startedAt);
       if (probeError || outcome !== 'no-change' || durationMs >= 80) {
         sendDebugProbe(
           'CodeEditor.tsx:checkFileModification',

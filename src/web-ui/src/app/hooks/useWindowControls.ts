@@ -4,6 +4,7 @@ import { useWorkspaceContext } from '../../infrastructure/contexts/WorkspaceCont
 import { notificationService } from '@/shared/notification-system';
 import { createLogger } from '@/shared/utils/logger';
 import { sendDebugProbe } from '@/shared/utils/debugProbe';
+import { nowMs } from '@/shared/utils/timing';
 import { useI18n } from '@/infrastructure/i18n';
 import { isMacOSDesktopRuntime, supportsNativeWindowControls } from '@/infrastructure/runtime';
 
@@ -101,7 +102,7 @@ export const useWindowControls = (options?: { isToolbarMode?: boolean }) => {
           const appWindow = getCurrentWindow();
           // Delay update until window fully restores
           setTimeout(async () => {
-            const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+            const startedAt = nowMs();
             try {
               await updateWindowState(appWindow);
               await restoreMacOSOverlayTitlebar(appWindow);
@@ -109,14 +110,9 @@ export const useWindowControls = (options?: { isToolbarMode?: boolean }) => {
                 'useWindowControls.ts:handleVisibilityChange',
                 'Window restore sync completed',
                 {
-                  durationMs:
-                    Math.round(
-                      ((typeof performance !== 'undefined' ? performance.now() : Date.now()) -
-                        startedAt) *
-                        10
-                    ) / 10,
                   isToolbarMode,
-                }
+                },
+                { startedAt }
               );
             } catch (error) {
               sendDebugProbe(
