@@ -9,6 +9,7 @@ use crate::service::git::{
     execute_git_command, GitAddParams, GitCommitParams, GitDiffParams, GitLogParams, GitPullParams,
     GitPushParams, GitService,
 };
+use crate::util::elapsed_ms_u64;
 use crate::util::errors::{BitFunError, BitFunResult};
 use async_trait::async_trait;
 use log::debug;
@@ -545,7 +546,7 @@ impl GitTool {
 
         match execute_git_command(repo_path, &cmd_args).await {
             Ok(output) => {
-                let duration = start_time.elapsed().as_millis() as u64;
+                let duration = elapsed_ms_u64(start_time);
                 Ok(json!({
                     "success": true,
                     "exit_code": 0,
@@ -555,7 +556,7 @@ impl GitTool {
                 }))
             }
             Err(e) => {
-                let duration = start_time.elapsed().as_millis() as u64;
+                let duration = elapsed_ms_u64(start_time);
                 // Git command failed but still return result
                 Ok(json!({
                     "success": false,

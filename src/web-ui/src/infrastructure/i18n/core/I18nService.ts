@@ -24,6 +24,7 @@ import { useI18nStore } from '../store/i18nStore';
 import { i18nAPI } from '@/infrastructure/api/service-api/I18nAPI';
 
 import { createLogger } from '@/shared/utils/logger';
+import { logDuration, measureSync, nowMs, elapsedMs } from '@/shared/utils/timing';
 
 const log = createLogger('I18nService');
 
@@ -49,7 +50,14 @@ function buildResources(): Resource {
   }, {});
 }
 
-const resources = buildResources();
+const resourcesResult = measureSync(() => buildResources());
+const resources = resourcesResult.value;
+logDuration(log, 'I18n resources prepared', resourcesResult.durationMs, {
+  data: {
+  localeCount: Object.keys(resources).length,
+  moduleCount: Object.keys(localeModules).length,
+  },
+});
 
  
 export class I18nService {
@@ -91,6 +99,7 @@ export class I18nService {
       return;
     }
 
+    const startedAt = nowMs();
     try {
       let localeToUse: LocaleId = DEFAULT_LOCALE;
       const preInjectedLocale = document.documentElement.getAttribute('lang');
@@ -114,12 +123,21 @@ export class I18nService {
 
       this.initialized = true;
       log.info('Initialization completed', { locale: this.currentLocaleId });
+      logDuration(log, 'I18n initialization timing', elapsedMs(startedAt), {
+        level: 'debug',
+        data: {
+        locale: this.currentLocaleId,
+        },
+      });
 
       const seqAtInitEnd = this.localeChangeSeq;
       const localeAtInitEnd = this.currentLocaleId;
       this.loadAndApplyBackendLocale(seqAtInitEnd, localeAtInitEnd);
     } catch (error) {
-      log.error('Initialization failed', error);
+      log.error('Initialization failed', {
+        error,
+        durationMs: elapsedMs(startedAt),
+      });
       
       this.initialized = true;
       const store = useI18nStore.getState();
@@ -128,6 +146,7 @@ export class I18nService {
   }
 
   private async loadAndApplyBackendLocale(seqAtInitEnd: number, localeAtInitEnd: LocaleId): Promise<void> {
+    const startedAt = nowMs();
     try {
       const savedLocale = await this.loadCurrentLocale();
       if (!savedLocale || savedLocale === this.currentLocaleId) {
@@ -140,6 +159,11 @@ export class I18nService {
       }
 
       await this.changeLanguage(savedLocale);
+      logDuration(log, 'Backend locale applied after initialization', elapsedMs(startedAt), {
+        data: {
+        locale: savedLocale,
+        },
+      });
     } catch (error) {
       log.debug('Failed to load backend locale (ignored)', error);
     }
@@ -147,6 +171,7 @@ export class I18nService {
 
    
   private async loadCurrentLocale(): Promise<LocaleId | null> {
+    const startedAt = nowMs();
     try {
       
       const timeoutPromise = new Promise<null>((resolve) => {
@@ -158,12 +183,18 @@ export class I18nService {
         timeoutPromise,
       ]);
 
-      if (locale && isLocaleSupported(locale)) {
-        return locale;
-      }
-      return null;
+      const resolvedLocale = locale && isLocaleSupported(locale) ? locale : null;
+      logDuration(log, 'Backend locale load completed', elapsedMs(startedAt), {
+        data: {
+        locale: resolvedLocale ?? locale ?? 'timeout',
+        },
+      });
+      return resolvedLocale;
     } catch (error) {
-      log.debug('Failed to load locale config (ignored)', error);
+      log.debug('Failed to load locale config (ignored)', {
+        error,
+        durationMs: elapsedMs(startedAt),
+      });
       return null;
     }
   }

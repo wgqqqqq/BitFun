@@ -24,6 +24,7 @@ use crate::infrastructure::ai::get_global_ai_client_factory;
 use crate::service::config::get_global_config_service;
 use crate::service::config::types::{ModelCapability, ModelCategory};
 use crate::service::remote_ssh::workspace_state::get_remote_workspace_manager;
+use crate::util::elapsed_ms_u64;
 use crate::util::errors::{BitFunError, BitFunResult};
 use crate::util::token_counter::TokenCounter;
 use crate::util::types::Message as AIMessage;
@@ -719,13 +720,6 @@ impl ExecutionEngine {
                 // Update session compression state
                 session.compression_state.increment_compression_count();
 
-                info!(
-                    "Compression completed: messages {} -> {}, compression_count={}",
-                    old_messages_len,
-                    new_messages.len(),
-                    session.compression_state.compression_count
-                );
-
                 // Update session state
                 let _ = self
                     .session_manager
@@ -733,12 +727,30 @@ impl ExecutionEngine {
                     .await;
 
                 // Calculate duration
-                let duration_ms = start_time.elapsed().as_millis() as u64;
+                let duration_ms = elapsed_ms_u64(start_time);
 
                 // Recalculate tokens after compression
                 let compressed_tokens = Self::estimate_request_tokens_internal(
                     &mut new_messages,
                     tool_definitions.as_deref(),
+                );
+                let summary_source = if compression_result.has_model_summary {
+                    "model"
+                } else {
+                    "local_fallback"
+                };
+
+                info!(
+                    "Compression completed: session_id={}, turn_id={}, messages {} -> {}, tokens {} -> {}, compression_count={}, duration_ms={}, summary_source={}",
+                    session_id,
+                    dialog_turn_id,
+                    old_messages_len,
+                    new_messages.len(),
+                    current_tokens,
+                    compressed_tokens,
+                    session.compression_state.compression_count,
+                    duration_ms,
+                    summary_source
                 );
 
                 // Emit compression completed event
@@ -753,11 +765,7 @@ impl ExecutionEngine {
                         compression_ratio: (compressed_tokens as f64) / (current_tokens as f64),
                         duration_ms,
                         has_summary: compression_result.has_model_summary,
-                        summary_source: if compression_result.has_model_summary {
-                            "model".to_string()
-                        } else {
-                            "local_fallback".to_string()
-                        },
+                        summary_source: summary_source.to_string(),
                         subagent_parent_info: event_subagent_parent_info.clone(),
                     },
                     EventPriority::Normal,
@@ -825,7 +833,7 @@ impl ExecutionEngine {
             .collect_all_turns_for_manual_compaction(session_id, messages)?;
 
         if turns.is_empty() {
-            let duration_ms = start_time.elapsed().as_millis() as u64;
+            let duration_ms = elapsed_ms_u64(start_time);
             let tokens_after = current_tokens;
             let compression_ratio = if current_tokens == 0 {
                 1.0
@@ -882,7 +890,7 @@ impl ExecutionEngine {
                     .update_compression_state(session_id, session.compression_state.clone())
                     .await;
 
-                let duration_ms = start_time.elapsed().as_millis() as u64;
+                let duration_ms = elapsed_ms_u64(start_time);
                 let tokens_after = compressed_messages
                     .iter_mut()
                     .map(|message| message.get_tokens())
@@ -1565,7 +1573,7 @@ impl ExecutionEngine {
             );
         }
 
-        let duration_ms = start_time.elapsed().as_millis() as u64;
+        let duration_ms = elapsed_ms_u64(start_time);
 
         info!(
             "Dialog turn loop completed: turn={}, rounds={}, total_tools={}",

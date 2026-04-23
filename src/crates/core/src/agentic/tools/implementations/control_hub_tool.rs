@@ -25,6 +25,7 @@ use crate::agentic::tools::framework::{
 };
 use crate::service::config::global::GlobalConfigManager;
 use crate::service::config::types::AIConfig;
+use crate::util::elapsed_ms_u64;
 use crate::util::errors::{BitFunError, BitFunResult};
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -3085,7 +3086,7 @@ for control flow.
                     Ok(Ok(o)) => o,
                 };
 
-                let elapsed_ms = started.elapsed().as_millis() as u64;
+                let elapsed_ms = elapsed_ms_u64(started);
                 let stdout_full = String::from_utf8_lossy(&output.stdout).to_string();
                 let stderr_full = String::from_utf8_lossy(&output.stderr).to_string();
                 let (stdout, stdout_truncated) = truncate_with_marker(&stdout_full, max_output_bytes);
