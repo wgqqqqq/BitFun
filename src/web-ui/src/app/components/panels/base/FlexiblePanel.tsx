@@ -885,6 +885,76 @@ const FlexiblePanel: React.FC<ExtendedFlexiblePanelProps> = memo(({
               title={content.title}
               widgetId={content.data?.widgetId}
               widgetCode={content.data?.widgetCode}
+              onWidgetCodePersist={async (nextWidgetCode) => {
+                if (onContentChange) {
+                  onContentChange({
+                    ...content,
+                    data: {
+                      ...content.data,
+                      widgetCode: nextWidgetCode,
+                    },
+                  });
+                }
+
+                const source = content.data?._source;
+                if (
+                  source?.type !== 'tool-call' ||
+                  source.toolName !== 'GenerativeUI' ||
+                  (!source.toolCallId && !source.toolItemId)
+                ) {
+                  return;
+                }
+
+                const { flowChatStore } = await import('@/flow_chat/store/FlowChatStore');
+                const { flowChatManager } = await import('@/flow_chat/services/FlowChatManager');
+                const state = flowChatStore.getState();
+                const sessionId = source.sessionId || state.activeSessionId;
+                if (!sessionId) {
+                  return;
+                }
+
+                const session = state.sessions.get(sessionId);
+                if (!session) {
+                  return;
+                }
+
+                for (const turn of session.dialogTurns) {
+                  for (const round of turn.modelRounds) {
+                    const item = round.items.find(
+                      (it: any) =>
+                        it.type === 'tool' &&
+                        (
+                          (source.toolCallId && it.toolCall?.id === source.toolCallId) ||
+                          (source.toolItemId && it.id === source.toolItemId)
+                        )
+                    );
+
+                    if (!item) {
+                      continue;
+                    }
+
+                    const toolItem = item as any;
+                    flowChatStore.updateModelRoundItem(sessionId, turn.id, toolItem.id, {
+                      toolCall: {
+                        ...toolItem.toolCall,
+                        input: {
+                          ...toolItem.toolCall?.input,
+                          widget_code: nextWidgetCode,
+                        },
+                      },
+                      toolResult: toolItem.toolResult
+                        ? {
+                            ...toolItem.toolResult,
+                            result: updateGenerativeWidgetResultCode(toolItem.toolResult.result, nextWidgetCode),
+                          }
+                        : toolItem.toolResult,
+                    } as any);
+
+                    await flowChatManager.saveDialogTurn(sessionId, turn.id);
+                    return;
+                  }
+                }
+              }}
             />
           </React.Suspense>
         );

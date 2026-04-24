@@ -13,12 +13,8 @@ import { handleWidgetBridgeEvent } from '@/tools/generative-widget/widgetInterac
 import { useGenerativeWidgetPromptMenu } from '@/tools/generative-widget/useGenerativeWidgetPromptMenu';
 import { useContextMenuStore } from '@/shared/context-menu-system';
 import { captureElementToDownloadsPng } from '../utils/captureElementToDownloadsPng';
-import { workspaceAPI } from '@/infrastructure/api';
 import { createLogger } from '@/shared/utils/logger';
 import { notificationService } from '@/shared/notification-system';
-import { flowChatStore } from '@/flow_chat/store/FlowChatStore';
-import { isLikelyFileNotFoundError } from '@/shared/utils/fsErrorUtils';
-import path from 'path-browserify';
 import './GenerativeWidgetToolCard.scss';
 
 const log = createLogger('GenerativeWidgetToolCard');
@@ -45,24 +41,6 @@ function parseWidgetResult(raw: unknown): WidgetResult | null {
     return raw as WidgetResult;
   }
   return null;
-}
-
-function sanitizeForFileSegment(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 64) || 'widget';
-}
-
-function getSessionWorkspacePath(sessionId?: string): string | undefined {
-  const state = flowChatStore.getState();
-  if (sessionId) {
-    return state.sessions.get(sessionId)?.workspacePath;
-  }
-  return flowChatStore.getActiveSession()?.workspacePath;
 }
 
 export const GenerativeWidgetToolCard: React.FC<ToolCardProps> = ({ toolItem, sessionId }) => {
@@ -122,87 +100,44 @@ export const GenerativeWidgetToolCard: React.FC<ToolCardProps> = ({ toolItem, se
   const isClickable = status === 'completed' && widgetCode.trim().length > 0;
   const hasRenderableWidget = widgetCode.trim().length > 0 && !isFailed;
 
-  const handleOpenPanel = useCallback(async () => {
+  const handleOpenPanel = useCallback(() => {
     if (!isClickable) {
       return;
     }
 
-    const workspacePath = getSessionWorkspacePath(sessionId);
-    if (!workspacePath) {
-      notificationService.error(t('toolCards.generativeUI.workspaceUnavailable'));
-      return;
-    }
-
-    const sessionKey = sanitizeForFileSegment(
-      sessionId || flowChatStore.getState().activeSessionId || 'active-session',
-    );
-    const safeTitle = sanitizeForFileSegment(title);
-    const safeWidgetId = sanitizeForFileSegment(widgetId);
-    const fileExtension = resultData?.is_svg ? 'svg' : 'html';
-    const targetDir = path.join(workspacePath, '.bitfun', 'sessions', sessionKey, 'generated-ui');
-    const filePath = path.join(targetDir, `${safeTitle}-${safeWidgetId}.${fileExtension}`);
-
-    try {
-      await workspaceAPI.createDirectory(targetDir);
-
-      let fileExists = false;
-      try {
-        const metadata = await workspaceAPI.getFileMetadata(filePath);
-        fileExists = metadata.isFile === true;
-      } catch (error) {
-        if (!isLikelyFileNotFoundError(error)) {
-          log.warn('Failed to inspect generative widget source file', { filePath, error });
-        }
-      }
-
-      if (!fileExists) {
-        await workspaceAPI.writeFileContent(workspacePath, filePath, widgetCode);
-      }
-
-      const fileName = path.basename(filePath);
-      const duplicateCheckKey = filePath;
-      const eventData = {
-        type: 'code-editor',
-        title: fileName,
-        data: {
-          filePath,
-          fileName,
-          workspacePath,
-          autoSave: true,
-          autoSaveDelayMs: 800,
-          _source: {
-            type: 'tool-call',
-            toolName: 'GenerativeUI',
-            toolCallId: toolCall?.id,
-            toolItemId: toolItem.id,
-            sessionId,
-          },
-        },
-        metadata: {
-          duplicateCheckKey,
-          fromTool: true,
+    const duplicateCheckKey = `generative-widget-${toolCall?.id || toolItem.id}`;
+    const eventData = {
+      type: 'generative-widget',
+      title,
+      data: {
+        widgetId,
+        widgetCode,
+        _source: {
+          type: 'tool-call',
           toolName: 'GenerativeUI',
+          sessionId,
+          toolCallId: toolCall?.id,
+          toolItemId: toolItem.id,
         },
-        checkDuplicate: true,
+      },
+      metadata: {
         duplicateCheckKey,
-        replaceExisting: true,
-      };
+        fromTool: true,
+        toolName: 'GenerativeUI',
+      },
+      checkDuplicate: true,
+      duplicateCheckKey,
+      replaceExisting: true,
+    };
 
-      window.dispatchEvent(new CustomEvent('expand-right-panel'));
+    window.dispatchEvent(new CustomEvent('expand-right-panel'));
+
+    setTimeout(() => {
       window.dispatchEvent(new CustomEvent('agent-create-tab', {
         detail: eventData,
       }));
-    } catch (error) {
-      log.error('Failed to open generative widget source editor', {
-        sessionId,
-        workspacePath,
-        widgetId,
-        filePath,
-        error,
-      });
-      notificationService.error(t('toolCards.generativeUI.openSourceFailed'));
-    }
-  }, [isClickable, resultData?.is_svg, sessionId, t, title, widgetCode, widgetId]);
+    }, 100);
+  }, [isClickable, sessionId, title, toolCall?.id, toolItem.id, widgetCode, widgetId]);
 
   const handleWidgetEvent = useCallback((event: WidgetMessage) => {
     if (event.type === 'bitfun-widget:context-menu') {
