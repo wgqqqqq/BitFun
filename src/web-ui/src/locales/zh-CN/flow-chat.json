@@ -107,6 +107,15 @@
     "copyToolInput": "复制工具输入",
     "copyToolOutput": "复制工具输出"
   },
+  "widgetContextMenu": {
+    "addToInput": "把选中元素加入输入框",
+    "addedToInput": "已将选中元素加入输入框",
+    "unknownElement": "元素",
+    "displayText": "UI：{{summary}}",
+    "promptSelected": "选中的生成式 UI 元素：{{summary}}。",
+    "promptSection": "所属区域：{{section}}。",
+    "promptFile": "关联文件：{{file}}{{line}}。"
+  },
   "input": {
     "placeholder": "有什么可以帮您...",
     "placeholderWithContext": "输入消息，或拖放文件添加上下文...",
@@ -438,6 +447,18 @@
       "gettingDiff": "获取差异",
       "preparing": "准备获取差异",
       "failed": "获取差异失败"
+    },
+    "generativeUI": {
+      "action": "生成式 UI",
+      "streamingPreview": "预览流式生成中",
+      "openSource": "打开源码",
+      "renderFailed": "组件渲染失败。",
+      "waitingForContent": "等待组件内容中...",
+      "workspaceUnavailable": "当前会话没有可用工作区，无法保存生成式 UI 源码",
+      "openSourceFailed": "打开生成式 UI 源码编辑器失败"
+    },
+    "generativeWidget": {
+      "exportFileNamePrefix": "BitFun组件"
     },
     "git": {
       "title": "Git",

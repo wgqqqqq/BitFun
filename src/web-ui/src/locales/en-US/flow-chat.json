@@ -107,6 +107,15 @@
     "copyToolInput": "Copy Tool Input",
     "copyToolOutput": "Copy Tool Output"
   },
+  "widgetContextMenu": {
+    "addToInput": "Add selected element to input",
+    "addedToInput": "Selected element added to input",
+    "unknownElement": "element",
+    "displayText": "UI: {{summary}}",
+    "promptSelected": "Selected generative UI element: {{summary}}.",
+    "promptSection": "Section: {{section}}.",
+    "promptFile": "Related file: {{file}}{{line}}."
+  },
   "input": {
     "placeholder": "How can I help you...",
     "placeholderWithContext": "Type a message, or drag and drop files to add context...",
@@ -438,6 +447,18 @@
       "gettingDiff": "Getting diff",
       "preparing": "Preparing diff",
       "failed": "Diff failed"
+    },
+    "generativeUI": {
+      "action": "Generative UI",
+      "streamingPreview": "Streaming preview",
+      "openSource": "Open source",
+      "renderFailed": "Widget rendering failed.",
+      "waitingForContent": "Waiting for widget content...",
+      "workspaceUnavailable": "No workspace is available for this session, so the generated UI source cannot be saved",
+      "openSourceFailed": "Failed to open the generated UI source editor"
+    },
+    "generativeWidget": {
+      "exportFileNamePrefix": "BitFun-Widget"
     },
     "git": {
       "title": "Git",
