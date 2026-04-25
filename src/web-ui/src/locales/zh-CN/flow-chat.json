@@ -749,6 +749,7 @@
       "noData": "无法加载任务数据",
       "executionContent": "执行内容",
       "duration": "耗时",
+      "waitingForModelResponse": "等待模型响应...",
       "status": {
         "pending": "等待中",
         "running": "执行中",
