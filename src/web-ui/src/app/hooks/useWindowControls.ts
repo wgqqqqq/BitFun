@@ -141,9 +141,10 @@ export const useWindowControls = (options?: { isToolbarMode?: boolean }) => {
     const setupListener = async () => {
       try {
         const appWindow = getCurrentWindow();
-        
-        // Get initial state (only when visible)
-        await updateWindowState(appWindow);
+
+        // Get initial state (skip visibility check so we still sync
+        // when the window is maximized before it becomes visible)
+        await updateWindowState(appWindow, true);
         await restoreMacOSOverlayTitlebar(appWindow);
         
         // Listen for resize (with debounce and visibility checks)
