@@ -185,12 +185,17 @@ describeWithJsdom('ReviewTeamPage', () => {
     expect(container.textContent).toContain('Current Policy');
     expect(container.textContent).toContain('Review settings');
     expect(container.textContent).toContain('Normal');
+    expect(container.textContent).toContain('300s');
+    expect(container.textContent).toContain('20 files');
+    expect(container.textContent).toContain('3 max');
   });
 
   it('opens the review settings tab from the overview page', async () => {
     const { useSettingsStore } = await import('@/app/scenes/settings/settingsStore');
     const { useSceneStore } = await import('@/app/stores/sceneStore');
     const { default: ReviewTeamPage } = await import('./ReviewTeamPage');
+    useSettingsStore.setState({ activeTab: 'basics' });
+    useSceneStore.setState({ activeTabId: 'session' });
 
     await act(async () => {
       root.render(<ReviewTeamPage />);
@@ -205,6 +210,32 @@ describeWithJsdom('ReviewTeamPage', () => {
 
     await act(async () => {
       settingsButton!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(useSettingsStore.getState().activeTab).toBe('review');
+    expect(useSceneStore.getState().activeTabId).toBe('settings');
+  });
+
+  it('opens review settings from the current policy summary', async () => {
+    const { useSettingsStore } = await import('@/app/scenes/settings/settingsStore');
+    const { useSceneStore } = await import('@/app/stores/sceneStore');
+    const { default: ReviewTeamPage } = await import('./ReviewTeamPage');
+    useSettingsStore.setState({ activeTab: 'basics' });
+    useSceneStore.setState({ activeTabId: 'session' });
+
+    await act(async () => {
+      root.render(<ReviewTeamPage />);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const policyPanel = container.querySelector<HTMLButtonElement>('.review-team-page__policy-panel');
+    expect(policyPanel).toBeTruthy();
+
+    await act(async () => {
+      policyPanel!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
     });
 

@@ -1,7 +1,24 @@
 {
   "title": "Review",
-  "subtitle": "Configure the Code Review Team used by Deep Review and /DeepReview.",
+  "subtitle": "Configure how Deep Review and /DeepReview assemble reviewers, apply strategy depth, and finish with a quality gate.",
   "loading": "Loading review settings...",
+  "overview": {
+    "title": "Review workflow",
+    "description": "Deep Review runs a read-only reviewer lineup in parallel, then asks the quality inspector to merge and validate the final report.",
+    "badge": "Deep Review",
+    "command": {
+      "title": "/DeepReview entry",
+      "description": "The command uses these settings whenever a chat session launches the full code review team."
+    },
+    "reviewers": {
+      "title": "Reviewer lineup",
+      "description": "Locked core reviewers cover business logic, performance, security, and final quality inspection; eligible read-only Sub-Agents can join as specialists."
+    },
+    "qualityGate": {
+      "title": "Quality gate",
+      "description": "Timeouts, file splitting, strategy depth, and model choices shape how much work each reviewer can do before the result is summarized."
+    }
+  },
   "strategy": {
     "title": "Review strategy",
     "description": "Choose the default depth for the whole code review team.",

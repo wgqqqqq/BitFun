@@ -216,6 +216,26 @@ const ReviewTeamPage: React.FC = () => {
     });
   }, [t]);
 
+  const formatPolicySeconds = useCallback((seconds: number): string => {
+    if (seconds <= 0) {
+      return t('reviewTeams.detail.noTimeout', { defaultValue: 'No cap' });
+    }
+    return t('reviewTeams.detail.secondsValue', {
+      seconds,
+      defaultValue: `${seconds}s`,
+    });
+  }, [t]);
+
+  const formatSplitThreshold = useCallback((count: number): string => {
+    if (count <= 0) {
+      return t('reviewTeams.detail.splitDisabled', { defaultValue: 'No split' });
+    }
+    return t('reviewTeams.detail.fileCountValue', {
+      count,
+      defaultValue: `${count} files`,
+    });
+  }, [t]);
+
   const formatModelLabel = useCallback((modelId: string): string => {
     if (!modelId || modelId === DEFAULT_REVIEW_TEAM_MODEL) {
       return tModel('selection.fast', { defaultValue: 'Fast' });
@@ -243,6 +263,26 @@ const ReviewTeamPage: React.FC = () => {
 
   const selectedResponsibilities = selectedMember ? getLocalizedResponsibilities(selectedMember) : [];
   const SelectedIcon = selectedMember ? getMemberIcon(selectedMember) : Bot;
+  const policy = team.executionPolicy;
+  const strategyLabel = getStrategyLabel(team.strategyLevel);
+  const reviewerTimeoutLabel = formatPolicySeconds(policy.reviewerTimeoutSeconds);
+  const judgeTimeoutLabel = formatPolicySeconds(policy.judgeTimeoutSeconds);
+  const splitThresholdLabel = formatSplitThreshold(policy.reviewerFileSplitThreshold);
+  const sameRoleInstancesLabel = t('reviewTeams.detail.instancesValue', {
+    count: policy.maxSameRoleInstances,
+    defaultValue: `${policy.maxSameRoleInstances} max`,
+  });
+  const policySummaryDescription = t('reviewTeams.detail.policySummaryDescription', {
+    strategy: strategyLabel,
+    reviewerTimeout: reviewerTimeoutLabel,
+    judgeTimeout: judgeTimeoutLabel,
+    splitThreshold: splitThresholdLabel,
+    maxSameRoleInstances: sameRoleInstancesLabel,
+    defaultValue:
+      `${strategyLabel} review uses ${reviewerTimeoutLabel} reviewer timeouts, ` +
+      `${judgeTimeoutLabel} judge timeouts, splits at ${splitThresholdLabel}, ` +
+      `and allows ${sameRoleInstancesLabel} per reviewer role.`,
+  });
 
   return (
     <ConfigPageLayout className="review-team-page">
@@ -315,8 +355,8 @@ const ReviewTeamPage: React.FC = () => {
 
         <ConfigPageSection
           title={t('reviewTeams.detail.policySummaryTitle', { defaultValue: 'Current Policy' })}
-          description={t('reviewTeams.detail.policySummaryDescription', {
-            defaultValue: 'Edit strategy, timeouts, models, and extra Review Sub-Agents in Settings.',
+          description={t('reviewTeams.detail.policySummaryIntro', {
+            defaultValue: 'This live snapshot comes from Review settings and updates when the team policy changes.',
           })}
           extra={(
             <Button variant="secondary" size="small" onClick={openReviewSettings}>
@@ -325,27 +365,54 @@ const ReviewTeamPage: React.FC = () => {
             </Button>
           )}
         >
-          <div className="review-team-page__policy-strip">
-            <Badge variant="info">{getStrategyLabel(team.strategyLevel)}</Badge>
-            <Badge variant="neutral">
-              {t('reviewTeams.detail.reviewerTimeoutValue', {
-                seconds: team.executionPolicy.reviewerTimeoutSeconds,
-                defaultValue: `Reviewer ${team.executionPolicy.reviewerTimeoutSeconds}s`,
+          <button
+            type="button"
+            className="review-team-page__policy-panel"
+            onClick={openReviewSettings}
+            aria-label={t('reviewTeams.detail.policySummaryAction', {
+              defaultValue: 'Open Review settings to edit the current policy',
+            })}
+          >
+            <div className="review-team-page__policy-copy">
+              <span className="review-team-page__policy-eyebrow">
+                {t('reviewTeams.detail.policySummaryEyebrow', { defaultValue: 'Configured behavior' })}
+              </span>
+              <p className="review-team-page__policy-description">{policySummaryDescription}</p>
+            </div>
+
+            <div
+              className="review-team-page__policy-metrics"
+              aria-label={t('reviewTeams.detail.policyMetricsLabel', {
+                defaultValue: 'Current policy values',
               })}
-            </Badge>
-            <Badge variant="neutral">
-              {t('reviewTeams.detail.judgeTimeoutValue', {
-                seconds: team.executionPolicy.judgeTimeoutSeconds,
-                defaultValue: `Judge ${team.executionPolicy.judgeTimeoutSeconds}s`,
-              })}
-            </Badge>
-            <Badge variant="neutral">
-              {t('reviewTeams.detail.splitThresholdValue', {
-                count: team.executionPolicy.reviewerFileSplitThreshold,
-                defaultValue: `Split at ${team.executionPolicy.reviewerFileSplitThreshold} files`,
-              })}
-            </Badge>
-          </div>
+            >
+              <span className="review-team-page__policy-metric">
+                <span>{t('reviewTeams.detail.policyStrategyLabel', { defaultValue: 'Strategy' })}</span>
+                <strong>{strategyLabel}</strong>
+              </span>
+              <span className="review-team-page__policy-metric">
+                <span>{t('reviewTeams.detail.reviewerTimeout', { defaultValue: 'Reviewer timeout' })}</span>
+                <strong>{reviewerTimeoutLabel}</strong>
+              </span>
+              <span className="review-team-page__policy-metric">
+                <span>{t('reviewTeams.detail.judgeTimeout', { defaultValue: 'Judge timeout' })}</span>
+                <strong>{judgeTimeoutLabel}</strong>
+              </span>
+              <span className="review-team-page__policy-metric">
+                <span>{t('reviewTeams.detail.fileSplitThreshold', { defaultValue: 'File split threshold' })}</span>
+                <strong>{splitThresholdLabel}</strong>
+              </span>
+              <span className="review-team-page__policy-metric">
+                <span>{t('reviewTeams.detail.maxSameRoleInstances', { defaultValue: 'Max same-role instances' })}</span>
+                <strong>{sameRoleInstancesLabel}</strong>
+              </span>
+            </div>
+
+            <span className="review-team-page__policy-action">
+              <Settings size={14} strokeWidth={1.9} />
+              {t('reviewTeams.detail.openSettings', { defaultValue: 'Review settings' })}
+            </span>
+          </button>
         </ConfigPageSection>
 
         <ConfigPageSection

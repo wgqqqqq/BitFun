@@ -332,6 +332,27 @@ const ReviewConfig: React.FC = () => {
 
       <ConfigPageContent>
         <ConfigPageSection
+          title={t('overview.title')}
+          description={t('overview.description')}
+          titleSuffix={<Badge variant="info">{t('overview.badge')}</Badge>}
+        >
+          <div className="review-config__overview-grid">
+            <div className="review-config__overview-item">
+              <span className="review-config__overview-label">{t('overview.command.title')}</span>
+              <p className="review-config__overview-copy">{t('overview.command.description')}</p>
+            </div>
+            <div className="review-config__overview-item">
+              <span className="review-config__overview-label">{t('overview.reviewers.title')}</span>
+              <p className="review-config__overview-copy">{t('overview.reviewers.description')}</p>
+            </div>
+            <div className="review-config__overview-item">
+              <span className="review-config__overview-label">{t('overview.qualityGate.title')}</span>
+              <p className="review-config__overview-copy">{t('overview.qualityGate.description')}</p>
+            </div>
+          </div>
+        </ConfigPageSection>
+
+        <ConfigPageSection
           title={t('strategy.title')}
           description={t('strategy.description')}
           titleSuffix={<Badge variant="neutral">{getStrategyLabel(team.strategyLevel)}</Badge>}
