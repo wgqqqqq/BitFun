@@ -18,6 +18,7 @@ import {
   type ParamsPartialToolEvent
 } from '../EventBatcher';
 import { notificationService } from '../../../shared/notification-system/services/NotificationService';
+import type { NotificationAction } from '../../../shared/notification-system/types';
 import { createLogger } from '@/shared/utils/logger';
 import type {
   ImageAnalysisEvent,
@@ -34,6 +35,7 @@ import {
 import {
   getAiErrorPresentation,
   normalizeAiErrorDetail,
+  type AiErrorPresentation,
   type AiErrorDetail,
 } from '@/shared/ai-errors/aiErrorPresenter';
 
@@ -1562,66 +1564,85 @@ function normalizeDialogErrorDetail(event: any): AiErrorDetail {
   return normalizeAiErrorDetail(detail, event.error);
 }
 
-function formatDialogError(rawError: string, errorDetail?: AiErrorDetail): { title: string; message: string; detail: string } {
-  if (errorDetail) {
-    const presentation = getAiErrorPresentation(errorDetail);
-    return {
-      title: i18nService.t(presentation.titleKey),
-      message: i18nService.t(presentation.messageKey),
-      detail: presentation.diagnostics || rawError,
-    };
-  }
+export interface DialogErrorNotification {
+  type: 'error' | 'warning';
+  title: string;
+  message: string;
+  detail: string;
+  rawError: string;
+  diagnostics: string;
+  actions?: NotificationAction[];
+  metadata?: Record<string, any>;
+}
 
-  const error = rawError || '';
-
-  const patterns: Array<{ test: RegExp; titleKey: string; messageKey: string }> = [
-    {
-      test: /stream closed before response completed|sse error|connection reset|broken pipe/i,
-      titleKey: 'errors.ai.networkError',
-      messageKey: 'errors.ai.networkErrorSuggestion',
-    },
-    {
-      test: /loop detected|consecutive.*same.*tool/i,
-      titleKey: 'errors.ai.loopDetected',
-      messageKey: 'errors.ai.loopDetectedSuggestion',
-    },
-    {
-      test: /rate limit|429|too many requests/i,
-      titleKey: 'errors.ai.rateLimit',
-      messageKey: 'errors.ai.rateLimitSuggestion',
-    },
-    {
-      test: /authentication|401|invalid api key|unauthorized/i,
-      titleKey: 'errors.ai.authError',
-      messageKey: 'errors.ai.authErrorSuggestion',
-    },
-    {
-      test: /context window|token limit|max.*token|context length/i,
-      titleKey: 'errors.ai.contextOverflow',
-      messageKey: 'errors.ai.contextOverflowSuggestion',
-    },
-    {
-      test: /timeout|timed out/i,
-      titleKey: 'errors.ai.timeout',
-      messageKey: 'errors.ai.timeoutSuggestion',
-    },
-  ];
-
-  for (const pattern of patterns) {
-    if (pattern.test.test(error)) {
-      return {
-        title: i18nService.t(pattern.titleKey),
-        message: i18nService.t(pattern.messageKey),
-        detail: error,
-      };
-    }
-  }
+export function formatDialogErrorForNotification(
+  rawError: string,
+  errorDetail?: AiErrorDetail
+): DialogErrorNotification {
+  const raw = rawError || '';
+  const normalizedDetail = normalizeAiErrorDetail(errorDetail ?? { rawMessage: raw }, raw);
+  const presentation = getAiErrorPresentation(normalizedDetail);
+  const title = i18nService.t(presentation.titleKey);
+  const message = i18nService.t(presentation.messageKey);
+  const diagnostics = buildDialogErrorDiagnostics(presentation, raw, normalizedDetail);
 
   return {
-    title: i18nService.t('errors.ai.executionFailed'),
-    message: i18nService.t('errors.ai.genericSuggestion'),
-    detail: error,
+    type: presentation.severity,
+    title,
+    message,
+    detail: diagnostics || raw,
+    rawError: raw,
+    diagnostics,
+    actions: buildDialogErrorActions(diagnostics),
+    metadata: {
+      aiError: {
+        category: presentation.category,
+        retryable: presentation.retryable,
+        diagnostics,
+        rawError: raw,
+        detail: normalizedDetail,
+      },
+    },
   };
+}
+
+function buildDialogErrorDiagnostics(
+  presentation: AiErrorPresentation,
+  rawError: string,
+  detail: AiErrorDetail
+): string {
+  const lines = [
+    presentation.diagnostics,
+    detail.providerMessage ? `provider_message=${detail.providerMessage}` : null,
+    rawError ? `raw_error=${rawError}` : null,
+  ].filter(Boolean);
+
+  return lines.join('\n');
+}
+
+function buildDialogErrorActions(diagnostics: string): NotificationAction[] | undefined {
+  if (!diagnostics) {
+    return undefined;
+  }
+
+  return [
+    {
+      label: i18nService.t('errors:ai.actions.copyDiagnostics'),
+      variant: 'secondary',
+      onClick: () => {
+        const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+        if (!clipboard?.writeText) {
+          return;
+        }
+
+        void clipboard.writeText(diagnostics).then(() => {
+          notificationService.success(i18nService.t('flow-chat:deepReviewActionBar.diagnosticsCopied'), {
+            duration: 2500,
+          });
+        });
+      },
+    },
+  ];
 }
 
 function handleDialogTurnFailed(context: FlowChatContext, event: any): void {
@@ -1716,11 +1737,19 @@ function handleDialogTurnFailed(context: FlowChatContext, event: any): void {
     });
   }
   
-  const formatted = formatDialogError(error, errorDetail);
-  notificationService.error(formatted.message, {
+  const formatted = formatDialogErrorForNotification(error, errorDetail);
+  const options = {
     title: formatted.title,
-    duration: 8000
-  });
+    duration: 8000,
+    actions: formatted.actions,
+    metadata: formatted.metadata,
+  };
+
+  if (formatted.type === 'warning') {
+    notificationService.warning(formatted.message, options);
+  } else {
+    notificationService.error(formatted.message, options);
+  }
 
   // Mark unread error completion for non-active sessions
   const activeSessionIdForError = store.getState().activeSessionId;

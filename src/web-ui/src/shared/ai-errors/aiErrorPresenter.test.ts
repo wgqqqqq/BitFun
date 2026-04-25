@@ -17,7 +17,7 @@ describe('aiErrorPresenter', () => {
 
     const presentation = getAiErrorPresentation(detail);
 
-    expect(presentation.titleKey).toBe('errors.ai.providerQuota.title');
+    expect(presentation.titleKey).toBe('errors:ai.providerQuota.title');
     expect(presentation.actions.map((action) => action.code)).toEqual([
       'open_model_settings',
       'switch_model',
@@ -37,6 +37,33 @@ describe('aiErrorPresenter', () => {
       const presentation = getAiErrorPresentation(normalizeAiErrorDetail(value));
       expect(presentation.category).toBe('provider_quota');
       expect(presentation.actions.some((action) => action.code === 'switch_model')).toBe(true);
+    }
+  });
+
+  it('returns translation keys from the errors namespace for notification copy', () => {
+    const cases: Array<{ detail: AiErrorDetail; titleKey: string; messageKey: string }> = [
+      {
+        detail: { category: 'network', rawMessage: 'stream closed before response completed' },
+        titleKey: 'errors:ai.networkError',
+        messageKey: 'errors:ai.networkErrorSuggestion',
+      },
+      {
+        detail: { category: 'rate_limit', httpStatus: 429, rawMessage: 'too many requests' },
+        titleKey: 'errors:ai.rateLimit',
+        messageKey: 'errors:ai.rateLimitSuggestion',
+      },
+      {
+        detail: { category: 'invalid_request', httpStatus: 400, rawMessage: 'invalid request' },
+        titleKey: 'errors:ai.invalidRequest.title',
+        messageKey: 'errors:ai.invalidRequest.message',
+      },
+    ];
+
+    for (const { detail, titleKey, messageKey } of cases) {
+      const presentation = getAiErrorPresentation(normalizeAiErrorDetail(detail));
+      expect(presentation.titleKey).toBe(titleKey);
+      expect(presentation.messageKey).toBe(messageKey);
+      expect(presentation.actions.some((action) => action.labelKey === 'errors:ai.actions.copyDiagnostics')).toBe(true);
     }
   });
 

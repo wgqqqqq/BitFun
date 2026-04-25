@@ -220,11 +220,15 @@
     }
 
     &--deep {
-      color: color-mix(in srgb, var(--color-accent-500, #60a5fa) 92%, var(--color-text-primary));
-      font-weight: 600;
+      color: var(--color-text-primary);
+      font-weight: var(--font-weight-normal, 400);
 
       &:hover {
-        background: color-mix(in srgb, var(--color-accent-500, #60a5fa) 14%, transparent);
+        background: var(--element-bg-soft);
+      }
+
+      .session-files-badge__review-icon {
+        color: var(--color-purple-500, #8b5cf6);
       }
     }
   }
