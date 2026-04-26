@@ -1602,6 +1602,7 @@ export class FlowChatStore {
             sessionKind: relationship.sessionKind,
             btwThreads: [],
             btwOrigin: relationship.btwOrigin,
+            hasUnreadCompletion: metadata.unreadCompletion,
           };
           
           const newSessions = new Map(prev.sessions);
