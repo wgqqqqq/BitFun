@@ -1,4 +1,3 @@
-/* eslint-disable no-useless-escape -- regex patterns inside template strings are eval'd as JS at runtime, so \\s becomes \s */
 /**
  * Main-window element inspector for desktop debugging.
  *

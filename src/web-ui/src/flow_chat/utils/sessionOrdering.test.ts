@@ -18,7 +18,7 @@ function createSession(overrides: Partial<Session> = {}): Session {
       agentType: 'agentic',
     },
     createdAt: 1000,
-    lastActiveAt: 1000,
+    lastActiveAt: undefined,
     lastFinishedAt: undefined,
     error: null,
     todos: [],
