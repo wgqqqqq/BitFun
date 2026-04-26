@@ -792,7 +792,9 @@
     },
     "timeout": {
       "disableTooltip": "Disable timeout",
+      "disableLabel": "Disable",
       "enableTooltip": "Re-enable timeout",
+      "enableLabel": "Enable",
       "restoreShort": "Restore ({{seconds}}s left)"
     },
     "diagram": {
@@ -1141,6 +1143,7 @@
         "certainty": "Certainty",
         "location": "Location",
         "noSelectionHint": "Select at least one remediation item to start fixing.",
+        "ungrouped": "Other",
         "startFix": "Start fixing",
         "fixAndReview": "Fix and re-review",
         "cancel": "Cancel",

@@ -792,7 +792,9 @@
     },
     "timeout": {
       "disableTooltip": "关闭超时限制",
+      "disableLabel": "关闭",
       "enableTooltip": "恢复超时限制",
+      "enableLabel": "启用",
       "restoreShort": "恢复（剩余 {{seconds}} 秒）"
     },
     "diagram": {
@@ -1141,6 +1143,7 @@
         "certainty": "确定性",
         "location": "位置",
         "noSelectionHint": "至少选择一项修复计划后才能开始修复。",
+        "ungrouped": "其他",
         "startFix": "开始修复",
         "fixAndReview": "修复后重新审核",
         "cancel": "取消",
