@@ -279,6 +279,20 @@ impl WorkspaceSearchService {
         }
     }
 
+    pub async fn stop_all_daemons(&self) {
+        let released_sessions = self.sessions.write().await.drain().count();
+        self.open_guards.lock().await.clear();
+        if released_sessions > 0 {
+            log::info!(
+                "Workspace search stop releasing sessions via daemon stop: count={}",
+                released_sessions
+            );
+        }
+        if let Err(error) = self.client.stop_daemon().await {
+            log::debug!("Workspace search daemon stop skipped: {}", error);
+        }
+    }
+
     async fn get_or_open_session(&self, repo_root: &Path) -> BitFunResult<Arc<RepoSession>> {
         let repo_root = normalize_repo_root(repo_root)?;
         let repo_guard = {
@@ -413,34 +427,92 @@ pub fn get_global_workspace_search_service() -> Option<Arc<WorkspaceSearchServic
     GLOBAL_WORKSPACE_SEARCH_SERVICE.get().cloned()
 }
 
-fn resolve_daemon_program() -> Option<OsString> {
+pub fn workspace_search_daemon_binary_names() -> &'static [&'static str] {
+    if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+        &["flashgrep-x86_64-pc-windows-msvc.exe"]
+    } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
+        &["flashgrep-aarch64-pc-windows-msvc.exe"]
+    } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+        &["flashgrep-x86_64-apple-darwin"]
+    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        &["flashgrep-aarch64-apple-darwin"]
+    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        &["flashgrep-x86_64-unknown-linux-gnu"]
+    } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+        &["flashgrep-aarch64-unknown-linux-gnu"]
+    } else if cfg!(windows) {
+        &["flashgrep.exe"]
+    } else {
+        &["flashgrep"]
+    }
+}
+
+pub fn workspace_search_daemon_binary_name() -> &'static str {
+    workspace_search_daemon_binary_names()
+        .first()
+        .copied()
+        .unwrap_or("flashgrep")
+}
+
+pub fn workspace_search_daemon_missing_hint() -> String {
+    let bundled_paths = workspace_search_daemon_binary_names()
+        .iter()
+        .map(|name| format!("flashgrep/{name}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "workspace search daemon binary is missing; expected one of bundled resources [{}] or a valid FLASHGREP_DAEMON_BIN override",
+        bundled_paths
+    )
+}
+
+pub fn workspace_search_daemon_available() -> bool {
+    resolve_workspace_search_daemon_program_path().is_some()
+}
+
+pub async fn workspace_search_feature_enabled() -> bool {
+    match get_global_config_service().await {
+        Ok(config_service) => config_service
+            .get_config::<bool>(Some("app.ai_experience.enable_workspace_search"))
+            .await
+            .unwrap_or(false),
+        Err(_) => false,
+    }
+}
+
+pub async fn workspace_search_runtime_available() -> bool {
+    workspace_search_feature_enabled().await && workspace_search_daemon_available()
+}
+
+pub fn resolve_workspace_search_daemon_program_path() -> Option<PathBuf> {
     if let Some(program) = std::env::var_os("FLASHGREP_DAEMON_BIN") {
-        return Some(program);
+        let path = PathBuf::from(program);
+        if path.exists() {
+            return Some(path);
+        }
     }
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let workspace_root = manifest_dir.join("../../..");
-    let binary_name = if cfg!(windows) {
-        "flashgrep.exe"
-    } else {
-        "flashgrep"
-    };
+    let binary_names = workspace_search_daemon_binary_names();
     let profile = std::env::var("PROFILE").ok();
 
-    for candidate in daemon_binary_candidates(&workspace_root, binary_name, profile.as_deref()) {
+    for candidate in daemon_binary_candidates(&workspace_root, binary_names, profile.as_deref()) {
         if candidate.exists() {
-            return Some(candidate.into_os_string());
+            return Some(candidate);
         }
     }
 
-    which::which("flashgrep")
-        .ok()
-        .map(|path| path.into_os_string())
+    which::which("flashgrep").ok()
+}
+
+fn resolve_daemon_program() -> Option<OsString> {
+    resolve_workspace_search_daemon_program_path().map(PathBuf::into_os_string)
 }
 
 fn daemon_binary_candidates(
     workspace_root: &Path,
-    binary_name: &str,
+    binary_names: &[&str],
     current_profile: Option<&str>,
 ) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
@@ -454,8 +526,10 @@ fn daemon_binary_candidates(
 
     if let Ok(current_exe) = std::env::current_exe() {
         if let Some(parent) = current_exe.parent() {
-            push_candidate(parent.join(binary_name));
-            push_exe_relative_bundle_candidates(&mut push_candidate, parent, binary_name);
+            for binary_name in binary_names {
+                push_candidate(parent.join(binary_name));
+            }
+            push_exe_relative_bundle_candidates(&mut push_candidate, parent, binary_names);
         }
     }
 
@@ -463,12 +537,14 @@ fn daemon_binary_candidates(
         .into_iter()
         .chain(["debug", "release", "release-fast"])
     {
-        push_candidate(
-            workspace_root
-                .join("target")
-                .join(profile)
-                .join(binary_name),
-        );
+        for binary_name in binary_names {
+            push_candidate(
+                workspace_root
+                    .join("target")
+                    .join(profile)
+                    .join(binary_name),
+            );
+        }
     }
 
     candidates
@@ -477,23 +553,29 @@ fn daemon_binary_candidates(
 fn push_exe_relative_bundle_candidates(
     push_candidate: &mut impl FnMut(PathBuf),
     exe_dir: &Path,
-    binary_name: &str,
+    binary_names: &[&str],
 ) {
     if cfg!(target_os = "macos") {
-        push_candidate(exe_dir.join("../Resources/flashgrep").join(binary_name));
+        for binary_name in binary_names {
+            push_candidate(exe_dir.join("../Resources/flashgrep").join(binary_name));
+        }
     }
 
-    push_candidate(exe_dir.join("flashgrep").join(binary_name));
-    push_candidate(exe_dir.join("resources/flashgrep").join(binary_name));
+    for binary_name in binary_names {
+        push_candidate(exe_dir.join("flashgrep").join(binary_name));
+        push_candidate(exe_dir.join("resources/flashgrep").join(binary_name));
+    }
 
     if cfg!(target_os = "linux") {
-        push_candidate(exe_dir.join("../lib/bitfun/flashgrep").join(binary_name));
-        push_candidate(exe_dir.join("../share/bitfun/flashgrep").join(binary_name));
-        push_candidate(
-            exe_dir
-                .join("../share/com.bitfun.desktop/flashgrep")
-                .join(binary_name),
-        );
+        for binary_name in binary_names {
+            push_candidate(exe_dir.join("../lib/bitfun/flashgrep").join(binary_name));
+            push_candidate(exe_dir.join("../share/bitfun/flashgrep").join(binary_name));
+            push_candidate(
+                exe_dir
+                    .join("../share/com.bitfun.desktop/flashgrep")
+                    .join(binary_name),
+            );
+        }
     }
 }
 
@@ -732,5 +814,15 @@ fn split_preview(
 fn map_flashgrep_error(
     prefix: &'static str,
 ) -> impl Fn(crate::service::search::flashgrep::error::AppError) -> BitFunError {
-    move |error| BitFunError::service(format!("{prefix}: {error}"))
+    move |error| {
+        let detail = match &error {
+            crate::service::search::flashgrep::error::AppError::Io(io_error)
+                if io_error.kind() == std::io::ErrorKind::NotFound =>
+            {
+                format!("{error}. {}", workspace_search_daemon_missing_hint())
+            }
+            _ => error.to_string(),
+        };
+        BitFunError::service(format!("{prefix}: {detail}"))
+    }
 }

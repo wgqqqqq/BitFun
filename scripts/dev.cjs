@@ -544,26 +544,49 @@ async function startDesktopPreview() {
   await new Promise(() => {});
 }
 
-function flashgrepBinaryName() {
-  return process.platform === 'win32' ? 'flashgrep.exe' : 'flashgrep';
+function flashgrepBinaryNames() {
+  if (process.platform === 'win32' && process.arch === 'x64') {
+    return ['flashgrep-x86_64-pc-windows-msvc.exe'];
+  }
+  if (process.platform === 'win32' && process.arch === 'arm64') {
+    return ['flashgrep-aarch64-pc-windows-msvc.exe'];
+  }
+  if (process.platform === 'darwin' && process.arch === 'x64') {
+    return ['flashgrep-x86_64-apple-darwin'];
+  }
+  if (process.platform === 'darwin' && process.arch === 'arm64') {
+    return ['flashgrep-aarch64-apple-darwin'];
+  }
+  if (process.platform === 'linux' && process.arch === 'x64') {
+    return ['flashgrep-x86_64-unknown-linux-gnu'];
+  }
+  if (process.platform === 'linux' && process.arch === 'arm64') {
+    return ['flashgrep-aarch64-unknown-linux-gnu'];
+  }
+  return [process.platform === 'win32' ? 'flashgrep.exe' : 'flashgrep'];
 }
 
-function flashgrepBinaryPath() {
-  return path.join(ROOT_DIR, 'resources', 'flashgrep', flashgrepBinaryName());
+function flashgrepBinaryName() {
+  return flashgrepBinaryNames()[0];
 }
 
 function ensureFlashgrepBinary() {
-  const binaryPath = flashgrepBinaryPath();
-  if (!fs.existsSync(binaryPath)) {
-    return {
-      ok: false,
-      error: new Error(
-        `flashgrep binary not found: ${binaryPath}. Put the prebuilt daemon binary at resources/flashgrep/${flashgrepBinaryName()}`
-      ),
-    };
+  for (const binaryName of flashgrepBinaryNames()) {
+    const binaryPath = path.join(ROOT_DIR, 'resources', 'flashgrep', binaryName);
+    if (!fs.existsSync(binaryPath)) {
+      continue;
+    }
+    return { ok: true, binaryPath };
   }
 
-  return { ok: true, binaryPath };
+  return {
+    ok: false,
+    error: new Error(
+      `flashgrep binary not found for ${process.platform}/${process.arch}. Expected one of: ${flashgrepBinaryNames()
+        .map((name) => `resources/flashgrep/${name}`)
+        .join(', ')}`
+    ),
+  };
 }
 
 async function ensureFlashgrepBundleResource() {
@@ -685,7 +708,7 @@ async function main() {
     if (mode === 'desktop') {
       await ensureDesktopOpenSslIfNeeded();
       const desktopDir = path.join(ROOT_DIR, 'src/apps/desktop');
-      const tauriConfig = path.join(desktopDir, 'tauri.conf.json');
+      const tauriConfig = path.join(desktopDir, 'tauri.dev.conf.json');
       if (process.platform === 'win32') {
         // Running the generated .cmd shim directly via spawn is flaky on Windows.
         // Use cmd.exe with an explicit args array so the desktop app directory
