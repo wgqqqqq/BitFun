@@ -8,7 +8,8 @@
     "searchClear": "清除搜索",
     "beta": "Beta",
     "tabDescriptions": {
-      "basics": "語言、主題、日誌、終端 Shell 與開機啟動。",
+      "basics": "日誌、終端 Shell、通知與開機啟動。",
+      "appearance": "語言、主題與介面字體大小。",
       "models": "AI 模型、API 密鑰、供應商與代理。",
       "sessionConfig": "會話行為、工具與超時。",
       "review": "深度審核策略、審核員模型與額外審核 Sub-Agent。",
@@ -26,6 +27,7 @@
     },
     "tabs": {
       "basics": "基礎",
+      "appearance": "外觀",
       "models": "模型",
       "sessionConfig": "會話配置",
       "review": "審核",

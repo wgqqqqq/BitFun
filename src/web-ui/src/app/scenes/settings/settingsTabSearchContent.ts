@@ -17,12 +17,21 @@ export const SETTINGS_TAB_SEARCH_CONTENT: Record<ConfigTab, readonly SettingsTab
   basics: [
     { ns: 'settings/basics', key: 'title' },
     { ns: 'settings/basics', key: 'subtitle' },
-    { ns: 'settings/basics', key: 'appearance.title' },
-    { ns: 'settings/basics', key: 'appearance.hint' },
     { ns: 'settings/basics', key: 'logging.sections.logging' },
     { ns: 'settings/basics', key: 'logging.sections.loggingHint' },
     { ns: 'settings/basics', key: 'terminal.sections.terminal' },
     { ns: 'settings/basics', key: 'terminal.sections.terminalHint' },
+    { ns: 'settings/basics', key: 'notifications.title' },
+    { ns: 'settings/basics', key: 'notifications.hint' },
+  ],
+
+  appearance: [
+    { ns: 'settings/appearance', key: 'title' },
+    { ns: 'settings/appearance', key: 'subtitle' },
+    { ns: 'settings/basics', key: 'appearance.title' },
+    { ns: 'settings/basics', key: 'appearance.hint' },
+    { ns: 'settings/basics', key: 'appearance.fontSize.title' },
+    { ns: 'settings/basics', key: 'appearance.fontSize.hint' },
   ],
 
   models: [

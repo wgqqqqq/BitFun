@@ -35,6 +35,7 @@ import {
 } from '@/shared/types';
 import { SSHContext } from '@/features/ssh-remote/SSHRemoteContext';
 import { useWorkspaceSearchIndex } from '@/tools/file-explorer';
+import { computeFixedPopoverPosition } from '@/shared/utils/fixedPopoverViewport';
 
 
 interface WorkspaceItemProps {
@@ -266,13 +267,19 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
 
     const rect = anchor.getBoundingClientRect();
     const viewportPadding = 8;
-    const estimatedWidth = 240;
-    const maxLeft = window.innerWidth - estimatedWidth - viewportPadding;
+    const gap = 6;
+    const fallbackWidth = 240;
+    const fallbackHeight = 260;
 
-    setMenuPosition({
-      top: Math.max(viewportPadding, rect.bottom + 6),
-      left: Math.max(viewportPadding, Math.min(rect.left, maxLeft)),
-    });
+    const apply = () => {
+      const menuEl = menuPopoverRef.current;
+      const w = menuEl?.offsetWidth ?? fallbackWidth;
+      const h = menuEl?.offsetHeight ?? fallbackHeight;
+      setMenuPosition(computeFixedPopoverPosition(rect, w, h, gap, viewportPadding));
+    };
+
+    apply();
+    requestAnimationFrame(apply);
   }, []);
 
   useEffect(() => {

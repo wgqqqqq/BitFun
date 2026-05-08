@@ -7,6 +7,7 @@
 
 export type ConfigTab =
   | 'basics'
+  | 'appearance'
   | 'models'
   | 'session-config'
   | 'review'
@@ -44,11 +45,6 @@ export const SETTINGS_CATEGORIES: ConfigCategoryDef[] = [
         labelKey: 'configCenter.tabs.basics',
         descriptionKey: 'configCenter.tabDescriptions.basics',
         keywords: [
-          'language',
-          'locale',
-          'i18n',
-          'theme',
-          'appearance',
           'logging',
           'log',
           'terminal',
@@ -59,6 +55,25 @@ export const SETTINGS_CATEGORIES: ConfigCategoryDef[] = [
           'login',
           'boot',
           'launch',
+          'notification',
+          'notifications',
+          'startup tips',
+        ],
+      },
+      {
+        id: 'appearance',
+        labelKey: 'configCenter.tabs.appearance',
+        descriptionKey: 'configCenter.tabDescriptions.appearance',
+        keywords: [
+          'language',
+          'locale',
+          'i18n',
+          'theme',
+          'appearance',
+          'font',
+          'fonts',
+          'typography',
+          'size',
         ],
       },
       {
@@ -197,7 +212,8 @@ const KNOWN_TABS: ConfigTab[] = SETTINGS_CATEGORIES.flatMap((c) => c.tabs.map((t
 
 /** Map removed or renamed tabs; used by deep links and IDE actions. */
 export function normalizeSettingsTab(section: string): ConfigTab {
-  if (section === 'theme' || section === 'logging' || section === 'terminal') return 'basics';
+  if (section === 'theme' || section === 'font' || section === 'fonts') return 'appearance';
+  if (section === 'logging' || section === 'terminal') return 'basics';
   if (section === 'lsp') return DEFAULT_SETTINGS_TAB;
   if (section === 'deep-review' || section === 'code-review' || section === 'review-team') return 'review';
   if (section === 'shortcuts' || section === 'keybindings' || section === 'hotkeys') return 'keyboard';

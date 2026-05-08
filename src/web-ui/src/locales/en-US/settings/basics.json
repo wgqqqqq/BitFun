@@ -1,6 +1,6 @@
 {
   "title": "Basics",
-  "subtitle": "Interface language, theme, logging, terminal, and login startup",
+  "subtitle": "Logging, terminal, notifications, and launch at login",
   "appearance": {
     "title": "Appearance",
     "hint": "Interface language and visual theme",

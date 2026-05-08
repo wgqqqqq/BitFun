@@ -8,7 +8,8 @@
     "searchClear": "Clear search",
     "beta": "Beta",
     "tabDescriptions": {
-      "basics": "Language, theme, logging, terminal shell, and launch at login.",
+      "basics": "Logging, terminal shell, notifications, and launch at login.",
+      "appearance": "Language, theme, and UI font size.",
       "models": "AI models, API keys, providers, and proxy.",
       "sessionConfig": "Session behavior, tools, and timeouts.",
       "review": "Deep Review strategy, reviewer models, and extra Review Sub-Agents.",
@@ -26,6 +27,7 @@
     },
     "tabs": {
       "basics": "Basics",
+      "appearance": "Appearance",
       "models": "Models",
       "sessionConfig": "Session Config",
       "review": "Review",
