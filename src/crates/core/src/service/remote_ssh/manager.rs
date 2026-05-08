@@ -1411,13 +1411,14 @@ impl SSHConnectionManager {
                 Some(russh::ChannelMsg::ExitSignal { signal_name, .. }) => {
                     interrupted = interrupted || matches!(signal_name, Sig::INT | Sig::TERM);
                 }
-                Some(russh::ChannelMsg::Eof) | Some(russh::ChannelMsg::Close) => {
-                    break;
+                Some(russh::ChannelMsg::Eof) => {
+                }
+                Some(russh::ChannelMsg::Close) => {
                 }
                 None => {
                     break;
                 }
-                _ => {}
+                Some(_) => {}
             }
         }
 
