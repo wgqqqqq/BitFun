@@ -4,7 +4,7 @@ use std::{
     process::Stdio,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc,
+        Arc, Mutex as StdMutex, MutexGuard as StdMutexGuard,
     },
     time::{Duration, Instant},
 };
@@ -35,6 +35,7 @@ const CLIENT_NAME: &str = "bitfun-workspace-search";
 const REPO_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 const SHUTDOWN_REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
+const DROP_CLEANUP_TIMEOUT: Duration = Duration::from_millis(150);
 
 type PendingResponseSender = oneshot::Sender<Result<ResponseEnvelope>>;
 type PendingResponses = HashMap<u64, PendingResponseSender>;
@@ -62,18 +63,30 @@ struct ManagedClientState {
 
 #[derive(Debug)]
 struct AsyncDaemonClient {
-    child: Mutex<Option<Child>>,
+    child: StdMutex<Option<Child>>,
     writer: Mutex<BufWriter<ChildStdin>>,
     shared: Arc<DaemonShared>,
     next_id: AtomicU64,
-    reader_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    stderr_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    reader_task: StdMutex<Option<tokio::task::JoinHandle<()>>>,
+    stderr_task: StdMutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 #[derive(Debug, Default)]
 struct DaemonShared {
     pending: Mutex<PendingResponses>,
     closed: AtomicBool,
+}
+
+fn lock_std_mutex<T>(mutex: &StdMutex<T>) -> StdMutexGuard<'_, T> {
+    match mutex.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    }
+}
+
+fn take_std_option<T>(mutex: &StdMutex<Option<T>>) -> Option<T> {
+    let mut guard = lock_std_mutex(mutex);
+    guard.take()
 }
 
 impl Default for ManagedClient {
@@ -404,6 +417,7 @@ impl AsyncDaemonClient {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
+        process_manager::configure_process_group(&mut command);
 
         let mut child = command.spawn()?;
         let stdin = child.stdin.take().ok_or_else(|| {
@@ -415,17 +429,30 @@ impl AsyncDaemonClient {
         let stderr = child.stderr.take();
 
         let client = Self {
-            child: Mutex::new(Some(child)),
+            child: StdMutex::new(Some(child)),
             writer: Mutex::new(BufWriter::new(stdin)),
             shared: Arc::new(DaemonShared::default()),
             next_id: AtomicU64::new(1),
-            reader_task: Mutex::new(None),
-            stderr_task: Mutex::new(None),
+            reader_task: StdMutex::new(None),
+            stderr_task: StdMutex::new(None),
         };
 
         client.spawn_reader_task(stdout).await;
         client.spawn_stderr_task(stderr).await;
-        client.initialize().await?;
+        if let Err(error) = client.initialize().await {
+            client.mark_closed();
+            client
+                .reject_pending("flashgrep stdio backend failed during startup")
+                .await;
+            if let Err(terminate_error) = client.wait_for_child_exit().await {
+                log::debug!(
+                    "Flashgrep stdio daemon cleanup after failed startup errored: {}",
+                    terminate_error
+                );
+            }
+            client.stop_background_tasks().await;
+            return Err(error);
+        }
         Ok(client)
     }
 
@@ -542,7 +569,7 @@ impl AsyncDaemonClient {
     }
 
     async fn wait_for_child_exit(&self) -> Result<()> {
-        let mut child = self.child.lock().await.take();
+        let mut child = take_std_option(&self.child);
         let Some(child) = child.as_mut() else {
             return Ok(());
         };
@@ -552,20 +579,23 @@ impl AsyncDaemonClient {
                 wait_result?;
                 Ok(())
             }
-            Err(_) => {
-                child.kill().await?;
-                child.wait().await?;
-                Ok(())
-            }
+            Err(_) => process_manager::terminate_child_process_tree(
+                child,
+                Duration::from_millis(750),
+            )
+            .await
+            .map_err(AppError::Io),
         }
     }
 
     async fn stop_background_tasks(&self) {
-        if let Some(handle) = self.reader_task.lock().await.take() {
+        let reader_handle = take_std_option(&self.reader_task);
+        if let Some(handle) = reader_handle {
             handle.abort();
             let _ = handle.await;
         }
-        if let Some(handle) = self.stderr_task.lock().await.take() {
+        let stderr_handle = take_std_option(&self.stderr_task);
+        if let Some(handle) = stderr_handle {
             handle.abort();
             let _ = handle.await;
         }
@@ -595,7 +625,7 @@ impl AsyncDaemonClient {
             }
         });
 
-        *self.reader_task.lock().await = Some(handle);
+        *lock_std_mutex(&self.reader_task) = Some(handle);
     }
 
     async fn spawn_stderr_task(&self, stderr: Option<ChildStderr>) {
@@ -619,11 +649,34 @@ impl AsyncDaemonClient {
             }
         });
 
-        *self.stderr_task.lock().await = Some(handle);
+        *lock_std_mutex(&self.stderr_task) = Some(handle);
     }
 
     async fn reject_pending(&self, message: impl Into<String>) {
         reject_pending_requests(&self.shared.pending, message.into()).await;
+    }
+
+    fn take_child_for_drop(&self) -> Option<Child> {
+        take_std_option(&self.child)
+    }
+
+    fn abort_background_tasks_for_drop(&self) {
+        if let Some(handle) = take_std_option(&self.reader_task) {
+            handle.abort();
+        }
+        if let Some(handle) = take_std_option(&self.stderr_task) {
+            handle.abort();
+        }
+    }
+}
+
+impl Drop for AsyncDaemonClient {
+    fn drop(&mut self) {
+        self.mark_closed();
+        self.abort_background_tasks_for_drop();
+        if let Some(child) = self.take_child_for_drop() {
+            process_manager::spawn_child_process_tree_cleanup(child, DROP_CLEANUP_TIMEOUT);
+        }
     }
 }
 

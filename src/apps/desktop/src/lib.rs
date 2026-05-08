@@ -1056,33 +1056,7 @@ fn perform_process_exit_cleanup() -> bool {
     }
 
     if let Some(search_service) = get_global_workspace_search_service() {
-        let shutdown_thread = std::thread::Builder::new()
-            .name("workspace-search-shutdown".to_string())
-            .spawn(move || {
-                match tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                {
-                    Ok(runtime) => {
-                        runtime.block_on(async move {
-                            search_service.shutdown_all_daemons().await;
-                        });
-                    }
-                    Err(error) => {
-                        log::warn!(
-                            "Failed to create runtime for workspace search shutdown: {}",
-                            error
-                        );
-                    }
-                }
-            });
-
-        if let Err(error) = shutdown_thread {
-            log::warn!(
-                "Failed to spawn workspace search shutdown thread: {}",
-                error
-            );
-        }
+        search_service.shutdown_blocking();
     }
     bitfun_core::util::process_manager::cleanup_all_processes();
     api::remote_connect_api::cleanup_on_exit();

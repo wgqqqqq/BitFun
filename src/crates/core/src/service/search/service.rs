@@ -11,7 +11,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    Arc, OnceLock,
+    Arc, LazyLock, Mutex as StdMutex, Weak,
 };
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock};
@@ -22,7 +22,8 @@ use super::types::{
     WorkspaceSearchHit,
 };
 
-static GLOBAL_WORKSPACE_SEARCH_SERVICE: OnceLock<Arc<WorkspaceSearchService>> = OnceLock::new();
+static GLOBAL_WORKSPACE_SEARCH_SERVICE: LazyLock<StdMutex<Weak<WorkspaceSearchService>>> =
+    LazyLock::new(|| StdMutex::new(Weak::new()));
 
 const DEFAULT_TOP_K_TOKENS: usize = 6;
 const DEFAULT_SESSION_IDLE_GRACE: Duration = Duration::from_secs(45);
@@ -260,9 +261,14 @@ impl WorkspaceSearchService {
         let Ok(repo_root) = normalize_repo_root(repo_root.as_ref()) else {
             return;
         };
-        let service = Arc::clone(self);
+        let delay = self.session_idle_grace;
+        let service = Arc::downgrade(self);
         tokio::spawn(async move {
-            service.release_repo_after_grace(repo_root).await;
+            tokio::time::sleep(delay).await;
+            let Some(service) = service.upgrade() else {
+                return;
+            };
+            service.release_repo_if_idle(repo_root).await;
         });
     }
 
@@ -291,6 +297,40 @@ impl WorkspaceSearchService {
         }
         if let Err(error) = self.client.stop_daemon().await {
             log::debug!("Workspace search daemon stop skipped: {}", error);
+        }
+    }
+
+    pub fn shutdown_blocking(self: &Arc<Self>) {
+        let service = Arc::clone(self);
+        match std::thread::Builder::new()
+            .name("workspace-search-shutdown".to_string())
+            .spawn(move || match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(runtime) => {
+                    runtime.block_on(async move {
+                        service.shutdown_all_daemons().await;
+                    });
+                }
+                Err(error) => {
+                    log::warn!(
+                        "Failed to create runtime for workspace search shutdown: {}",
+                        error
+                    );
+                }
+            }) {
+            Ok(handle) => {
+                if handle.join().is_err() {
+                    log::warn!("Workspace search shutdown thread panicked during blocking shutdown");
+                }
+            }
+            Err(error) => {
+                log::warn!(
+                    "Failed to spawn workspace search shutdown thread: {}",
+                    error
+                );
+            }
         }
     }
 
@@ -380,7 +420,7 @@ impl WorkspaceSearchService {
         })
     }
 
-    async fn release_repo_after_grace(self: Arc<Self>, repo_root: PathBuf) {
+    async fn release_repo_if_idle(&self, repo_root: PathBuf) {
         let Some(expected_epoch) = self
             .sessions
             .read()
@@ -390,8 +430,6 @@ impl WorkspaceSearchService {
         else {
             return;
         };
-
-        tokio::time::sleep(self.session_idle_grace).await;
 
         let entry = {
             let mut sessions = self.sessions.write().await;
@@ -428,11 +466,19 @@ impl Default for WorkspaceSearchService {
 }
 
 pub fn set_global_workspace_search_service(service: Arc<WorkspaceSearchService>) {
-    let _ = GLOBAL_WORKSPACE_SEARCH_SERVICE.set(service);
+    let mut global = match GLOBAL_WORKSPACE_SEARCH_SERVICE.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    *global = Arc::downgrade(&service);
 }
 
 pub fn get_global_workspace_search_service() -> Option<Arc<WorkspaceSearchService>> {
-    GLOBAL_WORKSPACE_SEARCH_SERVICE.get().cloned()
+    let global = match GLOBAL_WORKSPACE_SEARCH_SERVICE.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    global.upgrade()
 }
 
 pub fn workspace_search_daemon_binary_names() -> &'static [&'static str] {
