@@ -461,18 +461,18 @@ mod tests {
     fn normalize_skill_override_lists_removes_duplicates_and_conflicts() {
         let (disabled, enabled) = normalize_skill_override_lists(
             vec![
-                "user::bitfun::pdf".to_string(),
-                "user::bitfun::pdf".to_string(),
+                "user::bitfun-system::pdf".to_string(),
+                "user::bitfun-system::pdf".to_string(),
             ],
             vec![
-                "user::bitfun::pdf".to_string(),
-                "user::bitfun::docx".to_string(),
-                "user::bitfun::docx".to_string(),
+                "user::bitfun-system::pdf".to_string(),
+                "user::bitfun-system::docx".to_string(),
+                "user::bitfun-system::docx".to_string(),
             ],
         );
 
-        assert_eq!(disabled, vec!["user::bitfun::pdf".to_string()]);
-        assert_eq!(enabled, vec!["user::bitfun::docx".to_string()]);
+        assert_eq!(disabled, vec!["user::bitfun-system::pdf".to_string()]);
+        assert_eq!(enabled, vec!["user::bitfun-system::docx".to_string()]);
     }
 
     #[test]
@@ -484,7 +484,7 @@ mod tests {
             Vec::new(),
             Vec::new(),
             Vec::new(),
-            vec!["user::bitfun::pdf".to_string()],
+            vec!["user::bitfun-system::pdf".to_string()],
             &[],
             &valid_tools,
         )
@@ -492,7 +492,7 @@ mod tests {
 
         assert_eq!(
             stored.enabled_user_skills,
-            vec!["user::bitfun::pdf".to_string()]
+            vec!["user::bitfun-system::pdf".to_string()]
         );
         assert!(stored.disabled_user_skills.is_empty());
     }

@@ -235,10 +235,23 @@ export interface SkillInfo {
 }
 
 export interface ModeSkillInfo extends SkillInfo {
-  /** True when this skill key is explicitly disabled in the current mode config. */
+  /** True when this skill is enabled before any mode-specific override is applied. */
+  defaultEnabled: boolean;
+  /** True when this skill remains enabled after all mode-specific overrides are applied. */
+  effectiveEnabled: boolean;
+  /** Backward-compatible inverse of `effectiveEnabled`. */
   disabledByMode: boolean;
   /** True when this skill is the one actually selected at runtime after disable + priority resolution. */
   selectedForRuntime: boolean;
+  /** The most specific rule that decided the effective state. */
+  stateReason:
+    | 'project_default_enabled'
+    | 'disabled_by_project_override'
+    | 'custom_user_default_enabled'
+    | 'builtin_policy_enabled'
+    | 'builtin_policy_disabled'
+    | 'enabled_by_user_override'
+    | 'disabled_by_user_override';
 }
 
 export interface SkillMarketItem {

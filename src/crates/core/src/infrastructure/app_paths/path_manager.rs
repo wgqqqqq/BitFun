@@ -205,6 +205,11 @@ impl PathManager {
         }
     }
 
+    /// Get BitFun-managed built-in skills directory under the user skills root.
+    pub fn builtin_skills_dir(&self) -> PathBuf {
+        self.user_skills_dir().join(".system")
+    }
+
     /// Get cache root directory: ~/.config/bitfun/cache/
     pub fn cache_root(&self) -> PathBuf {
         self.user_root.join("cache")

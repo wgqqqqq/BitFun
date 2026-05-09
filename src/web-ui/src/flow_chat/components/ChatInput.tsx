@@ -50,7 +50,8 @@ import { resolveSessionRelationship } from '../utils/sessionMetadata';
 import { resolveWorkspaceChatInputMode } from '../utils/chatInputMode';
 import { useSceneStore } from '@/app/stores/sceneStore';
 import type { SceneTabId } from '@/app/components/SceneBar/types';
-import type { SkillInfo } from '@/infrastructure/config/types';
+import { configAPI } from '@/infrastructure/api';
+import type { ModeSkillInfo } from '@/infrastructure/config/types';
 import { aiExperienceConfigService } from '@/infrastructure/config/services/AIExperienceConfigService';
 import MCPAPI, { type MCPPrompt, type MCPPromptMessage, type MCPServerInfo } from '@/infrastructure/api/service-api/MCPAPI';
 import { deriveChatInputPetMood } from '../utils/chatInputPetMood';
@@ -314,6 +315,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [tokenUsage, setTokenUsage] = React.useState({ current: 0, max: 128128 });
   const isAssistantWorkspace = workspace?.workspaceKind === WorkspaceKind.Assistant;
   const currentMode = modeState.current;
+  const isModeDropdownOpen = modeState.dropdownOpen;
   const activeSessionMode = effectiveTargetSessionId
     ? flowChatState.sessions.get(effectiveTargetSessionId)?.mode
     : undefined;
@@ -337,7 +339,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   );
 
   const openScene = useSceneStore(s => s.openScene);
-  const [boostPanelSkills, setBoostPanelSkills] = useState<SkillInfo[]>([]);
+  const [boostPanelSkills, setBoostPanelSkills] = useState<ModeSkillInfo[]>([]);
   const [boostSkillsLoading, setBoostSkillsLoading] = useState(false);
 
   const [skillsFlyoutOpen, setSkillsFlyoutOpen] = useState(false);
@@ -375,6 +377,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const setChatInputActive = useChatInputState(state => state.setActive);
   const setChatInputExpanded = useChatInputState(state => state.setExpanded);
   const setChatInputHeight = useChatInputState(state => state.setInputHeight);
+  const runtimeBoostSkills = useMemo(
+    // Only surface skills that this mode will actually resolve at runtime.
+    () => boostPanelSkills.filter(skill => skill.selectedForRuntime),
+    [boostPanelSkills]
+  );
 
   useEffect(() => {
     const unsubscribe = FlowChatStore.getInstance().subscribe(setFlowChatState);
@@ -898,22 +905,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   }, [modeState.dropdownOpen]);
 
   useEffect(() => {
-    if (!modeState.dropdownOpen) {
+    if (!isModeDropdownOpen) {
       return;
     }
     let cancelled = false;
     setBoostSkillsLoading(true);
     (async () => {
       try {
-        const { configAPI } = await import('@/infrastructure/api');
-        const list = await configAPI.getSkillConfigs({
+        const list = await configAPI.getModeSkillConfigs({
+          modeId: currentMode,
           workspacePath: workspacePath || undefined,
         });
         if (!cancelled) {
           setBoostPanelSkills(list);
         }
       } catch (err) {
-        log.error('Failed to load skills for boost panel', { err });
+        log.error('Failed to load mode-resolved skills for boost panel', {
+          err,
+          modeId: currentMode,
+          workspacePath: workspacePath || undefined,
+        });
         if (!cancelled) setBoostPanelSkills([]);
       } finally {
         if (!cancelled) setBoostSkillsLoading(false);
@@ -922,7 +933,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [modeState.dropdownOpen, workspacePath]);
+  }, [currentMode, isModeDropdownOpen, workspacePath]);
 
   useEffect(() => {
     if (!modeState.dropdownOpen) {
@@ -2844,13 +2855,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                   <Loader2 size={14} className="bitfun-chat-input__boost-submenu-spinner" aria-hidden />
                                   <span>{t('chatInput.boostSkillsLoading')}</span>
                                 </div>
-                              ) : boostPanelSkills.length === 0 ? (
+                              ) : runtimeBoostSkills.length === 0 ? (
                                 <div className="bitfun-chat-input__boost-submenu-empty">{t('chatInput.boostSkillsEmpty')}</div>
                               ) : (
                                 <div className="bitfun-chat-input__boost-submenu-list">
-                                  {boostPanelSkills.map(skill => (
+                                  {runtimeBoostSkills.map(skill => (
                                     <div
-                                      key={skill.name}
+                                      key={skill.key}
                                       role="button"
                                       tabIndex={0}
                                       className="bitfun-chat-input__boost-submenu-item"

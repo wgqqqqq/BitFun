@@ -142,12 +142,12 @@ const TemplateConfigPage: React.FC = () => {
   );
 
   const skillsEnabled = useMemo(
-    () => modeSkills.filter((skill) => !skill.disabledByMode),
+    () => modeSkills.filter((skill) => skill.effectiveEnabled),
     [modeSkills],
   );
 
   const skillsDisabled = useMemo(
-    () => modeSkills.filter((skill) => skill.disabledByMode),
+    () => modeSkills.filter((skill) => !skill.effectiveEnabled),
     [modeSkills],
   );
   const duplicateSkillNames = useMemo(
@@ -338,7 +338,7 @@ const TemplateConfigPage: React.FC = () => {
   const handleSkillToggle = useCallback(async (skill: ModeSkillInfo) => {
     const loadingKey = skill.key;
     setSkillsLoading((prev) => ({ ...prev, [loadingKey]: true }));
-    const nextDisabled = !skill.disabledByMode;
+    const nextDisabled = skill.effectiveEnabled;
     try {
       await configAPI.setModeSkillDisabled({
         modeId: 'agentic',
@@ -473,7 +473,7 @@ const TemplateConfigPage: React.FC = () => {
   const renderSkillList = (list: ModeSkillInfo[]) => (
     <div className="tc-skill-list">
       {list.map((skill) => {
-        const on = !skill.disabledByMode;
+        const on = skill.effectiveEnabled;
         const selected = detail?.type === 'skill' && detail.skill.key === skill.key;
         const displayName = formatSkillDisplayName(skill, duplicateSkillNames);
         return (
@@ -686,7 +686,7 @@ const TemplateConfigPage: React.FC = () => {
     }
 
     const { skill } = detail;
-    const on = !skill.disabledByMode;
+    const on = skill.effectiveEnabled;
     return (
       <aside className="tc-template-detail" aria-label={t('nursery.template.detailPanel')}>
         <div className="tc-template-detail__head tc-template-detail__head--center-line">
