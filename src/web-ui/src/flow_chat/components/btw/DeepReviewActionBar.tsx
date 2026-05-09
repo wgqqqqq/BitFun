@@ -10,6 +10,7 @@ import {
   ChevronUp,
   MessageSquare,
   Play,
+  Pause,
   Copy,
   Info,
   SkipForward,
@@ -18,7 +19,11 @@ import {
   Minus,
 } from 'lucide-react';
 import { Button, Checkbox, Tooltip } from '@/component-library';
-import { useReviewActionBarStore, type ReviewActionPhase } from '../../store/deepReviewActionBarStore';
+import {
+  useReviewActionBarStore,
+  type DeepReviewCapacityQueueAction,
+  type ReviewActionPhase,
+} from '../../store/deepReviewActionBarStore';
 import type { ReviewRemediationItem } from '../../utils/codeReviewRemediation';
 import { buildSelectedReviewRemediationPrompt, REMEDIATION_GROUP_ORDER } from '../../utils/codeReviewRemediation';
 import type { RemediationGroupId } from '../../utils/codeReviewReport';
@@ -40,6 +45,7 @@ import {
 } from '../../utils/deepReviewExperience';
 import { flowChatStore } from '../../store/FlowChatStore';
 import { CodeReviewReportExportActions } from '../../tool-cards/CodeReviewReportExportActions';
+import { agentAPI } from '@/infrastructure/api/service-api/AgentAPI';
 import './DeepReviewActionBar.scss';
 
 const log = createLogger('DeepReviewActionBar');
@@ -56,6 +62,7 @@ const PHASE_CONFIG: Record<ReviewActionPhase, {
   fix_failed: { icon: AlertCircle, iconClass: 'deep-review-action-bar__icon--error', variant: 'error' },
   fix_timeout: { icon: Clock, iconClass: 'deep-review-action-bar__icon--warning', variant: 'warning' },
   fix_interrupted: { icon: AlertTriangle, iconClass: 'deep-review-action-bar__icon--warning', variant: 'warning' },
+  review_waiting_capacity: { icon: Clock, iconClass: 'deep-review-action-bar__icon--warning', variant: 'warning' },
   review_interrupted: { icon: AlertTriangle, iconClass: 'deep-review-action-bar__icon--warning', variant: 'warning' },
   resume_blocked: { icon: AlertTriangle, iconClass: 'deep-review-action-bar__icon--error', variant: 'error' },
   resume_running: { icon: Loader2, iconClass: 'deep-review-action-bar__icon--loading', variant: 'loading' },
@@ -96,6 +103,7 @@ export const ReviewActionBar: React.FC = () => {
     completedRemediationIds,
     remainingFixIds,
     decisionSelections,
+    capacityQueueState,
   } = store;
 
   const [showCustomInput, setShowCustomInput] = useState(false);
@@ -112,6 +120,55 @@ export const ReviewActionBar: React.FC = () => {
   const isDeepReview = reviewMode === 'deep';
   const hasInterruption = isDeepReview && Boolean(interruption);
   const isResumeRunning = phase === 'resume_running';
+  const showCapacityQueueNotice = isDeepReview &&
+    Boolean(capacityQueueState) &&
+    capacityQueueState?.status !== 'running' &&
+    capacityQueueState?.status !== 'capacity_skipped';
+  const hasBackendQueueControlTarget = Boolean(
+    childSessionId &&
+    capacityQueueState?.dialogTurnId &&
+    capacityQueueState?.toolId,
+  );
+  const supportsInlineQueueControls =
+    capacityQueueState?.controlMode === 'backend'
+      ? hasBackendQueueControlTarget
+      : capacityQueueState?.controlMode !== 'session_stop_only';
+
+  const handleCapacityQueueAction = useCallback(async (
+    action: DeepReviewCapacityQueueAction,
+    applyLocalAction: () => void,
+  ) => {
+    if (!capacityQueueState) {
+      return;
+    }
+
+    if (capacityQueueState.controlMode !== 'backend') {
+      applyLocalAction();
+      return;
+    }
+
+    if (!childSessionId || !capacityQueueState.dialogTurnId || !capacityQueueState.toolId) {
+      notificationService.error(t('deepReviewActionBar.capacityQueue.controlFailed', {
+        defaultValue: 'Queue control is unavailable for this reviewer.',
+      }));
+      return;
+    }
+
+    try {
+      await agentAPI.controlDeepReviewQueue({
+        sessionId: childSessionId,
+        dialogTurnId: capacityQueueState.dialogTurnId,
+        toolId: capacityQueueState.toolId,
+        action,
+      });
+      applyLocalAction();
+    } catch (error) {
+      log.warn('Failed to control DeepReview capacity queue', error);
+      notificationService.error(t('deepReviewActionBar.capacityQueue.controlFailed', {
+        defaultValue: 'Queue control failed. Please try again or stop the review.',
+      }));
+    }
+  }, [capacityQueueState, childSessionId, t]);
 
   // ---- progress tracking ----
   const sessions = flowChatStore.getState().sessions;
@@ -533,6 +590,10 @@ export const ReviewActionBar: React.FC = () => {
         return t('deepReviewActionBar.fixTimeout', {
           defaultValue: 'Fix timed out',
         });
+      case 'review_waiting_capacity':
+        return t('deepReviewActionBar.reviewWaitingCapacity', {
+          defaultValue: 'Review queue waiting',
+        });
       case 'review_interrupted':
         return t('deepReviewActionBar.reviewInterrupted', {
           defaultValue: 'Deep review interrupted',
@@ -609,6 +670,105 @@ export const ReviewActionBar: React.FC = () => {
                 defaultValue: `Running for ${formatElapsedTime(elapsedMs)}`,
               })}
             </span>
+          )}
+        </div>
+      )}
+
+      {/* Capacity queue notice */}
+      {showCapacityQueueNotice && capacityQueueState && (
+        <div className="deep-review-action-bar__capacity-queue" aria-live="polite">
+          <div className="deep-review-action-bar__capacity-queue-main">
+            <Clock size={14} className="deep-review-action-bar__capacity-queue-icon" />
+            <div className="deep-review-action-bar__capacity-queue-copy">
+              <span className="deep-review-action-bar__capacity-queue-title">
+                {capacityQueueState.status === 'paused_by_user'
+                  ? t('deepReviewActionBar.capacityQueue.pausedTitle', {
+                    defaultValue: 'Queue paused',
+                  })
+                  : t('deepReviewActionBar.capacityQueue.title', {
+                    defaultValue: 'Reviewers waiting for capacity',
+                  })}
+              </span>
+              <span className="deep-review-action-bar__capacity-queue-detail">
+                {t('deepReviewActionBar.capacityQueue.detail', {
+                  defaultValue: 'Queue wait does not count against reviewer runtime.',
+                })}
+              </span>
+              {capacityQueueState.sessionConcurrencyHigh && (
+                <span className="deep-review-action-bar__capacity-queue-detail">
+                  {t('deepReviewActionBar.capacityQueue.sessionBusy', {
+                    defaultValue: 'Your active session is busy. Pause Deep Review or continue later.',
+                  })}
+                </span>
+              )}
+              {!supportsInlineQueueControls && (
+                <span className="deep-review-action-bar__capacity-queue-detail">
+                  {t('deepReviewActionBar.capacityQueue.stopHint', {
+                    defaultValue: 'Use Stop to interrupt this review queue.',
+                  })}
+                </span>
+              )}
+            </div>
+          </div>
+          {supportsInlineQueueControls && (
+            <div className="deep-review-action-bar__capacity-queue-actions">
+              {capacityQueueState.status === 'paused_by_user' ? (
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => void handleCapacityQueueAction(
+                    'continue',
+                    store.continueCapacityQueue,
+                  )}
+                >
+                  <Play size={13} />
+                  {t('deepReviewActionBar.capacityQueue.continueQueue', {
+                    defaultValue: 'Continue queue',
+                  })}
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => void handleCapacityQueueAction(
+                    'pause',
+                    store.pauseCapacityQueue,
+                  )}
+                >
+                  <Pause size={13} />
+                  {t('deepReviewActionBar.capacityQueue.pauseQueue', {
+                    defaultValue: 'Pause queue',
+                  })}
+                </Button>
+              )}
+              {(capacityQueueState.optionalReviewerCount ?? 0) > 0 && (
+                <Button
+                  variant="ghost"
+                  size="small"
+                  onClick={() => void handleCapacityQueueAction(
+                    'skip_optional',
+                    store.skipOptionalQueuedReviewers,
+                  )}
+                >
+                  <SkipForward size={13} />
+                  {t('deepReviewActionBar.capacityQueue.skipOptionalQueued', {
+                    defaultValue: 'Skip optional extras',
+                  })}
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="small"
+                onClick={() => void handleCapacityQueueAction(
+                  'cancel',
+                  store.cancelQueuedReviewers,
+                )}
+              >
+                {t('deepReviewActionBar.capacityQueue.cancelQueued', {
+                  defaultValue: 'Cancel queued reviewers',
+                })}
+              </Button>
+            </div>
           )}
         </div>
       )}

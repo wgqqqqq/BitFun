@@ -625,6 +625,7 @@
     "fixFailed": "Fix failed",
     "fixTimeout": "Fix timed out",
     "fixInterrupted": "Fix was interrupted. {{count}} items remain.",
+    "reviewWaitingCapacity": "Review queue waiting",
     "continueFix": "Continue fixing {{count}} items",
     "skipRemaining": "Skip remaining",
     "reviewError": "Review error",
@@ -686,6 +687,18 @@
     "recoveryPreserve": "{{count}} completed reviewers will be preserved",
     "recoveryRerun": "{{count}} reviewers will be rerun",
     "recoverySkip": "{{count}} reviewers will be skipped",
+    "capacityQueue": {
+      "title": "Reviewers waiting for capacity",
+      "pausedTitle": "Queue paused",
+      "detail": "Queue wait does not count against reviewer runtime.",
+      "sessionBusy": "Your active session is busy. Pause Deep Review or continue later.",
+      "stopHint": "Use Stop to interrupt this review queue.",
+      "pauseQueue": "Pause queue",
+      "continueQueue": "Continue queue",
+      "cancelQueued": "Cancel queued reviewers",
+      "skipOptionalQueued": "Skip optional extras",
+      "controlFailed": "Queue control failed. Please try again or stop the review."
+    },
     "degradation": {
       "reduceReviewers": "Run with core reviewers only",
       "reduceReviewersDesc": "Skip extra reviewers and keep only core reviewers",
@@ -716,9 +729,11 @@
     "windowTitle": "Deep Review",
     "eyebrow": "Code review team",
     "title": "Start Deep Review?",
-    "body": "Deep Review launches a parallel code review team. It can take longer and consume noticeably more tokens than a standard review.",
+    "body": "Deep Review launches multiple reviewers and can take longer or use more tokens than a standard review.",
     "readonlyLabel": "Read-only first pass",
-    "readonly": "The first pass is read-only. It will produce findings and a remediation plan before any code changes.",
+    "readonly": "The first pass reports findings and a remediation plan before any code changes.",
+    "sessionConcurrencyTitle": "Active session is busy",
+    "sessionConcurrencyBody": "The target session already has {{count}} running subagent tasks. Choose a lighter strategy, cancel for now, or continue manually when capacity is free.",
     "costLabel": "Higher token usage",
     "cost": "Expected cost: multiple reviewers plus a quality gate, so runtime and token use may be several times higher than a standard review.",
     "timeLabel": "Longer runtime",
@@ -726,7 +741,71 @@
     "dontShowAgain": "Do not show this again",
     "cancel": "Cancel",
     "confirm": "Start Deep Review",
-    "estimatedTokens": "Estimated: {{min}} - {{max}} tokens"
+    "estimatedTokens": "Estimated: {{min}} - {{max}} tokens",
+    "runStrategy": "Run strategy: {{strategy}}",
+    "recommendedStrategy": "Recommended strategy: {{strategy}}",
+    "recommendationTitle": "Risk recommendation",
+    "strategyOverrideTitle": "Run strategy",
+    "strategyOverrideBody": "Choose a project-specific strategy for this launch.",
+    "teamDefaultStrategy": "Team default",
+    "strategyLabels": {
+      "quick": "Quick",
+      "normal": "Normal",
+      "deep": "Deep"
+    },
+    "lineupTitle": "Review lineup",
+    "summaryTitle": "Launch summary",
+    "targetFiles": "{{count}} files",
+    "targetFiles_one": "{{count}} file",
+    "targetFiles_other": "{{count}} files",
+    "targetRiskTags": "Risk areas: {{tags}}",
+    "targetTagsWithMore": "{{tags}} +{{count}} more",
+    "targetTagsWithMore_one": "{{tags}} +{{count}} more",
+    "targetTagsWithMore_other": "{{tags}} +{{count}} more",
+    "optionalReviewers": "{{count}} optional reviewers",
+    "optionalReviewers_one": "{{count}} optional reviewer",
+    "optionalReviewers_other": "{{count}} optional reviewers",
+    "summaryFirstReview": "Summary-first coverage",
+    "targetTagLabels": {
+      "frontendUi": "Frontend UI",
+      "frontendStyle": "Frontend styles",
+      "frontendI18n": "Frontend i18n",
+      "frontendContract": "Frontend contract",
+      "desktopContract": "Desktop contract",
+      "webServerContract": "Web server contract",
+      "backendCore": "Backend core",
+      "transport": "Transport",
+      "apiLayer": "API layer",
+      "aiAdapter": "AI adapter",
+      "installerUi": "Installer UI",
+      "test": "Tests",
+      "docs": "Docs",
+      "config": "Config",
+      "generatedOrLock": "Generated or lockfile",
+      "unknown": "Unknown area"
+    },
+    "estimatedCalls": "{{count}} reviewer calls",
+    "estimatedCalls_one": "{{count}} reviewer call",
+    "estimatedCalls_other": "{{count}} reviewer calls",
+    "activeReviewers": "{{count}} active",
+    "activeReviewers_one": "{{count}} active",
+    "activeReviewers_other": "{{count}} active",
+    "skippedReviewers": "{{count}} skipped",
+    "skippedReviewers_one": "{{count}} skipped",
+    "skippedReviewers_other": "{{count}} skipped",
+    "skippedMore": "+{{count}} more",
+    "skippedMore_one": "+{{count}} more",
+    "skippedMore_other": "+{{count}} more",
+    "activeGroupTitle": "Will run",
+    "skippedGroupTitle": "Skipped reviewers",
+    "skippedReasons": {
+      "notApplicable": "Not applicable to this target",
+      "budgetLimited": "Limited by token budget",
+      "invalidTooling": "Configuration issue",
+      "disabled": "Disabled",
+      "unavailable": "Unavailable",
+      "skipped": "Skipped"
+    }
   },
   "flowChatHeader": {
     "turnList": "Turn list",
@@ -1423,8 +1502,55 @@
         "partial": "partial",
         "unknown": "unknown"
       },
+      "runManifest": {
+        "recommendedStrategy": "Recommended strategy",
+        "riskRecommendationTitle": "Risk recommendation"
+      },
       "sectionItemCount": "{{count}} items",
       "remediationPlan": "Remediation Plan",
+      "reliabilityStatus": {
+        "title": "Review status",
+        "context_pressure": {
+          "label": "Context pressure rising",
+          "detail": "{{count}} reviewer calls planned for a large or constrained target."
+        },
+        "compression_preserved": {
+          "label": "Compression preserved key facts",
+          "detail": "Coverage notes include preserved context from compression."
+        },
+        "cache_hit": {
+          "label": "Incremental cache reused reviewer output",
+          "detail": "{{count}} reviewer packet reused matching cached output."
+        },
+        "cache_miss": {
+          "label": "Incremental cache missed or refreshed",
+          "detail": "{{count}} reviewer packet ran fresh or refreshed stale cache."
+        },
+        "concurrency_limited": {
+          "label": "Reviewer launch was concurrency-limited",
+          "detail": "{{count}} reviewer launch hit a concurrency cap."
+        },
+        "partial_reviewer": {
+          "label": "Reviewer timed out with partial result",
+          "detail": "{{count}} reviewer result is partial; confidence is reduced."
+        },
+        "retry_guidance": {
+          "label": "Retry guidance emitted",
+          "detail": "{{count}} retry guidance item was emitted for partial review coverage."
+        },
+        "skipped_reviewers": {
+          "label": "Skipped reviewers",
+          "detail": "{{count}} reviewer was skipped by applicability, configuration, or budget."
+        },
+        "token_budget_limited": {
+          "label": "Token budget limited reviewer coverage",
+          "detail": "{{count}} reviewer was skipped by token budget mode."
+        },
+        "user_decision": {
+          "label": "User decision needed",
+          "detail": "{{count}} review item needs your decision before fixing."
+        }
+      },
       "sections": {
         "summary": "Executive Summary",
         "issues": "Issues",
@@ -1453,8 +1579,11 @@
         "noIssues": "No validated issues.",
         "status": "Status",
         "findings": "Findings",
+        "packet": "Packet",
+        "partialOutput": "Partial output",
         "validation": "Validation",
         "source": "Source",
+        "reliabilitySignals": "Review Reliability",
         "noItems": "None."
       },
       "export": {

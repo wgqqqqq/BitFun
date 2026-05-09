@@ -17,6 +17,7 @@ import type {
   ImageAnalysisEvent,
   ModelRoundCompletedEvent,
   UserSteeringInjectedEvent,
+  DeepReviewQueueStateChangedEvent,
 } from '@/infrastructure/api/service-api/AgentAPI';
 import { createLogger } from '@/shared/utils/logger';
 
@@ -35,6 +36,7 @@ export interface AgenticEventCallbacks {
   onModelRoundCompleted?: (event: ModelRoundCompletedEvent) => void;
   onTextChunk?: (event: TextChunkEvent) => void;
   onToolEvent?: (event: ToolEvent) => void;
+  onDeepReviewQueueStateChanged?: (event: DeepReviewQueueStateChangedEvent) => void;
   onDialogTurnCompleted?: (event: AgenticEvent) => void;
   onDialogTurnFailed?: (event: AgenticEvent) => void;
   onDialogTurnCancelled?: (event: AgenticEvent) => void;
@@ -134,6 +136,14 @@ export class AgenticEventListener {
       if (callbacks.onToolEvent) {
         const unlisten = agentAPI.onToolEvent((event) => {
           callbacks.onToolEvent?.(event);
+        });
+        this.unlistenFunctions.push(unlisten);
+      }
+
+      if (callbacks.onDeepReviewQueueStateChanged) {
+        const unlisten = agentAPI.onDeepReviewQueueStateChanged((event) => {
+          logger.debug('Deep Review queue state changed:', event);
+          callbacks.onDeepReviewQueueStateChanged?.(event);
         });
         this.unlistenFunctions.push(unlisten);
       }

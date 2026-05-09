@@ -1,9 +1,23 @@
+import {
+  getActiveReviewTeamManifestMembers,
+  type ReviewTeamManifestMember,
+  type ReviewTeamRunManifest,
+} from '@/shared/services/reviewTeamService';
+
 export type ReviewRiskLevel = 'low' | 'medium' | 'high' | 'critical';
 export type ReviewAction = 'approve' | 'approve_with_suggestions' | 'request_changes' | 'block';
 export type ReviewMode = 'standard' | 'deep';
 export type ReviewIssueSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export type ReviewIssueCertainty = 'confirmed' | 'likely' | 'possible';
-export type ReviewSectionId = 'summary' | 'issues' | 'remediation' | 'strengths' | 'team' | 'coverage';
+export type ReviewPacketStatusSource = 'reported' | 'inferred' | 'missing';
+export type ReviewSectionId =
+  | 'summary'
+  | 'issues'
+  | 'remediation'
+  | 'strengths'
+  | 'runManifest'
+  | 'team'
+  | 'coverage';
 export type RemediationGroupId = 'must_fix' | 'should_improve' | 'needs_decision' | 'verification';
 export type StrengthGroupId =
   | 'architecture'
@@ -39,6 +53,9 @@ export interface CodeReviewReviewer {
   specialty: string;
   status: string;
   summary: string;
+  partial_output?: string;
+  packet_id?: string;
+  packet_status_source?: ReviewPacketStatusSource;
   issue_count?: number;
 }
 
@@ -80,6 +97,7 @@ export interface CodeReviewReportData {
   reviewers?: CodeReviewReviewer[];
   remediation_plan?: string[];
   report_sections?: CodeReviewReportSectionsData;
+  reliability_signals?: CodeReviewReliabilitySignal[];
 }
 
 export interface ReviewReportGroup<TId extends string = string> {
@@ -111,27 +129,72 @@ export interface ReviewReportSections {
   reviewerStats: ReviewReviewerStats;
 }
 
+export type ReviewReliabilityNoticeKind =
+  | 'context_pressure'
+  | 'compression_preserved'
+  | 'cache_hit'
+  | 'cache_miss'
+  | 'concurrency_limited'
+  | 'partial_reviewer'
+  | 'retry_guidance'
+  | 'skipped_reviewers'
+  | 'token_budget_limited'
+  | 'user_decision';
+
+export type ReviewReliabilityNoticeSeverity = 'info' | 'warning' | 'action';
+export type ReviewReliabilitySignalSource = 'runtime' | 'manifest' | 'report' | 'inferred';
+
+export interface ReviewReliabilityNotice {
+  kind: ReviewReliabilityNoticeKind;
+  severity: ReviewReliabilityNoticeSeverity;
+  count?: number;
+  source?: ReviewReliabilitySignalSource;
+  detail?: string;
+}
+
+export interface CodeReviewReliabilitySignal {
+  kind: ReviewReliabilityNoticeKind;
+  severity?: ReviewReliabilityNoticeSeverity;
+  count?: number;
+  source?: ReviewReliabilitySignalSource;
+  detail?: string;
+}
+
 export interface CodeReviewReportMarkdownLabels {
   titleStandard: string;
   titleDeep: string;
   executiveSummary: string;
   reviewDecision: string;
+  runManifest: string;
   riskLevel: string;
   recommendedAction: string;
   scope: string;
+  target: string;
+  budget: string;
+  estimatedCalls: string;
+  activeReviewers: string;
+  skippedReviewers: string;
   issues: string;
   noIssues: string;
   remediationPlan: string;
   strengths: string;
   reviewTeam: string;
+  reliabilitySignals: string;
   coverageNotes: string;
   status: string;
+  packet: string;
+  partialOutput: string;
   findings: string;
   validation: string;
   suggestion: string;
   source: string;
   noItems: string;
   groupTitles: Record<RemediationGroupId | StrengthGroupId, string>;
+  reliabilityNoticeLabels: Record<ReviewReliabilityNoticeKind, string>;
+}
+
+export interface CodeReviewReportMarkdownOptions {
+  runManifest?: ReviewTeamRunManifest;
 }
 
 const REMEDIATION_GROUP_ORDER: RemediationGroupId[] = [
@@ -152,27 +215,74 @@ const STRENGTH_GROUP_ORDER: StrengthGroupId[] = [
 ];
 
 const DEGRADED_REVIEWER_STATUSES = new Set(['timed_out', 'cancelled_by_user', 'failed', 'skipped']);
+const PARTIAL_TIMEOUT_REVIEWER_STATUSES = new Set(['partial_timeout', 'timed_out', 'cancelled_by_user']);
+const RELIABILITY_NOTICE_ORDER: ReviewReliabilityNoticeKind[] = [
+  'context_pressure',
+  'skipped_reviewers',
+  'token_budget_limited',
+  'compression_preserved',
+  'cache_hit',
+  'cache_miss',
+  'concurrency_limited',
+  'partial_reviewer',
+  'retry_guidance',
+  'user_decision',
+];
+const RELIABILITY_NOTICE_FALLBACK_LABELS: Record<ReviewReliabilityNoticeKind, string> = {
+  context_pressure: 'Context pressure rising',
+  compression_preserved: 'Compression preserved key facts',
+  cache_hit: 'Incremental cache reused reviewer output',
+  cache_miss: 'Incremental cache missed or refreshed',
+  concurrency_limited: 'Reviewer launch was concurrency-limited',
+  partial_reviewer: 'Reviewer timed out with partial result',
+  retry_guidance: 'Retry guidance emitted',
+  skipped_reviewers: 'Skipped reviewers',
+  token_budget_limited: 'Token budget limited reviewer coverage',
+  user_decision: 'User decision needed',
+};
+const RELIABILITY_NOTICE_SEVERITY_BY_KIND: Record<ReviewReliabilityNoticeKind, ReviewReliabilityNoticeSeverity> = {
+  context_pressure: 'info',
+  compression_preserved: 'info',
+  cache_hit: 'info',
+  cache_miss: 'info',
+  concurrency_limited: 'warning',
+  partial_reviewer: 'warning',
+  retry_guidance: 'warning',
+  skipped_reviewers: 'info',
+  token_budget_limited: 'warning',
+  user_decision: 'action',
+};
 
 export const DEFAULT_CODE_REVIEW_MARKDOWN_LABELS: CodeReviewReportMarkdownLabels = {
   titleStandard: 'Code Review Report',
   titleDeep: 'Deep Review Report',
   executiveSummary: 'Executive Summary',
   reviewDecision: 'Review Decision',
+  runManifest: 'Run manifest',
   riskLevel: 'Risk Level',
   recommendedAction: 'Recommended Action',
   scope: 'Scope',
+  target: 'Target',
+  budget: 'Budget',
+  estimatedCalls: 'Estimated calls',
+  activeReviewers: 'Active reviewers',
+  skippedReviewers: 'Skipped reviewers',
   issues: 'Issues',
   noIssues: 'No validated issues.',
   remediationPlan: 'Remediation Plan',
   strengths: 'Strengths',
   reviewTeam: 'Code Review Team',
+  reliabilitySignals: 'Review Reliability',
   coverageNotes: 'Coverage Notes',
   status: 'Status',
+  packet: 'Packet',
+  partialOutput: 'Partial output',
   findings: 'Findings',
   validation: 'Validation',
   suggestion: 'Suggestion',
   source: 'Source',
   noItems: 'None.',
+  reliabilityNoticeLabels: RELIABILITY_NOTICE_FALLBACK_LABELS,
   groupTitles: {
     must_fix: 'Must Fix',
     should_improve: 'Should Improve',
@@ -259,7 +369,10 @@ function buildReviewerStats(reviewers: CodeReviewReviewer[] = []): ReviewReviewe
   for (const reviewer of reviewers) {
     if (reviewer.status === 'completed') {
       completed += 1;
-    } else if (DEGRADED_REVIEWER_STATUSES.has(reviewer.status)) {
+    } else if (
+      DEGRADED_REVIEWER_STATUSES.has(reviewer.status) ||
+      reviewer.status === 'partial_timeout'
+    ) {
       degraded += 1;
     }
   }
@@ -269,6 +382,251 @@ function buildReviewerStats(reviewers: CodeReviewReviewer[] = []): ReviewReviewe
     completed,
     degraded,
   };
+}
+
+function buildPartialReviewerCoverageNotes(reviewers: CodeReviewReviewer[] = []): string[] {
+  return reviewers
+    .map((reviewer) => {
+      const partialOutput = reviewer.partial_output?.trim();
+      if (!partialOutput || !PARTIAL_TIMEOUT_REVIEWER_STATUSES.has(reviewer.status)) {
+        return null;
+      }
+      return `${reviewer.name} timed out after producing partial output: ${partialOutput}`;
+    })
+    .filter((note): note is string => Boolean(note));
+}
+
+function hasCompressionPreservationNote(report: CodeReviewReportData): boolean {
+  const notes = [
+    ...(report.report_sections?.coverage_notes ?? []),
+    report.summary?.confidence_note,
+  ];
+
+  return notes.some((note) => {
+    const normalized = note?.toLowerCase() ?? '';
+    return normalized.includes('compress') && normalized.includes('preserv');
+  });
+}
+
+function countPartialReviewers(reviewers: CodeReviewReviewer[] = []): number {
+  return reviewers.filter((reviewer) =>
+    reviewer.status === 'partial_timeout' ||
+    (
+      PARTIAL_TIMEOUT_REVIEWER_STATUSES.has(reviewer.status) &&
+      Boolean(reviewer.partial_output?.trim())
+    )
+  ).length;
+}
+
+function countSkippedReviewers(runManifest?: ReviewTeamRunManifest): number {
+  return runManifest?.skippedReviewers.length ?? 0;
+}
+
+function countTokenBudgetLimitedReviewers(runManifest?: ReviewTeamRunManifest): number {
+  if (!runManifest) {
+    return 0;
+  }
+  const skippedByBudget = new Set(runManifest.tokenBudget.skippedReviewerIds);
+  for (const reviewer of runManifest.skippedReviewers) {
+    if (reviewer.reason === 'budget_limited') {
+      skippedByBudget.add(reviewer.subagentId);
+    }
+  }
+  return skippedByBudget.size;
+}
+
+function countDecisionItems(report: CodeReviewReportData): number {
+  const structuredDecisionItems = report.report_sections?.remediation_groups?.needs_decision ?? [];
+  if (structuredDecisionItems.length > 0) {
+    const stringItems = structuredDecisionItems.filter((item): item is string => typeof item === 'string');
+    return nonEmpty(stringItems).length;
+  }
+
+  return report.summary?.recommended_action === 'block' ? 1 : 0;
+}
+
+function isReliabilityNoticeKind(value: string): value is ReviewReliabilityNoticeKind {
+  return RELIABILITY_NOTICE_ORDER.includes(value as ReviewReliabilityNoticeKind);
+}
+
+function isReliabilitySeverity(value: string): value is ReviewReliabilityNoticeSeverity {
+  return value === 'info' || value === 'warning' || value === 'action';
+}
+
+function isReliabilitySignalSource(value: string): value is ReviewReliabilitySignalSource {
+  return value === 'runtime' || value === 'manifest' || value === 'report' || value === 'inferred';
+}
+
+function normalizeStructuredReliabilityNotice(
+  signal: CodeReviewReliabilitySignal,
+): ReviewReliabilityNotice | null {
+  if (!isReliabilityNoticeKind(signal.kind)) {
+    return null;
+  }
+
+  const detail = signal.detail?.trim();
+  return {
+    kind: signal.kind,
+    severity: signal.severity && isReliabilitySeverity(signal.severity)
+      ? signal.severity
+      : RELIABILITY_NOTICE_SEVERITY_BY_KIND[signal.kind],
+    ...(typeof signal.count === 'number' ? { count: signal.count } : {}),
+    ...(signal.source && isReliabilitySignalSource(signal.source)
+      ? { source: signal.source }
+      : {}),
+    ...(detail ? { detail } : {}),
+  };
+}
+
+function structuredReliabilityNoticeMap(
+  report: CodeReviewReportData,
+): Map<ReviewReliabilityNoticeKind, ReviewReliabilityNotice> {
+  const notices = new Map<ReviewReliabilityNoticeKind, ReviewReliabilityNotice>();
+  for (const signal of report.reliability_signals ?? []) {
+    const notice = normalizeStructuredReliabilityNotice(signal);
+    if (notice && !notices.has(notice.kind)) {
+      notices.set(notice.kind, notice);
+    }
+  }
+  return notices;
+}
+
+function reliabilityNoticeLabel(
+  kind: ReviewReliabilityNoticeKind,
+  labels: CodeReviewReportMarkdownLabels,
+): string {
+  return labels.reliabilityNoticeLabels[kind] ?? RELIABILITY_NOTICE_FALLBACK_LABELS[kind];
+}
+
+function reliabilityNoticeMarkdownDetail(notice: ReviewReliabilityNotice): string {
+  if (notice.detail?.trim()) {
+    return notice.detail.trim();
+  }
+  if (typeof notice.count === 'number') {
+    return `Count: ${notice.count}`;
+  }
+  return '';
+}
+
+function reliabilityNoticeMarkdownLine(
+  notice: ReviewReliabilityNotice,
+  labels: CodeReviewReportMarkdownLabels,
+): string {
+  const tags = [notice.severity, notice.source].filter(Boolean).join('/');
+  const detail = reliabilityNoticeMarkdownDetail(notice);
+  const tagText = tags ? ` [${tags}]` : '';
+  return detail
+    ? `- ${reliabilityNoticeLabel(notice.kind, labels)}${tagText}: ${detail}`
+    : `- ${reliabilityNoticeLabel(notice.kind, labels)}${tagText}`;
+}
+
+export function buildCodeReviewReliabilityNotices(
+  report: CodeReviewReportData,
+  runManifest?: ReviewTeamRunManifest,
+): ReviewReliabilityNotice[] {
+  const notices: ReviewReliabilityNotice[] = [];
+  const structuredNotices = structuredReliabilityNoticeMap(report);
+  const hasContextPressure = runManifest
+    ? runManifest.tokenBudget.largeDiffSummaryFirst || runManifest.tokenBudget.warnings.length > 0
+    : false;
+
+  const structuredContextPressure = structuredNotices.get('context_pressure');
+  if (structuredContextPressure) {
+    notices.push(structuredContextPressure);
+  } else if (hasContextPressure && runManifest) {
+    notices.push({
+      kind: 'context_pressure',
+      severity: 'info',
+      count: runManifest.tokenBudget.estimatedReviewerCalls,
+      source: 'manifest',
+    });
+  }
+
+  const structuredCompressionPreserved = structuredNotices.get('compression_preserved');
+  if (structuredCompressionPreserved) {
+    notices.push(structuredCompressionPreserved);
+  } else if (hasCompressionPreservationNote(report)) {
+    notices.push({
+      kind: 'compression_preserved',
+      severity: 'info',
+      source: 'inferred',
+    });
+  }
+
+  for (const kind of ['cache_hit', 'cache_miss', 'concurrency_limited'] as const) {
+    const structuredNotice = structuredNotices.get(kind);
+    if (structuredNotice) {
+      notices.push(structuredNotice);
+    }
+  }
+
+  const partialReviewerCount = countPartialReviewers(report.reviewers);
+  const structuredPartialReviewer = structuredNotices.get('partial_reviewer');
+  if (structuredPartialReviewer) {
+    notices.push(structuredPartialReviewer);
+  } else if (partialReviewerCount > 0) {
+    notices.push({
+      kind: 'partial_reviewer',
+      severity: 'warning',
+      count: partialReviewerCount,
+      source: 'runtime',
+    });
+  }
+
+  const structuredRetryGuidance = structuredNotices.get('retry_guidance');
+  if (structuredRetryGuidance) {
+    notices.push(structuredRetryGuidance);
+  } else if (partialReviewerCount > 0) {
+    notices.push({
+      kind: 'retry_guidance',
+      severity: 'warning',
+      count: partialReviewerCount,
+      source: 'runtime',
+    });
+  }
+
+  const skippedReviewerCount = countSkippedReviewers(runManifest);
+  const structuredSkippedReviewers = structuredNotices.get('skipped_reviewers');
+  if (structuredSkippedReviewers) {
+    notices.push(structuredSkippedReviewers);
+  } else if (skippedReviewerCount > 0) {
+    notices.push({
+      kind: 'skipped_reviewers',
+      severity: 'info',
+      count: skippedReviewerCount,
+      source: 'manifest',
+    });
+  }
+
+  const tokenBudgetLimitedReviewerCount = countTokenBudgetLimitedReviewers(runManifest);
+  const structuredTokenBudgetLimited = structuredNotices.get('token_budget_limited');
+  if (structuredTokenBudgetLimited) {
+    notices.push(structuredTokenBudgetLimited);
+  } else if (tokenBudgetLimitedReviewerCount > 0) {
+    notices.push({
+      kind: 'token_budget_limited',
+      severity: 'warning',
+      count: tokenBudgetLimitedReviewerCount,
+      source: 'manifest',
+    });
+  }
+
+  const decisionItemCount = countDecisionItems(report);
+  const structuredUserDecision = structuredNotices.get('user_decision');
+  if (structuredUserDecision) {
+    notices.push(structuredUserDecision);
+  } else if (decisionItemCount > 0) {
+    notices.push({
+      kind: 'user_decision',
+      severity: 'action',
+      count: decisionItemCount,
+      source: 'report',
+    });
+  }
+
+  return RELIABILITY_NOTICE_ORDER
+    .map((kind) => notices.find((notice) => notice.kind === kind))
+    .filter((notice): notice is ReviewReliabilityNotice => Boolean(notice));
 }
 
 export function buildCodeReviewReportSections(report: CodeReviewReportData): ReviewReportSections {
@@ -291,6 +649,7 @@ export function buildCodeReviewReportSections(report: CodeReviewReportData): Rev
   const strengthGroups = buildGroups(STRENGTH_GROUP_ORDER, structuredSections?.strength_groups);
   const executiveSummary = nonEmpty(structuredSections?.executive_summary);
   const coverageNotes = nonEmpty(structuredSections?.coverage_notes);
+  const partialReviewerCoverageNotes = buildPartialReviewerCoverageNotes(report.reviewers);
   const confidenceNote = report.summary?.confidence_note?.trim();
 
   return {
@@ -304,8 +663,8 @@ export function buildCodeReviewReportSections(report: CodeReviewReportData): Rev
       ? strengthGroups
       : buildLegacyStrengthGroups(report),
     coverageNotes: coverageNotes.length > 0
-      ? coverageNotes
-      : nonEmpty([confidenceNote]),
+      ? nonEmpty([...coverageNotes, ...partialReviewerCoverageNotes])
+      : nonEmpty([confidenceNote, ...partialReviewerCoverageNotes]),
     issueStats: buildIssueStats(report.issues),
     reviewerStats: buildReviewerStats(report.reviewers),
   };
@@ -330,6 +689,10 @@ function mergeLabels(labels?: Partial<CodeReviewReportMarkdownLabels>): CodeRevi
       ...DEFAULT_CODE_REVIEW_MARKDOWN_LABELS.groupTitles,
       ...labels?.groupTitles,
     },
+    reliabilityNoticeLabels: {
+      ...DEFAULT_CODE_REVIEW_MARKDOWN_LABELS.reliabilityNoticeLabels,
+      ...labels?.reliabilityNoticeLabels,
+    },
   };
 }
 
@@ -352,9 +715,137 @@ function issueLocation(issue: CodeReviewIssue): string {
   return issue.line ? `${issue.file}:${issue.line}` : issue.file;
 }
 
+function manifestTarget(manifest: ReviewTeamRunManifest): string {
+  return manifest.target.tags.length > 0
+    ? manifest.target.tags.join(', ')
+    : manifest.target.source;
+}
+
+function manifestMemberLabel(member: ReviewTeamManifestMember): string {
+  return member.displayName || member.subagentId;
+}
+
+function manifestMemberLine(member: ReviewTeamManifestMember): string {
+  return `${manifestMemberLabel(member)} (${member.subagentId})`;
+}
+
+function pluralize(count: number, singular: string): string {
+  return `${count} ${singular}${count === 1 ? '' : 's'}`;
+}
+
+function pushPreReviewSummarySection(
+  lines: string[],
+  manifest: ReviewTeamRunManifest,
+): void {
+  const summary = manifest.preReviewSummary;
+  if (!summary) {
+    return;
+  }
+
+  lines.push(`### Pre-review summary`);
+  lines.push(`- ${summary.summary}`);
+  lines.push(`- Files: ${summary.fileCount}`);
+  if (summary.lineCount !== undefined) {
+    lines.push(`- Lines changed: ${summary.lineCount} (${summary.lineCountSource})`);
+  } else {
+    lines.push(`- Lines changed: unknown (${summary.lineCountSource})`);
+  }
+  if (summary.workspaceAreas.length > 0) {
+    for (const area of summary.workspaceAreas) {
+      const sampleFiles = area.sampleFiles.length > 0
+        ? ` (${area.sampleFiles.join(', ')})`
+        : '';
+      lines.push(`- ${area.key}: ${pluralize(area.fileCount, 'file')}${sampleFiles}`);
+    }
+  }
+  lines.push('');
+}
+
+function pushSharedContextCacheSection(
+  lines: string[],
+  manifest: ReviewTeamRunManifest,
+): void {
+  const cachePlan = manifest.sharedContextCache;
+  if (!cachePlan) {
+    return;
+  }
+
+  lines.push(`### Shared context cache`);
+  if (cachePlan.entries.length === 0) {
+    lines.push('- None.');
+  } else {
+    for (const entry of cachePlan.entries) {
+      lines.push(
+        `- ${entry.cacheKey}: ${entry.path} -> ${entry.consumerPacketIds.join(', ')}`,
+      );
+    }
+  }
+  if (cachePlan.omittedEntryCount > 0) {
+    lines.push(`- Omitted entries: ${cachePlan.omittedEntryCount}`);
+  }
+  lines.push('');
+}
+
+function pushIncrementalReviewCacheSection(
+  lines: string[],
+  manifest: ReviewTeamRunManifest,
+): void {
+  const cachePlan = manifest.incrementalReviewCache;
+  if (!cachePlan) {
+    return;
+  }
+
+  lines.push(`### Incremental review cache`);
+  lines.push(`- Cache key: ${cachePlan.cacheKey}`);
+  lines.push(`- Fingerprint: ${cachePlan.fingerprint}`);
+  lines.push(`- Strategy: ${cachePlan.strategy}`);
+  lines.push(`- Reviewer packets: ${cachePlan.reviewerPacketIds.join(', ') || 'none'}`);
+  lines.push(`- Invalidates on: ${cachePlan.invalidatesOn.join(', ') || 'none'}`);
+  lines.push('');
+}
+
+function pushRunManifestSection(
+  lines: string[],
+  manifest: ReviewTeamRunManifest,
+  labels: CodeReviewReportMarkdownLabels,
+): void {
+  const activeReviewers = getActiveReviewTeamManifestMembers(manifest);
+
+  lines.push(`## ${labels.runManifest}`);
+  lines.push(`- ${labels.target}: ${manifestTarget(manifest)}`);
+  lines.push(`- ${labels.budget}: ${manifest.tokenBudget.mode}`);
+  lines.push(`- ${labels.estimatedCalls}: ${manifest.tokenBudget.estimatedReviewerCalls}`);
+  if (manifest.strategyRecommendation) {
+    lines.push(`- Recommended strategy: ${manifest.strategyRecommendation.strategyLevel}`);
+    lines.push(`- Recommendation score: ${manifest.strategyRecommendation.score}`);
+    lines.push(`- Recommendation rationale: ${manifest.strategyRecommendation.rationale}`);
+  }
+  lines.push('');
+  lines.push(`### ${labels.activeReviewers}`);
+  pushList(
+    lines,
+    activeReviewers.map((member) => manifestMemberLine(member)),
+    labels.noItems,
+  );
+  lines.push('');
+  lines.push(`### ${labels.skippedReviewers}`);
+  pushList(
+    lines,
+    manifest.skippedReviewers.map((member) =>
+      `${manifestMemberLine(member)}: ${member.reason ?? 'skipped'}`,
+    ),
+    labels.noItems,
+  );
+  lines.push('');
+  pushPreReviewSummarySection(lines, manifest);
+  pushSharedContextCacheSection(lines, manifest);
+  pushIncrementalReviewCacheSection(lines, manifest);
+}
+
 export function formatCodeReviewReportMarkdown(
   report: CodeReviewReportData,
   labels?: Partial<CodeReviewReportMarkdownLabels>,
+  options?: CodeReviewReportMarkdownOptions,
 ): string {
   const mergedLabels = mergeLabels(labels);
   const sections = buildCodeReviewReportSections(report);
@@ -374,6 +865,17 @@ export function formatCodeReviewReportMarkdown(
     lines.push(`- ${mergedLabels.scope}: ${report.review_scope.trim()}`);
   }
   lines.push('');
+  if (report.review_mode === 'deep' && options?.runManifest) {
+    pushRunManifestSection(lines, options.runManifest, mergedLabels);
+  }
+  const reliabilityNotices = buildCodeReviewReliabilityNotices(report, options?.runManifest);
+  if (reliabilityNotices.length > 0) {
+    lines.push(`## ${mergedLabels.reliabilitySignals}`);
+    reliabilityNotices.forEach((notice) => {
+      lines.push(reliabilityNoticeMarkdownLine(notice, mergedLabels));
+    });
+    lines.push('');
+  }
   lines.push(`## ${mergedLabels.issues}`);
   if (issues.length === 0) {
     lines.push(`- ${mergedLabels.noIssues}`);
@@ -437,6 +939,17 @@ export function formatCodeReviewReportMarkdown(
       lines.push(`- ${reviewer.name} (${reviewer.specialty}; ${mergedLabels.status}: ${reviewer.status}${issueCount})`);
       if (reviewer.summary) {
         lines.push(`  - ${reviewer.summary}`);
+      }
+      const packetId = reviewer.packet_id?.trim();
+      if (packetId || reviewer.packet_status_source) {
+        const packetLabel = packetId || 'missing';
+        const sourceLabel = reviewer.packet_status_source
+          ? ` (${reviewer.packet_status_source})`
+          : '';
+        lines.push(`  - ${mergedLabels.packet}: ${packetLabel}${sourceLabel}`);
+      }
+      if (reviewer.partial_output?.trim()) {
+        lines.push(`  - ${mergedLabels.partialOutput}: ${reviewer.partial_output.trim()}`);
       }
     }
   }

@@ -28,6 +28,7 @@ export type ReviewActionPhase =
   | 'fix_failed'
   | 'fix_timeout'
   | 'fix_interrupted'
+  | 'review_waiting_capacity'
   | 'review_interrupted'
   | 'resume_blocked'
   | 'resume_running'
@@ -35,6 +36,34 @@ export type ReviewActionPhase =
   | 'review_error';
 
 export type DeepReviewActionPhase = ReviewActionPhase;
+
+export type DeepReviewCapacityQueueStatus =
+  | 'queued_for_capacity'
+  | 'paused_by_user'
+  | 'running'
+  | 'capacity_skipped';
+
+export type DeepReviewCapacityQueueAction =
+  | 'pause'
+  | 'continue'
+  | 'cancel'
+  | 'skip_optional';
+
+export interface DeepReviewCapacityQueueState {
+  toolId?: string;
+  subagentType?: string;
+  dialogTurnId?: string;
+  status: DeepReviewCapacityQueueStatus;
+  queuedReviewerCount: number;
+  activeReviewerCount?: number;
+  effectiveParallelInstances?: number;
+  optionalReviewerCount?: number;
+  queueElapsedMs?: number;
+  runElapsedMs?: number;
+  maxQueueWaitSeconds?: number;
+  sessionConcurrencyHigh?: boolean;
+  controlMode?: 'local' | 'session_stop_only' | 'backend';
+}
 
 export interface ReviewActionBarState {
   /** Which child session this bar belongs to */
@@ -73,6 +102,10 @@ export interface ReviewActionBarState {
   remainingFixIds: string[];
   /** User's option choice for needs_decision items: map of item id -> option index */
   decisionSelections: Record<string, number>;
+  /** Visible Deep Review capacity queue state. Automatic queue execution is not enabled here. */
+  capacityQueueState: DeepReviewCapacityQueueState | null;
+  /** Last local queue-control action selected by the user */
+  lastCapacityQueueAction: DeepReviewCapacityQueueAction | null;
 
   // ---- actions ----
   showActionBar: (params: {
@@ -89,6 +122,11 @@ export interface ReviewActionBarState {
     interruption: DeepReviewInterruption;
     phase?: Extract<ReviewActionPhase, 'review_interrupted' | 'resume_blocked' | 'resume_failed'>;
   }) => void;
+  showCapacityQueueBar: (params: {
+    childSessionId: string;
+    parentSessionId: string | null;
+    capacityQueueState: DeepReviewCapacityQueueState;
+  }) => void;
   updatePhase: (phase: ReviewActionPhase, errorMessage?: string | null) => void;
   toggleRemediation: (id: string) => void;
   toggleAllRemediation: () => void;
@@ -100,6 +138,11 @@ export interface ReviewActionBarState {
   minimize: () => void;
   restore: () => void;
   skipRemainingFixes: () => void;
+  setCapacityQueueState: (state: DeepReviewCapacityQueueState | null) => void;
+  pauseCapacityQueue: () => void;
+  continueCapacityQueue: () => void;
+  cancelQueuedReviewers: () => void;
+  skipOptionalQueuedReviewers: () => void;
   setDecisionSelection: (itemId: string, optionIndex: number) => void;
   reset: () => void;
 }
@@ -125,6 +168,8 @@ const initialState = {
   fixingRemediationIds: new Set<string>(),
   remainingFixIds: [] as string[],
   decisionSelections: {} as Record<string, number>,
+  capacityQueueState: null as DeepReviewCapacityQueueState | null,
+  lastCapacityQueueAction: null as DeepReviewCapacityQueueAction | null,
 };
 
 export const useReviewActionBarStore = create<ReviewActionBarState>((set, get) => ({
@@ -164,6 +209,8 @@ export const useReviewActionBarStore = create<ReviewActionBarState>((set, get) =
       fixingRemediationIds: new Set(),
       remainingFixIds: [],
       decisionSelections: {},
+      capacityQueueState: null,
+      lastCapacityQueueAction: null,
     });
   },
 
@@ -187,6 +234,35 @@ export const useReviewActionBarStore = create<ReviewActionBarState>((set, get) =
       fixingRemediationIds: new Set(),
       remainingFixIds: [],
       decisionSelections: {},
+      capacityQueueState: null,
+      lastCapacityQueueAction: null,
+    });
+  },
+
+  showCapacityQueueBar: ({ childSessionId, parentSessionId, capacityQueueState }) => {
+    set({
+      childSessionId,
+      parentSessionId,
+      reviewMode: 'deep',
+      reviewData: null,
+      remediationItems: [],
+      selectedRemediationIds: new Set(),
+      phase: 'review_waiting_capacity',
+      dismissed: false,
+      minimized: false,
+      activeAction: null,
+      lastSubmittedAction: null,
+      customInstructions: '',
+      errorMessage: null,
+      interruption: null,
+      completedRemediationIds: get().childSessionId === childSessionId
+        ? get().completedRemediationIds
+        : new Set(),
+      fixingRemediationIds: new Set(),
+      remainingFixIds: [],
+      decisionSelections: {},
+      capacityQueueState,
+      lastCapacityQueueAction: null,
     });
   },
 
@@ -283,6 +359,57 @@ export const useReviewActionBarStore = create<ReviewActionBarState>((set, get) =
     activeAction: null,
     lastSubmittedAction: null,
   }),
+  setCapacityQueueState: (capacityQueueState) => set({
+    capacityQueueState,
+    lastCapacityQueueAction: null,
+  }),
+  pauseCapacityQueue: () => {
+    const current = get().capacityQueueState;
+    if (!current || current.status === 'capacity_skipped') return;
+    set({
+      capacityQueueState: { ...current, status: 'paused_by_user' },
+      lastCapacityQueueAction: 'pause',
+    });
+  },
+  continueCapacityQueue: () => {
+    const current = get().capacityQueueState;
+    if (!current || current.status !== 'paused_by_user') return;
+    set({
+      capacityQueueState: { ...current, status: 'queued_for_capacity' },
+      lastCapacityQueueAction: 'continue',
+    });
+  },
+  cancelQueuedReviewers: () => {
+    const current = get().capacityQueueState;
+    if (!current) return;
+    set({
+      capacityQueueState: {
+        ...current,
+        status: 'capacity_skipped',
+        queuedReviewerCount: 0,
+        optionalReviewerCount: 0,
+      },
+      lastCapacityQueueAction: 'cancel',
+    });
+  },
+  skipOptionalQueuedReviewers: () => {
+    const current = get().capacityQueueState;
+    if (!current) return;
+    const optionalCount = current.optionalReviewerCount ?? 0;
+    if (optionalCount <= 0) return;
+
+    const skippedCount = Math.min(optionalCount, current.queuedReviewerCount);
+    const queuedReviewerCount = Math.max(0, current.queuedReviewerCount - skippedCount);
+    set({
+      capacityQueueState: {
+        ...current,
+        status: queuedReviewerCount > 0 ? current.status : 'capacity_skipped',
+        queuedReviewerCount,
+        optionalReviewerCount: 0,
+      },
+      lastCapacityQueueAction: 'skip_optional',
+    });
+  },
   reset: () => set({ ...initialState, selectedRemediationIds: new Set() }),
 }));
 

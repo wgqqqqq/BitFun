@@ -625,6 +625,7 @@
     "fixFailed": "修复失败",
     "fixTimeout": "修复超时",
     "fixInterrupted": "修复已中断，还剩 {{count}} 项。",
+    "reviewWaitingCapacity": "审核队列等待中",
     "continueFix": "继续修复 {{count}} 项",
     "skipRemaining": "跳过剩余项",
     "reviewError": "审核出错",
@@ -686,6 +687,18 @@
     "recoveryPreserve": "{{count}} 个已完成的 reviewer 将保留",
     "recoveryRerun": "{{count}} 个 reviewer 将重新运行",
     "recoverySkip": "{{count}} 个 reviewer 将被跳过",
+    "capacityQueue": {
+      "title": "审核员正在等待容量",
+      "pausedTitle": "队列已暂停",
+      "detail": "排队等待时间不会计入审核员运行时长。",
+      "sessionBusy": "当前会话较忙，可暂停 Deep Review 或稍后继续。",
+      "stopHint": "可使用停止按钮中断当前审核队列。",
+      "pauseQueue": "暂停队列",
+      "continueQueue": "继续队列",
+      "cancelQueued": "取消排队审核员",
+      "skipOptionalQueued": "跳过可选扩展",
+      "controlFailed": "\u961f\u5217\u63a7\u5236\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u6216\u505c\u6b62\u5ba1\u6838\u3002"
+    },
     "degradation": {
       "reduceReviewers": "仅运行核心 reviewer",
       "reduceReviewersDesc": "跳过额外 reviewer，只保留核心 reviewer",
@@ -716,9 +729,11 @@
     "windowTitle": "深度审核",
     "eyebrow": "代码审核团队",
     "title": "开始深度审核？",
-    "body": "深度审核会启动并行代码审核团队，通常比普通审核耗时更久，也会消耗更多 Token。",
+    "body": "深度审核会启动多个审核员，通常比普通审核耗时更久，也会消耗更多 Token。",
     "readonlyLabel": "首次只读",
-    "readonly": "首次审核默认只读：它会先输出问题和修复计划，不会直接修改代码。",
+    "readonly": "首次审核会先输出问题和修复计划，不会直接修改代码。",
+    "sessionConcurrencyTitle": "当前会话较忙",
+    "sessionConcurrencyBody": "目标会话已有 {{count}} 个 subagent 任务在运行。可选择更轻量策略、暂时取消，或在容量空闲后手动继续。",
     "costLabel": "Token 消耗更高",
     "cost": "预期消耗：多个审核角色加质量门禁，运行时间和 Token 可能达到普通审核的数倍。",
     "timeLabel": "耗时更久",
@@ -726,7 +741,71 @@
     "dontShowAgain": "下次不再提示",
     "cancel": "取消",
     "confirm": "开始深度审核",
-    "estimatedTokens": "预计消耗：{{min}} - {{max}} tokens"
+    "estimatedTokens": "预计消耗：{{min}} - {{max}} tokens",
+    "runStrategy": "运行策略：{{strategy}}",
+    "recommendedStrategy": "推荐策略：{{strategy}}",
+    "recommendationTitle": "风险推荐",
+    "strategyOverrideTitle": "运行策略",
+    "strategyOverrideBody": "为本项目的本次启动选择审核策略。",
+    "teamDefaultStrategy": "团队默认",
+    "strategyLabels": {
+      "quick": "快速",
+      "normal": "标准",
+      "deep": "深度"
+    },
+    "lineupTitle": "审核阵容",
+    "summaryTitle": "启动摘要",
+    "targetFiles": "{{count}} 个文件",
+    "targetFiles_one": "{{count}} 个文件",
+    "targetFiles_other": "{{count}} 个文件",
+    "targetRiskTags": "风险区域：{{tags}}",
+    "targetTagsWithMore": "{{tags}}，另有 {{count}} 个",
+    "targetTagsWithMore_one": "{{tags}}，另有 {{count}} 个",
+    "targetTagsWithMore_other": "{{tags}}，另有 {{count}} 个",
+    "optionalReviewers": "{{count}} 个可选审核者",
+    "optionalReviewers_one": "{{count}} 个可选审核者",
+    "optionalReviewers_other": "{{count}} 个可选审核者",
+    "summaryFirstReview": "先摘要再覆盖",
+    "targetTagLabels": {
+      "frontendUi": "前端 UI",
+      "frontendStyle": "前端样式",
+      "frontendI18n": "前端国际化",
+      "frontendContract": "前端契约",
+      "desktopContract": "桌面契约",
+      "webServerContract": "Web 服务契约",
+      "backendCore": "后端核心",
+      "transport": "传输层",
+      "apiLayer": "API 层",
+      "aiAdapter": "AI 适配器",
+      "installerUi": "安装器 UI",
+      "test": "测试",
+      "docs": "文档",
+      "config": "配置",
+      "generatedOrLock": "生成文件或锁文件",
+      "unknown": "未知区域"
+    },
+    "estimatedCalls": "{{count}} 次审核调用",
+    "estimatedCalls_one": "{{count}} 次审核调用",
+    "estimatedCalls_other": "{{count}} 次审核调用",
+    "activeReviewers": "{{count}} 个已启用",
+    "activeReviewers_one": "{{count}} 个已启用",
+    "activeReviewers_other": "{{count}} 个已启用",
+    "skippedReviewers": "{{count}} 个已跳过",
+    "skippedReviewers_one": "{{count}} 个已跳过",
+    "skippedReviewers_other": "{{count}} 个已跳过",
+    "skippedMore": "另有 {{count}} 个",
+    "skippedMore_one": "另有 {{count}} 个",
+    "skippedMore_other": "另有 {{count}} 个",
+    "activeGroupTitle": "将运行",
+    "skippedGroupTitle": "已跳过的审核者",
+    "skippedReasons": {
+      "notApplicable": "不适用于本次目标",
+      "budgetLimited": "受 Token 预算限制",
+      "invalidTooling": "配置问题",
+      "disabled": "已停用",
+      "unavailable": "不可用",
+      "skipped": "已跳过"
+    }
   },
   "flowChatHeader": {
     "turnList": "轮次列表",
@@ -1423,8 +1502,55 @@
         "partial": "部分完成",
         "unknown": "未知"
       },
+      "runManifest": {
+        "recommendedStrategy": "推荐策略",
+        "riskRecommendationTitle": "风险推荐"
+      },
       "sectionItemCount": "{{count}} 项",
       "remediationPlan": "修复计划",
+      "reliabilityStatus": {
+        "title": "审核状态",
+        "context_pressure": {
+          "label": "上下文压力上升",
+          "detail": "大型或受限目标预计会调用 {{count}} 次审核者。"
+        },
+        "compression_preserved": {
+          "label": "压缩已保留关键事实",
+          "detail": "覆盖说明包含压缩保留下来的上下文。"
+        },
+        "cache_hit": {
+          "label": "增量缓存复用了审核结果",
+          "detail": "{{count}} 个审核包复用了匹配的缓存输出。"
+        },
+        "cache_miss": {
+          "label": "增量缓存未命中或已刷新",
+          "detail": "{{count}} 个审核包重新执行或刷新了过期缓存。"
+        },
+        "concurrency_limited": {
+          "label": "审核员启动受到并发限制",
+          "detail": "{{count}} 次审核员启动触发了并发上限。"
+        },
+        "partial_reviewer": {
+          "label": "审核者超时但有部分结果",
+          "detail": "{{count}} 个审核者结果是部分结果，置信度已降低。"
+        },
+        "retry_guidance": {
+          "label": "已给出重试指引",
+          "detail": "{{count}} 条重试指引用于补足部分审核覆盖。"
+        },
+        "skipped_reviewers": {
+          "label": "已跳过的审核员",
+          "detail": "{{count}} 个审核员因适用性、配置或预算被跳过。"
+        },
+        "token_budget_limited": {
+          "label": "Token 预算限制了审核覆盖",
+          "detail": "{{count}} 个审核员因 Token 预算模式被跳过。"
+        },
+        "user_decision": {
+          "label": "需要用户决策",
+          "detail": "{{count}} 个审核项需要先决策再修复。"
+        }
+      },
       "sections": {
         "summary": "结论摘要",
         "issues": "问题列表",
@@ -1453,8 +1579,11 @@
         "noIssues": "没有已验证问题。",
         "status": "状态",
         "findings": "问题数",
+        "packet": "分包",
+        "partialOutput": "部分输出",
         "validation": "验证说明",
         "source": "来源",
+        "reliabilitySignals": "审核可靠性",
         "noItems": "无。"
       },
       "export": {

@@ -437,6 +437,14 @@ export const BtwSessionPanel: React.FC<BtwSessionPanelProps> = ({
           completedRemediationIds: store.completedRemediationIds,
         });
         store.minimize();
+      } else if (isComplete && store.phase === 'review_waiting_capacity') {
+        store.showActionBar({
+          childSessionId,
+          parentSessionId: parentSessionId ?? null,
+          reviewData: latestReviewData,
+          reviewMode,
+          phase: 'review_completed',
+        });
       }
       return;
     }

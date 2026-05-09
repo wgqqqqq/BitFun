@@ -188,6 +188,97 @@ describe('deepReviewActionBarStore', () => {
     });
   });
 
+  describe('capacity queue controls', () => {
+    it('can bind a visible queue state before the review report is available', () => {
+      bar().showCapacityQueueBar({
+        childSessionId: 'child-1',
+        parentSessionId: 'parent-1',
+        capacityQueueState: {
+          status: 'queued_for_capacity',
+          queuedReviewerCount: 2,
+          activeReviewerCount: 1,
+        },
+      });
+
+      expect(bar().childSessionId).toBe('child-1');
+      expect(bar().reviewMode).toBe('deep');
+      expect(bar().phase).toBe('review_waiting_capacity');
+      expect(bar().reviewData).toBeNull();
+      expect(bar().capacityQueueState?.queuedReviewerCount).toBe(2);
+    });
+
+    it('pauses and resumes capacity queue state without clearing completed remediation', () => {
+      bar().showActionBar({
+        childSessionId: 'child-1',
+        parentSessionId: 'parent-1',
+        reviewData: {
+          summary: { recommended_action: 'request_changes' },
+          remediation_plan: ['Fix issue 1', 'Fix issue 2'],
+        },
+        completedRemediationIds: new Set(['remediation-0']),
+      });
+
+      const queueActions = bar() as unknown as {
+        setCapacityQueueState: (state: {
+          status: string;
+          queuedReviewerCount: number;
+          optionalReviewerCount: number;
+        }) => void;
+        pauseCapacityQueue: () => void;
+        continueCapacityQueue: () => void;
+      };
+
+      queueActions.setCapacityQueueState({
+        status: 'queued_for_capacity',
+        queuedReviewerCount: 2,
+        optionalReviewerCount: 1,
+      });
+      queueActions.pauseCapacityQueue();
+
+      expect((bar() as unknown as { capacityQueueState: { status: string } }).capacityQueueState.status).toBe('paused_by_user');
+      expect(bar().completedRemediationIds.has('remediation-0')).toBe(true);
+
+      queueActions.continueCapacityQueue();
+
+      expect((bar() as unknown as { capacityQueueState: { status: string } }).capacityQueueState.status).toBe('queued_for_capacity');
+      expect(bar().completedRemediationIds.has('remediation-0')).toBe(true);
+    });
+
+    it('can skip optional queued reviewers without cancelling required queued work', () => {
+      bar().showActionBar({
+        childSessionId: 'child-1',
+        parentSessionId: 'parent-1',
+        reviewData: {
+          summary: { recommended_action: 'request_changes' },
+          remediation_plan: ['Fix issue 1'],
+        },
+      });
+
+      const queueActions = bar() as unknown as {
+        setCapacityQueueState: (state: {
+          status: string;
+          queuedReviewerCount: number;
+          optionalReviewerCount: number;
+        }) => void;
+        skipOptionalQueuedReviewers: () => void;
+      };
+
+      queueActions.setCapacityQueueState({
+        status: 'queued_for_capacity',
+        queuedReviewerCount: 3,
+        optionalReviewerCount: 2,
+      });
+      queueActions.skipOptionalQueuedReviewers();
+
+      const state = (bar() as unknown as {
+        capacityQueueState: { status: string; queuedReviewerCount: number; optionalReviewerCount: number };
+      }).capacityQueueState;
+      expect(state.status).toBe('queued_for_capacity');
+      expect(state.queuedReviewerCount).toBe(1);
+      expect(state.optionalReviewerCount).toBe(0);
+    });
+  });
+
   describe('toggleRemediation with completed items', () => {
     it('does not allow toggling completed items', () => {
       bar().showActionBar({

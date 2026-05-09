@@ -34,6 +34,15 @@ const REQUIRED_ACTION_BAR_KEYS = [
   'deepReviewActionBar.continueFix',
   'deepReviewActionBar.skipRemaining',
   'deepReviewActionBar.switchModel',
+  'deepReviewActionBar.capacityQueue.title',
+  'deepReviewActionBar.capacityQueue.pausedTitle',
+  'deepReviewActionBar.capacityQueue.detail',
+  'deepReviewActionBar.capacityQueue.sessionBusy',
+  'deepReviewActionBar.capacityQueue.pauseQueue',
+  'deepReviewActionBar.capacityQueue.continueQueue',
+  'deepReviewActionBar.capacityQueue.cancelQueued',
+  'deepReviewActionBar.capacityQueue.skipOptionalQueued',
+  'deepReviewActionBar.capacityQueue.controlFailed',
   'reviewActionBar.noIssuesFound',
 ];
 
@@ -57,6 +66,11 @@ const REQUIRED_CODE_REVIEW_CARD_KEYS = [
 
 const REQUIRED_REVIEW_TEAM_PAGE_KEYS = [
   'reviewTeams.detail.loading',
+];
+
+const REQUIRED_DEEP_REVIEW_CONSENT_KEYS = [
+  'deepReviewConsent.sessionConcurrencyTitle',
+  'deepReviewConsent.sessionConcurrencyBody',
 ];
 
 function getMessageValue(messages: unknown, key: string): unknown {
@@ -96,6 +110,17 @@ describe('DeepReviewActionBar i18n', () => {
   it('keeps review team page strings available in every bundled locale', () => {
     for (const [locale, messages] of Object.entries(AGENT_LOCALES)) {
       const missingKeys = REQUIRED_REVIEW_TEAM_PAGE_KEYS.filter((key) => {
+        const value = getMessageValue(messages, key);
+        return typeof value !== 'string' || value.trim().length === 0;
+      });
+
+      expect(missingKeys, `${locale} missing keys`).toEqual([]);
+    }
+  });
+
+  it('keeps Deep Review consent strings available in every bundled locale', () => {
+    for (const [locale, messages] of Object.entries(LOCALES)) {
+      const missingKeys = REQUIRED_DEEP_REVIEW_CONSENT_KEYS.filter((key) => {
         const value = getMessageValue(messages, key);
         return typeof value !== 'string' || value.trim().length === 0;
       });

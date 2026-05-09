@@ -13,6 +13,7 @@ const buildRecoveryPlanMock = vi.hoisted(() => vi.fn(() => ({
   willSkip: [],
   summaryText: '1 completed reviewer will be preserved; 1 reviewer will be rerun',
 })));
+const controlDeepReviewQueueMock = vi.hoisted(() => vi.fn());
 
 vi.mock('react-i18next', () => ({
   initReactI18next: {
@@ -56,6 +57,12 @@ vi.mock('@/component-library', () => ({
 vi.mock('../../services/FlowChatManager', () => ({
   flowChatManager: {
     sendMessage: sendMessageMock,
+  },
+}));
+
+vi.mock('@/infrastructure/api/service-api/AgentAPI', () => ({
+  agentAPI: {
+    controlDeepReviewQueue: controlDeepReviewQueueMock,
   },
 }));
 
@@ -358,6 +365,117 @@ describeWithJsdom('DeepReviewActionBar', () => {
     const state = useReviewActionBarStore.getState();
     expect(state.dismissed).toBe(false);
     expect(state.minimized).toBe(true);
+  });
+
+  it('does not show capacity queue controls when there is no queue state', async () => {
+    const { DeepReviewActionBar } = await import('./DeepReviewActionBar');
+
+    useReviewActionBarStore.getState().showActionBar({
+      childSessionId: 'child-session',
+      parentSessionId: 'parent-session',
+      reviewData: {
+        summary: { recommended_action: 'request_changes' },
+        remediation_plan: ['Fix issue 1'],
+      },
+      phase: 'review_completed',
+    });
+
+    await act(async () => {
+      root.render(<DeepReviewActionBar />);
+    });
+
+    expect(container.textContent).not.toContain('Reviewers waiting for capacity');
+    expect(Array.from(container.querySelectorAll('button')).some((button) => (
+      button.textContent?.includes('Pause queue')
+    ))).toBe(false);
+  });
+
+  it('shows compact capacity queue controls and keeps them locally adjustable', async () => {
+    const { DeepReviewActionBar } = await import('./DeepReviewActionBar');
+
+    useReviewActionBarStore.getState().showActionBar({
+      childSessionId: 'child-session',
+      parentSessionId: 'parent-session',
+      reviewData: {
+        summary: { recommended_action: 'request_changes' },
+        remediation_plan: ['Fix issue 1'],
+      },
+      phase: 'review_completed',
+    });
+    useReviewActionBarStore.setState({
+      capacityQueueState: {
+        status: 'queued_for_capacity',
+        queuedReviewerCount: 2,
+        activeReviewerCount: 1,
+        optionalReviewerCount: 1,
+        sessionConcurrencyHigh: true,
+      },
+    } as Partial<ReturnType<typeof useReviewActionBarStore.getState>>);
+
+    await act(async () => {
+      root.render(<DeepReviewActionBar />);
+    });
+
+    expect(container.textContent).toContain('Reviewers waiting for capacity');
+    expect(container.textContent).toContain('Queue wait does not count against reviewer runtime.');
+    expect(container.textContent).toContain('Your active session is busy.');
+
+    const pauseButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Pause queue'));
+    expect(pauseButton).toBeTruthy();
+
+    await act(async () => {
+      pauseButton!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect((useReviewActionBarStore.getState() as unknown as {
+      capacityQueueState: { status: string };
+    }).capacityQueueState.status).toBe('paused_by_user');
+    expect(container.textContent).toContain('Queue paused');
+  });
+
+  it('sends backend queue control actions for event-driven capacity waits', async () => {
+    const { DeepReviewActionBar } = await import('./DeepReviewActionBar');
+    controlDeepReviewQueueMock.mockResolvedValue(undefined);
+
+    useReviewActionBarStore.getState().showCapacityQueueBar({
+      childSessionId: 'child-session',
+      parentSessionId: 'parent-session',
+      capacityQueueState: {
+        toolId: 'task-queue-1',
+        subagentType: 'ReviewSecurity',
+        dialogTurnId: 'turn-queue-1',
+        status: 'queued_for_capacity',
+        queuedReviewerCount: 1,
+        activeReviewerCount: 1,
+        optionalReviewerCount: 1,
+        controlMode: 'backend',
+      },
+    });
+
+    await act(async () => {
+      root.render(<DeepReviewActionBar />);
+    });
+
+    const pauseButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Pause queue'));
+    expect(pauseButton).toBeTruthy();
+
+    await act(async () => {
+      pauseButton!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(controlDeepReviewQueueMock).toHaveBeenCalledWith({
+      sessionId: 'child-session',
+      dialogTurnId: 'turn-queue-1',
+      toolId: 'task-queue-1',
+      action: 'pause',
+    });
+    expect((useReviewActionBarStore.getState() as unknown as {
+      capacityQueueState: { status: string };
+    }).capacityQueueState.status).toBe('paused_by_user');
   });
 
   it('shows distinct progress text after starting fix and re-review', async () => {
