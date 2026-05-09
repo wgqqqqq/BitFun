@@ -104,8 +104,8 @@ export interface CompactToolCardHeaderProps {
   onAffordanceClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   /** Whether to show the left icon divider (default false for compact) */
   showDivider?: boolean;
-  /** Action text */
-  action?: string;
+  /** Action label (text or inline markup) */
+  action?: ReactNode;
   /** Main content */
   content?: ReactNode;
   /** Right extra content (e.g., statistics) */
