@@ -108,8 +108,6 @@ function getSkillGroupLabel(groupKey: string, t: TFunction<'scenes/agents'>): st
       return t('agentsOverview.skillGroups.meta');
     case 'team':
       return t('agentsOverview.skillGroups.team');
-    case 'superpowers':
-      return t('agentsOverview.skillGroups.superpowers');
     default:
       return t('agentsOverview.skillGroups.other');
   }

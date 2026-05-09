@@ -96,12 +96,12 @@ mod tests {
 
     fn builtin_skill(dir_name: &str) -> SkillInfo {
         SkillInfo {
-            key: format!("user::bitfun::{}", dir_name),
+            key: format!("user::bitfun-system::{}", dir_name),
             name: dir_name.to_string(),
             description: String::new(),
             path: format!("/tmp/{}", dir_name),
             level: SkillLocation::User,
-            source_slot: "bitfun".to_string(),
+            source_slot: "bitfun-system".to_string(),
             dir_name: dir_name.to_string(),
             is_builtin: true,
             group_key: None,

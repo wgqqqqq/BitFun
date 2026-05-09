@@ -3,7 +3,7 @@
 //! Manages skill discovery, mode-specific filtering, and loading.
 
 use super::builtin::{
-    builtin_skill_group_key, ensure_builtin_skills_installed, is_builtin_skill_dir_name,
+    builtin_skill_group_key, ensure_builtin_skills_installed,
 };
 use super::default_profiles::{is_enabled_by_default_for_mode, is_skill_enabled_for_mode};
 use super::mode_overrides::{
@@ -26,6 +26,9 @@ static SKILL_REGISTRY: OnceLock<SkillRegistry> = OnceLock::new();
 
 const USER_PREFIX: &str = "user";
 const PROJECT_PREFIX: &str = "project";
+const BITFUN_USER_SLOT: &str = "bitfun";
+const BITFUN_SYSTEM_SLOT: &str = "bitfun-system";
+const BITFUN_SYSTEM_DIR_NAME: &str = ".system";
 
 /// Project-level skill roots under a workspace.
 const PROJECT_SKILL_SLOTS: &[(&str, &str, &str)] = &[
@@ -57,6 +60,7 @@ struct SkillRootEntry {
     level: SkillLocation,
     slot: &'static str,
     priority: usize,
+    is_builtin: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -73,12 +77,15 @@ struct SkillCandidate {
 }
 
 impl SkillCandidate {
-    fn from_data(mut data: SkillData, slot: &str, key_prefix: &str, priority: usize) -> Self {
+    fn from_data(
+        mut data: SkillData,
+        slot: &str,
+        key_prefix: &str,
+        priority: usize,
+        is_builtin: bool,
+    ) -> Self {
         data.source_slot = slot.to_string();
         data.key = build_skill_key(key_prefix, slot, &data.dir_name);
-        let is_builtin = data.location == SkillLocation::User
-            && slot == "bitfun"
-            && is_builtin_skill_dir_name(&data.dir_name);
         let group_key = if is_builtin {
             builtin_skill_group_key(&data.dir_name).map(str::to_string)
         } else {
@@ -242,6 +249,7 @@ impl SkillRegistry {
                         level: SkillLocation::Project,
                         slot,
                         priority,
+                        is_builtin: false,
                     });
                 }
                 priority += 1;
@@ -257,13 +265,14 @@ impl SkillRegistry {
                         level: SkillLocation::User,
                         slot,
                         priority,
+                        is_builtin: false,
                     });
                 }
                 priority += 1;
             }
         }
 
-        // BitFun's own user skills dir sits between home slots and config slots.
+        // BitFun's own user-defined skills sit between home slots and config slots.
         // This lets other agent directories (e.g. ~/.claude/skills) take precedence
         // while still keeping config-level overrides after BitFun defaults.
         let path_manager = get_path_manager_arc();
@@ -272,8 +281,21 @@ impl SkillRegistry {
             entries.push(SkillRootEntry {
                 path: bitfun_skills,
                 level: SkillLocation::User,
-                slot: "bitfun",
+                slot: BITFUN_USER_SLOT,
                 priority,
+                is_builtin: false,
+            });
+        }
+        priority += 1;
+
+        let builtin_skills = path_manager.builtin_skills_dir();
+        if builtin_skills.exists() && builtin_skills.is_dir() {
+            entries.push(SkillRootEntry {
+                path: builtin_skills,
+                level: SkillLocation::User,
+                slot: BITFUN_SYSTEM_SLOT,
+                priority,
+                is_builtin: true,
             });
         }
         priority += 1;
@@ -287,6 +309,7 @@ impl SkillRegistry {
                         level: SkillLocation::User,
                         slot,
                         priority,
+                        is_builtin: false,
                     });
                 }
                 priority += 1;
@@ -316,6 +339,10 @@ impl SkillRegistry {
                 continue;
             };
 
+            if entry.slot == BITFUN_USER_SLOT && dir_name == BITFUN_SYSTEM_DIR_NAME {
+                continue;
+            }
+
             let skill_md_path = path.join("SKILL.md");
             if !skill_md_path.exists() {
                 continue;
@@ -339,6 +366,7 @@ impl SkillRegistry {
                             entry.slot,
                             key_prefix,
                             entry.priority,
+                            entry.is_builtin,
                         ));
                     }
                     Err(error) => {
@@ -421,6 +449,7 @@ impl SkillRegistry {
                                 entry.slot,
                                 PROJECT_PREFIX,
                                 entry.priority,
+                                false,
                             ));
                         }
                         Err(error) => {

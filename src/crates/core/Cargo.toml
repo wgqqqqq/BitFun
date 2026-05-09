@@ -143,3 +143,6 @@ schannel = "0.1"
 default = ["ssh-remote"]
 tauri-support = ["tauri"]  # Optional tauri support
 ssh-remote = ["russh", "russh-sftp", "russh-keys", "shellexpand", "ssh_config"]  # russh-keys pure-Rust crypto backend (no openssl)
+
+[build-dependencies]
+sha2 = { workspace = true }
