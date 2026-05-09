@@ -73,6 +73,19 @@ export const CodePreview: React.FC<CodePreviewProps> = memo(({
   // tokenization runs during browser idle time.
   const deferredContent = useDeferredValue(content);
 
+  // Prism tokenizes the *entire* string synchronously. For large streaming files
+  // (e.g. 500-line SCSS) this blocks the main thread for 50-150 ms per 100 ms
+  // batch flush. Since the streaming preview shows at most 4 visible lines
+  // (maxHeight ≈ 88 px), we only need to tokenize the tail of the buffer.
+  // After streaming ends, the full content is restored for the completed view.
+  const STREAMING_TAIL_LINES = 60; // generous tail – more than enough for any maxHeight
+  const displayContent = useMemo(() => {
+    if (!isStreaming) return deferredContent;
+    const lines = deferredContent.split('\n');
+    if (lines.length <= STREAMING_TAIL_LINES) return deferredContent;
+    return lines.slice(-STREAMING_TAIL_LINES).join('\n');
+  }, [isStreaming, deferredContent]);
+
   const [highlightedLine, setHighlightedLine] = useState<number | null>(null);
   
   const detectedLanguage = useMemo(() => {
@@ -166,7 +179,7 @@ export const CodePreview: React.FC<CodePreviewProps> = memo(({
             opacity: isLight ? 0.88 : 0.6,
           }}
         >
-          {deferredContent}
+          {displayContent}
         </SyntaxHighlighter>
         
         {/* Streaming cursor indicator */}

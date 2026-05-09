@@ -22,6 +22,7 @@ import { snapshotAPI } from '../../../infrastructure/api';
 import { useWorkspaceContext } from '../../../infrastructure/contexts/WorkspaceContext';
 import { notificationService } from '../../../shared/notification-system';
 import { createLogger } from '@/shared/utils/logger';
+import { runWithConcurrencyLimit } from '@/shared/utils/runWithConcurrencyLimit';
 import { createBtwChildSession } from '../../services/BtwThreadService';
 import { openBtwSessionInAuxPane } from '../../services/openBtwSession';
 import {
@@ -180,7 +181,8 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
   const observedProcessingTurnIdRef = useRef<string | null>(null);
   const promptedReviewReadyTurnIdRef = useRef<string | null>(null);
   const reviewReadyGlintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const CACHE_TTL = 10000;
+  const CACHE_TTL = 60000;
+  const DIFF_STATS_MAX_CONCURRENCY = 3;
 
   const badgeRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -308,8 +310,10 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
         loadingFilesRef.current.add(file.filePath);
       });
 
-      await Promise.all(
-        newFilesToLoad.map(async (file) => {
+      const batchResults = await runWithConcurrencyLimit(
+        newFilesToLoad,
+        DIFF_STATS_MAX_CONCURRENCY,
+        async (file) => {
           let stats: FileStats | null = null;
 
           try {
@@ -356,16 +360,19 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
             loadingFilesRef.current.delete(file.filePath);
           }
 
-          // Keep only files with changes or errors (filter +0/-0).
-          if (stats && (stats.additions > 0 || stats.deletions > 0 || stats.error)) {
-            setFileStats(prev => {
-              const newMap = new Map(prev);
-              newMap.set(file.filePath, stats!);
-              return newMap;
-            });
-          }
-        })
+          return { filePath: file.filePath, stats };
+        },
       );
+
+      setFileStats((prev) => {
+        const newMap = new Map(prev);
+        for (const { filePath, stats } of batchResults) {
+          if (stats && (stats.additions > 0 || stats.deletions > 0 || stats.error)) {
+            newMap.set(filePath, stats);
+          }
+        }
+        return newMap;
+      });
     } catch (error) {
       log.error('Failed to load file stats', error);
     } finally {

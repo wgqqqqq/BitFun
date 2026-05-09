@@ -12,6 +12,7 @@ import { createDiffEditorTab } from '../../../shared/utils/tabUtils';
 import { snapshotAPI } from '../../../infrastructure/api';
 import { useCurrentWorkspace } from '../../../infrastructure/contexts/WorkspaceContext';
 import { createLogger } from '@/shared/utils/logger';
+import { runWithConcurrencyLimit } from '@/shared/utils/runWithConcurrencyLimit';
 import { flowChatStore } from '../../store/FlowChatStore';
 import type { FlowChatState } from '../../types/flow-chat';
 import './SessionFileModificationsBar.scss';
@@ -77,7 +78,9 @@ export const SessionFileModificationsBar: React.FC<SessionFileModificationsBarPr
   const statsCacheRef = useRef<StatsCache>({});
   const loadingFilesRef = useRef<Set<string>>(new Set());
   const previousSessionIdRef = useRef<string | undefined>(undefined);
-  const CACHE_TTL = 10000;
+  const CACHE_TTL = 60000;
+  /** Limit parallel Tauri IPC for diff stats so the webview stays responsive on large file lists. */
+  const DIFF_STATS_MAX_CONCURRENCY = 3;
 
   const initializedRef = useRef(false);
 
@@ -234,8 +237,10 @@ export const SessionFileModificationsBar: React.FC<SessionFileModificationsBarPr
         loadingFilesRef.current.add(`${file.sourceSessionId}:${file.filePath}`);
       });
 
-      await Promise.all(
-        newFilesToLoad.map(async (file) => {
+      const batchResults = await runWithConcurrencyLimit(
+        newFilesToLoad,
+        DIFF_STATS_MAX_CONCURRENCY,
+        async (file) => {
           const sourceKey = `${file.sourceSessionId}:${file.filePath}`;
           let stats: FileStats | null = null;
 
@@ -288,16 +293,19 @@ export const SessionFileModificationsBar: React.FC<SessionFileModificationsBarPr
             loadingFilesRef.current.delete(sourceKey);
           }
 
-          // Keep only files with changes or errors (filter +0 -0).
-          if (stats && (stats.additions > 0 || stats.deletions > 0 || stats.error)) {
-            setFileStats(prev => {
-              const newMap = new Map(prev);
-              newMap.set(sourceKey, stats!);
-              return newMap;
-            });
-          }
-        })
+          return { sourceKey, stats };
+        },
       );
+
+      setFileStats((prev) => {
+        const newMap = new Map(prev);
+        for (const { sourceKey, stats } of batchResults) {
+          if (stats && (stats.additions > 0 || stats.deletions > 0 || stats.error)) {
+            newMap.set(sourceKey, stats);
+          }
+        }
+        return newMap;
+      });
     } catch (error) {
       log.error('Failed to load file stats', error);
     } finally {

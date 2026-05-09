@@ -16,13 +16,32 @@
 }
 
 .compact-tool-card-wrapper.terminal-tool-card--compact-collapsed {
+  /*
+   * Match collapsed thinking summary (`.thinking-label`, `ModelThinkingDisplay.scss`):
+   * sans + `sm` + line-height 1.5 + normal — not monospace (mono reads “thinner” vs “思考了 N 字”).
+   */
+  --tool-compact-summary-font:
+    var(--font-family-sans, 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif);
+
+  .compact-card-action,
+  .compact-card-content .tool-command-preview.tool-command-preview--compact {
+    font-family: var(--tool-compact-summary-font);
+    font-size: var(--flowchat-font-size-sm);
+    line-height: 1.5;
+    font-weight: normal;
+    color: var(--color-text-muted);
+  }
+
   .terminal-header-extra {
     gap: 4px;
   }
 
   .terminal-header-duration .duration-text {
     gap: 3px;
-    font-size: var(--flowchat-font-size-xs);
+    font-family: var(--tool-compact-summary-font);
+    font-size: var(--flowchat-font-size-sm);
+    line-height: 1.5;
+    font-weight: normal;
   }
 
   .terminal-header-duration .duration-text svg {
@@ -575,6 +594,21 @@
     .terminal-command,
     .terminal-command-input {
       font-size: 11px;
+    }
+
+    .compact-card-action,
+    .compact-card-content .tool-command-preview--compact {
+      font-size: 11px;
+      line-height: 1.5;
+      font-weight: normal;
+      font-family: var(--font-family-sans, 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif);
+    }
+
+    .terminal-header-duration .duration-text {
+      font-size: 11px;
+      line-height: 1.5;
+      font-weight: normal;
+      font-family: var(--font-family-sans, 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif);
     }
   }
 }

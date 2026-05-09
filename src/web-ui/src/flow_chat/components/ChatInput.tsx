@@ -674,13 +674,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     void loadMcpPromptCommands();
   }, [derivedState?.isProcessing, loadMcpPromptCommands, slashCommandState.isActive, slashCommandState.kind]);
 
+  // Stable ref so the mcp-app:message handler can read the latest value without
+  // being included in the effect's dependency array (prevents rapid listener
+  // teardown/re-registration on every keystroke or streaming update).
+  const inputStateValueRef = React.useRef(inputState.value);
+  React.useEffect(() => {
+    inputStateValueRef.current = inputState.value;
+  });
+
   // Handle MCP App ui/message requests (aligned with VSCode behavior)
   React.useEffect(() => {
     const handleMcpAppMessage = async (event: import('@/infrastructure/api/service-api/MCPAPI').McpAppMessageEvent) => {
       const { requestId, params } = event;
 
       // Don't fill if input already has content (aligned with VSCode behavior)
-      if (inputState.value.trim()) {
+      if (inputStateValueRef.current.trim()) {
         log.warn('MCP App ui/message rejected: input already has content');
         // Send error response (VSCode returns { isError: true } in this case)
         globalEventBus.emit('mcp-app:message-response', {
@@ -751,7 +759,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     return () => {
       globalEventBus.off('mcp-app:message', handleMcpAppMessage);
     };
-  }, [inputState.value, addContext, clearPendingLargePastes, currentImageCount]);
+  }, [addContext, clearPendingLargePastes, currentImageCount]);
 
   React.useEffect(() => {
     const handleInsertContextTag = (event: Event) => {

@@ -19,21 +19,31 @@
   cursor: pointer;
 }
 
+/* Collapsed row: match thinking summary typography (`ModelThinkingDisplay.scss` `.thinking-label`). */
 .compact-tool-card-wrapper.git-tool-display {
-  .tool-card-icon-slot {
-    width: 24px;
-    margin-right: 7px;
+  --tool-compact-summary-font:
+    var(--font-family-sans, 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif);
+
+  .compact-card-action,
+  .compact-card-content .tool-command-preview.tool-command-preview--compact {
+    font-family: var(--tool-compact-summary-font);
+    font-size: var(--flowchat-font-size-sm);
+    line-height: 1.5;
+    font-weight: normal;
+    color: var(--color-text-muted);
   }
 
-  .tool-card-icon-slot::after {
-    top: 1px;
-    bottom: 1px;
-    border-color: var(--border-subtle);
+  /* Failure: keep left rail (icon + optional label) same tone as success; details stay in extra / expanded. */
+  .compact-tool-card.status-error .tool-card-icon-marks {
+    color: var(--color-text-secondary);
   }
 
-  .tool-card-icon-marks {
-    width: 20px;
-    height: 20px;
+  .output-summary {
+    font-family: var(--tool-compact-summary-font);
+    font-size: var(--flowchat-font-size-sm);
+    line-height: 1.5;
+    font-weight: normal;
+    color: var(--tool-card-text-secondary);
   }
 }
 
@@ -45,6 +55,14 @@
   margin-bottom: -8px;
   padding: 6px 8px;
   border-radius: 0 0 6px 6px;
+}
+
+/* Expanded + same shell as Terminal: match `terminal-result-footer` inset from `TerminalToolCard.scss`. */
+.base-tool-card-wrapper.terminal-tool-card.git-tool-display .git-result-footer {
+  margin-left: -12px;
+  margin-right: -12px;
+  margin-bottom: -12px;
+  padding: 6px 12px;
 }
 
 /* ========== Fix scrollbar visibility on card hover ========== */
@@ -80,7 +98,9 @@
     flex: 1;
   }
 
-  .git-command-preview {
+  /* Collapsed row only — expanded uses `.terminal-command` from TerminalToolCard.scss. */
+  .compact-tool-card-wrapper.git-tool-display .git-tool-info .git-command-preview,
+  .compact-tool-card-wrapper.git-tool-display .git-command-preview.tool-command-preview--compact {
     color: var(--color-text-muted);
   }
 

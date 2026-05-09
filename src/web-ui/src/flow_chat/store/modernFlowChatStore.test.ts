@@ -11,10 +11,10 @@ vi.mock('./FlowChatStore', () => ({
 }));
 
 vi.mock('../tool-cards', () => ({
-  isCollapsibleTool: (toolName: string) => ['Read', 'LS', 'Grep', 'Glob', 'WebSearch', 'Bash'].includes(toolName),
+  isCollapsibleTool: (toolName: string) => ['Read', 'LS', 'Grep', 'Glob', 'WebSearch', 'Bash', 'Git'].includes(toolName),
   READ_TOOL_NAMES: new Set(['Read']),
   SEARCH_TOOL_NAMES: new Set(['Grep', 'Glob', 'WebSearch']),
-  COMMAND_TOOL_NAMES: new Set(['Bash']),
+  COMMAND_TOOL_NAMES: new Set(['Bash', 'Git']),
 }));
 
 import { sessionToVirtualItems } from './modernFlowChatStore';
