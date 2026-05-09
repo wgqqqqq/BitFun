@@ -124,9 +124,9 @@ pub fn policy_for_mode(mode_id: &str) -> ModeSkillPolicy {
         SkillModeId::Agentic | SkillModeId::Claw => AGENTIC_POLICY,
         SkillModeId::Cowork => COWORK_POLICY,
         SkillModeId::Team => TEAM_POLICY,
-        SkillModeId::ComputerUse
-        | SkillModeId::DeepResearch
-        | SkillModeId::Other => OPEN_META_ONLY_POLICY,
+        SkillModeId::ComputerUse | SkillModeId::DeepResearch | SkillModeId::Other => {
+            OPEN_META_ONLY_POLICY
+        }
     }
 }
 
@@ -137,10 +137,7 @@ fn selector_matches(selector: SkillSelector, spec: &BuiltinSkillSpec) -> bool {
     }
 }
 
-pub fn resolve_builtin_default_effect(
-    spec: &BuiltinSkillSpec,
-    mode_id: &str,
-) -> PolicyEffect {
+pub fn resolve_builtin_default_effect(spec: &BuiltinSkillSpec, mode_id: &str) -> PolicyEffect {
     let policy = policy_for_mode(mode_id);
     let mut current = policy.builtin_default;
 
@@ -157,7 +154,8 @@ pub fn resolve_builtin_default_effect(
 }
 
 pub fn resolve_builtin_default_enabled(dir_name: &str, mode_id: &str) -> Option<bool> {
-    builtin_skill_spec(dir_name).map(|spec| resolve_builtin_default_effect(spec, mode_id).is_enabled())
+    builtin_skill_spec(dir_name)
+        .map(|spec| resolve_builtin_default_effect(spec, mode_id).is_enabled())
 }
 
 #[cfg(test)]
@@ -170,15 +168,36 @@ mod tests {
         assert_eq!(SkillModeId::parse("debug"), SkillModeId::Debug);
         assert_eq!(SkillModeId::parse("something-else"), SkillModeId::Other);
 
-        assert_eq!(resolve_builtin_default_enabled("pdf", "agentic"), Some(false));
-        assert_eq!(resolve_builtin_default_enabled("agent-browser", "agentic"), Some(true));
+        assert_eq!(
+            resolve_builtin_default_enabled("pdf", "agentic"),
+            Some(false)
+        );
+        assert_eq!(
+            resolve_builtin_default_enabled("agent-browser", "agentic"),
+            Some(true)
+        );
         assert_eq!(resolve_builtin_default_enabled("pdf", "Cowork"), Some(true));
-        assert_eq!(resolve_builtin_default_enabled("agent-browser", "Cowork"), Some(false));
-        assert_eq!(resolve_builtin_default_enabled("gstack-review", "Team"), Some(true));
+        assert_eq!(
+            resolve_builtin_default_enabled("agent-browser", "Cowork"),
+            Some(false)
+        );
+        assert_eq!(
+            resolve_builtin_default_enabled("gstack-review", "Team"),
+            Some(true)
+        );
         assert_eq!(resolve_builtin_default_enabled("pdf", "Team"), Some(false));
-        assert_eq!(resolve_builtin_default_enabled("find-skills", "DeepResearch"), Some(true));
-        assert_eq!(resolve_builtin_default_enabled("pdf", "DeepResearch"), Some(false));
-        assert_eq!(resolve_builtin_default_enabled("agent-browser", "Claw"), Some(true));
+        assert_eq!(
+            resolve_builtin_default_enabled("find-skills", "DeepResearch"),
+            Some(true)
+        );
+        assert_eq!(
+            resolve_builtin_default_enabled("pdf", "DeepResearch"),
+            Some(false)
+        );
+        assert_eq!(
+            resolve_builtin_default_enabled("agent-browser", "Claw"),
+            Some(true)
+        );
         assert_eq!(resolve_builtin_default_enabled("pdf", "Claw"), Some(false));
         assert_eq!(resolve_builtin_default_enabled("pdf", "Other"), Some(false));
     }

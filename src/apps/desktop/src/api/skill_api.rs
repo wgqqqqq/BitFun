@@ -22,8 +22,8 @@ use bitfun_core::agentic::tools::implementations::skills::mode_overrides::{
     set_mode_skill_disabled_in_document, set_user_mode_skill_state,
 };
 use bitfun_core::agentic::tools::implementations::skills::{
-    resolver::resolve_skill_default_enabled_for_mode,
-    ModeSkillInfo, SkillData, SkillInfo, SkillLocation, SkillRegistry,
+    resolver::resolve_skill_default_enabled_for_mode, ModeSkillInfo, SkillData, SkillInfo,
+    SkillLocation, SkillRegistry,
 };
 use bitfun_core::agentic::workspace::RemoteWorkspaceFs;
 use bitfun_core::infrastructure::get_path_manager_arc;
@@ -208,7 +208,9 @@ async fn get_mode_skill_infos_for_workspace_input(
         // Mode-scoped built-in and user-level skills should still be available even
         // when no project workspace is open. In that case there are simply no
         // project-level overrides to apply.
-        Ok(registry.get_mode_skill_infos_for_workspace(None, mode_id).await)
+        Ok(registry
+            .get_mode_skill_infos_for_workspace(None, mode_id)
+            .await)
     }
 }
 

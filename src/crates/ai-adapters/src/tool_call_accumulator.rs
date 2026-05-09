@@ -1,6 +1,6 @@
 use log::error;
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolCallBoundary {
@@ -53,15 +53,6 @@ pub struct FinalizedToolCall {
     pub raw_arguments: String,
     pub arguments: Value,
     pub is_error: bool,
-}
-
-impl FinalizedToolCall {
-    pub fn arguments_as_object_map(&self) -> HashMap<String, Value> {
-        match &self.arguments {
-            Value::Object(map) => map.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-            _ => HashMap::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -533,7 +524,7 @@ mod tests {
     }
 
     #[test]
-    fn arguments_as_object_map_returns_hash_map_for_objects() {
+    fn finalized_arguments_preserve_object_fields() {
         let mut pending = PendingToolCall::default();
         pending.start_new("call_1".to_string(), Some("tool_a".to_string()));
         pending.append_arguments("{\"a\":1,\"b\":\"x\"}");
@@ -541,10 +532,9 @@ mod tests {
         let finalized = pending
             .finalize(ToolCallBoundary::EndOfAggregation)
             .expect("finalized tool");
-        let map = finalized.arguments_as_object_map();
 
-        assert_eq!(map.get("a"), Some(&json!(1)));
-        assert_eq!(map.get("b"), Some(&json!("x")));
+        assert_eq!(finalized.arguments["a"], json!(1));
+        assert_eq!(finalized.arguments["b"], json!("x"));
     }
 
     #[test]

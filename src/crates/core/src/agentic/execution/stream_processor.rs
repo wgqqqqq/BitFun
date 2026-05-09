@@ -262,8 +262,7 @@ impl StreamContext {
             tool_id,
             tool_name,
             arguments: finalized.arguments.clone(),
-            raw_arguments: finalized
-                .is_error
+            raw_arguments: (!finalized.raw_arguments.is_empty())
                 .then_some(finalized.raw_arguments.clone()),
             is_error: finalized.is_error,
         });
@@ -988,6 +987,10 @@ mod tests {
         assert_eq!(result.tool_calls[0].tool_id, "call_1");
         assert_eq!(result.tool_calls[0].tool_name, "tool_a");
         assert_eq!(result.tool_calls[0].arguments, json!({"a": 1}));
+        assert_eq!(
+            result.tool_calls[0].raw_arguments.as_deref(),
+            Some("{\"a\":1}")
+        );
         assert!(!result.tool_calls[0].is_error);
         assert_eq!(result.usage.as_ref().map(|u| u.total_token_count), Some(7));
     }
@@ -1143,6 +1146,10 @@ mod tests {
         assert_eq!(result.tool_calls[0].tool_id, "call_1");
         assert_eq!(result.tool_calls[0].tool_name, "tool_a");
         assert_eq!(result.tool_calls[0].arguments, json!({"city": "Beijing"}));
+        assert_eq!(
+            result.tool_calls[0].raw_arguments.as_deref(),
+            Some("{\"city\":\"Beijing\"}")
+        );
         assert!(!result.tool_calls[0].is_error);
     }
 

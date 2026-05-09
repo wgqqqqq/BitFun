@@ -746,7 +746,9 @@ impl SkillRegistry {
         workspace_root: Option<&Path>,
         mode_id: &str,
     ) -> Vec<ModeSkillInfo> {
-        let candidates = self.scan_skill_candidates_for_workspace(workspace_root).await;
+        let candidates = self
+            .scan_skill_candidates_for_workspace(workspace_root)
+            .await;
         let all_skills = sort_skills(annotate_shadowed_skills(candidates.clone()));
         let user_overrides = load_user_mode_skill_overrides(mode_id)
             .await
@@ -760,12 +762,8 @@ impl SkillRegistry {
         let disabled_project: HashSet<String> = dedupe_preserving_order(disabled_project)
             .into_iter()
             .collect();
-        let filtered = filter_candidates_for_mode(
-            candidates,
-            mode_id,
-            &user_overrides,
-            &disabled_project,
-        );
+        let filtered =
+            filter_candidates_for_mode(candidates, mode_id, &user_overrides, &disabled_project);
         let resolved = resolve_visible_skills(filtered);
 
         Self::build_mode_skill_infos(
@@ -796,12 +794,8 @@ impl SkillRegistry {
         let disabled_project: HashSet<String> = dedupe_preserving_order(disabled_project)
             .into_iter()
             .collect();
-        let filtered = filter_candidates_for_mode(
-            candidates,
-            mode_id,
-            &user_overrides,
-            &disabled_project,
-        );
+        let filtered =
+            filter_candidates_for_mode(candidates, mode_id, &user_overrides, &disabled_project);
         let resolved = resolve_visible_skills(filtered);
 
         Self::build_mode_skill_infos(

@@ -243,20 +243,11 @@ impl From<Message> for AIMessage {
                     Some(
                         tool_calls
                             .into_iter()
-                            .map(|tc| {
-                                // Convert serde_json::Value to HashMap
-                                let arguments = if let serde_json::Value::Object(map) = tc.arguments
-                                {
-                                    map.into_iter().collect()
-                                } else {
-                                    std::collections::HashMap::new()
-                                };
-
-                                AIToolCall {
-                                    id: tc.tool_id,
-                                    name: tc.tool_name,
-                                    arguments,
-                                }
+                            .map(|tc| AIToolCall {
+                                id: tc.tool_id,
+                                name: tc.tool_name,
+                                arguments: tc.arguments,
+                                raw_arguments: tc.raw_arguments,
                             })
                             .collect(),
                     )
@@ -525,9 +516,15 @@ impl Message {
 
                 for tool_call in tool_calls {
                     total += TokenCounter::estimate_tokens(&tool_call.tool_name);
-                    if let Ok(json_str) = serde_json::to_string(&tool_call.arguments) {
-                        total += TokenCounter::estimate_tokens(&json_str);
-                    }
+                    let serialized_arguments = tool_call
+                        .raw_arguments
+                        .clone()
+                        .filter(|raw| serde_json::from_str::<serde_json::Value>(raw).is_ok())
+                        .unwrap_or_else(|| {
+                            serde_json::to_string(&tool_call.arguments)
+                                .unwrap_or_else(|_| "{}".to_string())
+                        });
+                    total += TokenCounter::estimate_tokens(&serialized_arguments);
                     total += 10;
                 }
             }
@@ -634,7 +631,7 @@ pub struct ToolCall {
     pub tool_id: String,
     pub tool_name: String,
     pub arguments: serde_json::Value,
-    /// Original streamed argument text, preserved for diagnostics when parsing failed.
+    /// Original provider-emitted argument JSON, preserved for replay stability when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub raw_arguments: Option<String>,
     /// Record whether tool parameters are valid
@@ -662,17 +659,11 @@ pub struct ToolResult {
 
 impl From<ToolCall> for AIToolCall {
     fn from(tc: ToolCall) -> Self {
-        // Convert serde_json::Value to HashMap
-        let arguments = if let serde_json::Value::Object(map) = &tc.arguments {
-            map.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
-        } else {
-            std::collections::HashMap::new()
-        };
-
         Self {
             id: tc.tool_id.clone(),
             name: tc.tool_name.clone(),
-            arguments,
+            arguments: tc.arguments,
+            raw_arguments: tc.raw_arguments,
         }
     }
 }

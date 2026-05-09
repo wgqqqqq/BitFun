@@ -197,14 +197,20 @@ mod tests {
         assert_eq!(builtin_skill_group_key("xlsx"), Some("office"));
         assert_eq!(builtin_skill_group_key("find-skills"), Some("meta"));
         assert_eq!(builtin_skill_group_key("writing-skills"), Some("meta"));
-        assert_eq!(builtin_skill_group_key("agent-browser"), Some("computer-use"));
+        assert_eq!(
+            builtin_skill_group_key("agent-browser"),
+            Some("computer-use")
+        );
         assert_eq!(builtin_skill_group_key("gstack-review"), Some("team"));
         assert_eq!(builtin_skill_group("unknown-skill"), None);
     }
 
     #[test]
     fn catalog_covers_all_embedded_builtin_skills() {
-        let known: HashSet<&'static str> = BUILTIN_SKILL_SPECS.iter().map(|spec| spec.dir_name).collect();
+        let known: HashSet<&'static str> = BUILTIN_SKILL_SPECS
+            .iter()
+            .map(|spec| spec.dir_name)
+            .collect();
 
         for dir_name in builtin_skill_dir_names() {
             assert!(
