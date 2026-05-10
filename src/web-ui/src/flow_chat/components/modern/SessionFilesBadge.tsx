@@ -5,15 +5,16 @@
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
-  ClipboardCheck,
   FileEdit,
   FilePlus,
-  Loader2,
   SearchCheck,
   Sparkles,
   Trash2,
   ChevronDown,
   ChevronUp,
+  Zap,
+  GitCommitHorizontal,
+  GitPullRequest,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSnapshotState } from '../../../tools/snapshot_system/hooks/useSnapshotState';
@@ -41,6 +42,11 @@ import { useSessionReviewActivity } from '../../hooks/useSessionReviewActivity';
 import { useSessionStateMachine } from '../../hooks/useSessionStateMachine';
 import { SessionExecutionState } from '../../state-machine/types';
 import { isReviewActivityBlocking } from '../../utils/sessionReviewActivity';
+import {
+  aiExperienceConfigService,
+  DEFAULT_QUICK_ACTIONS,
+  type QuickAction,
+} from '@/infrastructure/config/services/AIExperienceConfigService';
 import './SessionFilesBadge.scss';
 
 const log = createLogger('SessionFilesBadge');
@@ -167,10 +173,13 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
   const isSessionProcessing =
     sessionMachine?.currentState === SessionExecutionState.PROCESSING ||
     sessionMachine?.currentState === SessionExecutionState.FINISHING;
-  const isReviewActionLocked =
-    loadingStats ||
+  const isReviewLaunchOrActivityBlocking =
     launchingReviewMode !== null ||
     isReviewActivityBlocking(reviewActivity);
+  /** Includes loadingStats: used for review launches and “review ready” affordances. */
+  const isReviewActionLocked =
+    loadingStats ||
+    isReviewLaunchOrActivityBlocking;
   const [latestTurnSnapshot, setLatestTurnSnapshot] = useState<LatestTurnSnapshot>(() =>
     getLatestTurnSnapshot(sessionId),
   );
@@ -184,6 +193,11 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
   const CACHE_TTL = 60000;
   const DIFF_STATS_MAX_CONCURRENCY = 3;
 
+  const [quickActions, setQuickActions] = useState<QuickAction[]>(() => {
+    const stored = aiExperienceConfigService.getSettings().quick_actions;
+    return (stored && stored.length > 0) ? stored : DEFAULT_QUICK_ACTIONS;
+  });
+
   const badgeRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const reviewMenuRef = useRef<HTMLDivElement>(null);
@@ -195,6 +209,14 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
       clearTimeout(reviewReadyGlintTimeoutRef.current);
       reviewReadyGlintTimeoutRef.current = null;
     }
+  }, []);
+
+  // Sync quick actions when settings change.
+  useEffect(() => {
+    return aiExperienceConfigService.addChangeListener((settings) => {
+      const actions = settings.quick_actions;
+      setQuickActions((actions && actions.length > 0) ? actions : DEFAULT_QUICK_ACTIONS);
+    });
   }, []);
 
   // Reset cached state when the session changes.
@@ -394,6 +416,12 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
     return () => clearTimeout(timeoutId);
   }, [files, loadFileStats]);
 
+  useEffect(() => {
+    if (fileStats.size === 0) {
+      setIsExpanded(false);
+    }
+  }, [fileStats.size]);
+
   // Compute totals.
   const totalStats = useMemo(() => {
     let totalAdditions = 0;
@@ -407,6 +435,34 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
     return { totalAdditions, totalDeletions };
   }, [fileStats]);
 
+  const fileChangeToggleHint = useMemo(() => {
+    if (fileStats.size === 0) return '';
+    const head = t('sessionFilesBadge.filesSummaryCount', {
+      count: fileStats.size,
+      defaultValue: '{{count}} files',
+    });
+    const deltas: string[] = [];
+    if (totalStats.totalAdditions > 0) deltas.push(`+${totalStats.totalAdditions}`);
+    if (totalStats.totalDeletions > 0) deltas.push(`-${totalStats.totalDeletions}`);
+    const cue = t('sessionFilesBadge.expandChangeListCue', { defaultValue: 'Expand list' });
+    return deltas.length > 0 ? `${head} · ${deltas.join(' ')} · ${cue}` : `${head} · ${cue}`;
+  }, [fileStats.size, totalStats.totalAdditions, totalStats.totalDeletions, t]);
+
+  const fileChangeToggleAriaCollapsed = useMemo(() => {
+    if (fileStats.size === 0) return '';
+    const head = t('sessionFilesBadge.filesSummaryCount', {
+      count: fileStats.size,
+      defaultValue: '{{count}} files',
+    });
+    const deltas: string[] = [];
+    if (totalStats.totalAdditions > 0) deltas.push(`+${totalStats.totalAdditions}`);
+    if (totalStats.totalDeletions > 0) deltas.push(`-${totalStats.totalDeletions}`);
+    const cue = t('sessionFilesBadge.expandChangeListAriaCue', {
+      defaultValue: 'Expand to show files',
+    });
+    return deltas.length > 0 ? `${head}, ${deltas.join(' ')}, ${cue}` : `${head}, ${cue}`;
+  }, [fileStats.size, totalStats.totalAdditions, totalStats.totalDeletions, t]);
+
   const reviewableFileCount = useMemo(() => {
     return Array.from(fileStats.keys()).filter(shouldReviewFile).length;
   }, [fileStats]);
@@ -415,6 +471,12 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
     reviewableFileCount > 0 &&
     !isReviewActionLocked &&
     !isSessionProcessing;
+
+  const areReviewMenuItemsDisabled =
+    loadingStats ||
+    reviewableFileCount === 0 ||
+    isSessionProcessing ||
+    isReviewLaunchOrActivityBlocking;
 
   useEffect(() => {
     if (shouldTriggerReviewReadyGlint({
@@ -671,6 +733,21 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
     }
   }, [confirmDeepReviewLaunch, fileStats, isReviewActionLocked, sessionId, t, currentWorkspace?.rootPath]);
 
+  const handleQuickActionClick = useCallback(async (action: QuickAction) => {
+    if (!sessionId || isSessionProcessing) return;
+    setIsReviewMenuOpen(false);
+    try {
+      const { FlowChatManager } = await import('../../services/FlowChatManager');
+      await FlowChatManager.getInstance().sendMessage(
+        action.prompt,
+        sessionId,
+        action.label,
+      );
+    } catch (error) {
+      log.error('Failed to trigger quick action', { actionId: action.id, error });
+    }
+  }, [sessionId, isSessionProcessing]);
+
   const getOperationIcon = (operationType: 'write' | 'edit' | 'delete') => {
     switch (operationType) {
       case 'write':
@@ -683,24 +760,19 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
   };
 
   const activeReviewMode = launchingReviewMode ?? (reviewActivity?.isBlocking ? reviewActivity.kind : null) ?? null;
-  const activeReviewLabel = activeReviewMode === 'deep_review'
-    ? t('sessionFilesBadge.reviewRunningDeep', {
-        defaultValue: 'Deep review in progress',
-      })
-    : t('sessionFilesBadge.reviewRunningStandard', {
-        defaultValue: 'Review in progress',
-      });
-  const reviewButtonLabel = activeReviewMode ? activeReviewLabel : t('sessionFilesBadge.reviewMenuLabel');
   const reviewButtonTitle = activeReviewMode
     ? t('sessionFilesBadge.reviewRunningHint', {
         defaultValue: 'Wait for the current review to finish or stop it from the review page.',
       })
-    : t('sessionFilesBadge.reviewMenuHint');
+    : t('sessionFilesBadge.actionsMenuHint', { defaultValue: 'Quick actions' });
 
-  // Hide when there is no session, no changes, or disabled.
-  if (!sessionId || fileStats.size === 0 || disabled) {
+  // Hide when there is no session or parent disabled. Actions menu (reviews + quick actions)
+  // renders first; file-change summary appears after we have stats.
+  if (!sessionId || disabled) {
     return null;
   }
+
+  const showFileStatsSummary = fileStats.size > 0;
 
   return (
     <>
@@ -708,15 +780,120 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
         ref={badgeRef}
         className={`session-files-badge ${isExpanded ? 'session-files-badge--expanded' : ''}`}
       >
+      <div
+        ref={reviewMenuRef}
+        className="session-files-badge__review-menu"
+      >
+        <button
+          className={[
+            'session-files-badge__review-btn',
+            showReviewReadyGlint && 'session-files-badge__review-btn--glint',
+            activeReviewMode && 'session-files-badge__review-btn--running',
+          ].filter(Boolean).join(' ')}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (isReviewLaunchOrActivityBlocking) return;
+            setIsReviewMenuOpen((open) => {
+              const next = !open;
+              if (next) setIsExpanded(false);
+              return next;
+            });
+          }}
+          disabled={isReviewLaunchOrActivityBlocking}
+          title={reviewButtonTitle}
+          type="button"
+          aria-label={reviewButtonTitle}
+          aria-haspopup="menu"
+          aria-expanded={isReviewMenuOpen && !isReviewLaunchOrActivityBlocking}
+          aria-busy={Boolean(activeReviewMode)}
+        >
+          <span className="session-files-badge__review-actions-label">
+            {activeReviewMode
+              ? t('sessionFilesBadge.actionsButtonRunning', { defaultValue: 'Busy…' })
+              : t('sessionFilesBadge.actionsButton', { defaultValue: 'Actions' })}
+          </span>
+          {!activeReviewMode ? (
+            <ChevronDown
+              size={12}
+              className={[
+                'session-files-badge__review-menu-chevron',
+                isReviewMenuOpen && !isReviewLaunchOrActivityBlocking && 'session-files-badge__review-menu-chevron--open',
+              ].filter(Boolean).join(' ')}
+              aria-hidden
+            />
+          ) : null}
+        </button>
+
+        {isReviewMenuOpen && !isReviewLaunchOrActivityBlocking && (
+          <div className="session-files-badge__review-menu-popover" role="menu">
+            <button
+              className="session-files-badge__review-menu-item"
+              onClick={handleReviewClick}
+              type="button"
+              role="menuitem"
+              disabled={areReviewMenuItemsDisabled}
+            >
+              <SearchCheck size={12} className="session-files-badge__review-icon session-files-badge__review-icon--standard" />
+              <span>{t('sessionFilesBadge.reviewModeStandard')}</span>
+            </button>
+            <button
+              className="session-files-badge__review-menu-item session-files-badge__review-menu-item--deep"
+              onClick={handleDeepReviewClick}
+              type="button"
+              role="menuitem"
+              disabled={areReviewMenuItemsDisabled}
+            >
+              <Sparkles size={12} className="session-files-badge__review-icon" />
+              <span>{t('sessionFilesBadge.reviewModeDeep')}</span>
+            </button>
+
+            {quickActions.filter(a => a.enabled).length > 0 && (
+              <div className="session-files-badge__review-menu-separator" role="separator" />
+            )}
+
+            {quickActions.filter(a => a.enabled).map(action => (
+              <button
+                key={action.id}
+                className="session-files-badge__review-menu-item"
+                onClick={() => { void handleQuickActionClick(action); }}
+                type="button"
+                role="menuitem"
+                disabled={isSessionProcessing}
+              >
+                {action.id === 'commit' ? (
+                  <GitCommitHorizontal size={12} className="session-files-badge__review-icon" />
+                ) : action.id === 'create_pr' ? (
+                  <GitPullRequest size={12} className="session-files-badge__review-icon" />
+                ) : (
+                  <Zap size={12} className="session-files-badge__review-icon" />
+                )}
+                <span>{action.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showFileStatsSummary ? (
       <button
         className="session-files-badge__button"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => {
+          setIsExpanded((prev) => {
+            const next = !prev;
+            if (next) setIsReviewMenuOpen(false);
+            return next;
+          });
+        }}
         disabled={loadingStats}
         type="button"
+        title={fileChangeToggleHint}
+        aria-label={
+          isExpanded
+            ? t('sessionFilesBadge.collapseFileDiffList', { defaultValue: 'Collapse file change list' })
+            : fileChangeToggleAriaCollapsed
+        }
+        aria-expanded={isExpanded}
       >
-        <span className="session-files-badge__count">
-          {fileStats.size} {t('sessionFilesBadge.files')}
-        </span>
         {totalStats.totalAdditions > 0 && (
           <span className="session-files-badge__stats session-files-badge__stats--add">
             +{totalStats.totalAdditions}
@@ -733,71 +910,35 @@ export const SessionFilesBadge: React.FC<SessionFilesBadgeProps> = ({
           <ChevronDown size={12} className="session-files-badge__arrow" />
         )}
       </button>
+      ) : null}
 
-      <div
-        ref={reviewMenuRef}
-        className="session-files-badge__review-menu"
-      >
-        <button
-          className={[
-            'session-files-badge__review-btn',
-            showReviewReadyGlint && 'session-files-badge__review-btn--glint',
-            activeReviewMode && 'session-files-badge__review-btn--running',
-          ].filter(Boolean).join(' ')}
-          onClick={(event) => {
-            event.stopPropagation();
-            if (isReviewActionLocked) {
-              return;
-            }
-            setIsReviewMenuOpen(open => !open);
-          }}
-          disabled={isReviewActionLocked}
-          title={reviewButtonTitle}
-          type="button"
-          aria-haspopup="menu"
-          aria-expanded={isReviewMenuOpen && !isReviewActionLocked}
-          aria-busy={Boolean(activeReviewMode)}
-        >
-          {activeReviewMode ? (
-            <Loader2 size={12} className="session-files-badge__review-running-icon" />
-          ) : (
-            <ClipboardCheck size={12} className="session-files-badge__review-main-icon" />
-          )}
-          <span className="session-files-badge__review-text">{reviewButtonLabel}</span>
-          {!activeReviewMode ? (
-            <ChevronDown size={12} className="session-files-badge__review-menu-chevron" />
-          ) : null}
-        </button>
-
-        {isReviewMenuOpen && !isReviewActionLocked && (
-          <div className="session-files-badge__review-menu-popover" role="menu">
-            <button
-              className="session-files-badge__review-menu-item"
-              onClick={handleReviewClick}
-              type="button"
-              role="menuitem"
-            >
-              <SearchCheck size={12} className="session-files-badge__review-icon session-files-badge__review-icon--standard" />
-              <span>{t('sessionFilesBadge.reviewModeStandard')}</span>
-            </button>
-            <button
-              className="session-files-badge__review-menu-item session-files-badge__review-menu-item--deep"
-              onClick={handleDeepReviewClick}
-              type="button"
-              role="menuitem"
-            >
-              <Sparkles size={12} className="session-files-badge__review-icon" />
-              <span>{t('sessionFilesBadge.reviewModeDeep')}</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      {isExpanded && (
+      {showFileStatsSummary && isExpanded && (
         <div
           ref={popoverRef}
           className="session-files-badge__popover"
         >
+          <div className="session-files-badge__popover-summary">
+            <span className="session-files-badge__popover-summary-count">
+              {t('sessionFilesBadge.filesSummaryCount', {
+                count: fileStats.size,
+                defaultValue: '{{count}} files',
+              })}
+            </span>
+            {(totalStats.totalAdditions > 0 || totalStats.totalDeletions > 0) && (
+              <span className="session-files-badge__popover-summary-stats">
+                {totalStats.totalAdditions > 0 && (
+                  <span className="session-files-badge__stats session-files-badge__stats--add">
+                    +{totalStats.totalAdditions}
+                  </span>
+                )}
+                {totalStats.totalDeletions > 0 && (
+                  <span className="session-files-badge__stats session-files-badge__stats--del">
+                    -{totalStats.totalDeletions}
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
           <div className="session-files-badge__list">
             {Array.from(fileStats.values()).map((stat) => (
               <div

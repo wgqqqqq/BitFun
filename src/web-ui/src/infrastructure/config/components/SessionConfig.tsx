@@ -77,6 +77,7 @@ interface SessionSettingsPanelsProps {
   variant: SessionSettingsPanelVariant;
 }
 
+
 const SessionSettingsPanels: React.FC<SessionSettingsPanelsProps> = ({ variant }) => {
   const { t } = useTranslation('settings/session-config');
   const { t: tTools } = useTranslation('settings/agentic-tools');

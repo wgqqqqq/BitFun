@@ -7,7 +7,7 @@
 
 .bitfun-chat-input-drop-zone {
   position: absolute;
-  bottom: 16px;
+  bottom: 4px;
   left: 50%;
   transform: translateX(-50%);
   width: 100%;
@@ -17,6 +17,11 @@
   flex-direction: column;
   padding: 0 $size-gap-2;
   pointer-events: auto !important;
+
+  /* Reserve the band between the input card bottom edge and workspace strip (larger = more gap above strip text). */
+  &:has(.bitfun-chat-input-workspace-strip) {
+    padding-bottom: 32px;
+  }
   
   &.bitfun-context-drop-zone--can-accept {
     .bitfun-chat-input__box {
@@ -402,6 +407,11 @@
   }
 
   gap: $size-gap-3;
+
+  /* Queue sits directly above the input card; keep this pair tighter than other stacked blocks. */
+  > .bitfun-pending-queue-panel + .bitfun-chat-input__container {
+    margin-top: -6px;
+  }
 
   &__recommendations {
     margin-bottom: 8px;
@@ -1447,7 +1457,14 @@
     gap: $size-gap-1;
     animation: bitfun-stacked-reveal 0.28s cubic-bezier(0.4, 0, 0.2, 1) 0.17s both;
   }
-  
+
+  &__model-usage-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
   &__actions-right {
     display: flex;
     align-items: center;

@@ -328,6 +328,9 @@
     "openWorkspaceFolderFailed": "打开工作区文件夹失败：{{error}}",
     "spaceToActivate": "按<space>空格键</space>快速键入"
   },
+  "workspaceStrip": {
+    "branchTooltipUnavailable": "非 Git 仓库或当前无分支"
+  },
   "context": {
     "title": "上下文",
     "add": "添加上下文",
@@ -695,10 +698,17 @@
   },
   "sessionFilesBadge": {
     "files": "文件",
+    "filesSummaryCount": "{{count}} 个文件",
+    "expandChangeListCue": "展开列表",
+    "expandChangeListAriaCue": "展开查看文件列表",
+    "collapseFileDiffList": "收起文件变更列表",
     "reviewLabel": "审核",
     "reviewAll": "全部审核",
     "reviewMenuLabel": "审核",
     "reviewMenuHint": "选择审核深度",
+    "actionsMenuHint": "快捷动作",
+    "actionsButton": "动作",
+    "actionsButtonRunning": "进行中…",
     "reviewModeStandard": "普通审核",
     "reviewModeDeep": "深度审核",
     "reviewRunningStandard": "审核中",

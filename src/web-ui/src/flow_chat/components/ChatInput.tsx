@@ -4,6 +4,7 @@
  */
 
 import React, { useRef, useCallback, useEffect, useReducer, useState, useMemo } from 'react';
+import path from 'path-browserify';
 import { Trans, useTranslation } from 'react-i18next';
 import { ArrowUp, Image, Maximize2, Minimize2, RotateCcw, Plus, X, Sparkles, Loader2, ChevronRight, Files, MessageSquarePlus } from 'lucide-react';
 import { ContextDropZone, useContextStore } from '../../shared/context-system';
@@ -57,6 +58,7 @@ import { aiExperienceConfigService } from '@/infrastructure/config/services/AIEx
 import MCPAPI, { type MCPPrompt, type MCPPromptMessage, type MCPServerInfo } from '@/infrastructure/api/service-api/MCPAPI';
 import { deriveChatInputPetMood } from '../utils/chatInputPetMood';
 import { ChatInputPixelPet } from './ChatInputPixelPet';
+import { ChatInputWorkspaceStrip } from './ChatInputWorkspaceStrip';
 import { expandWidgetPromptReferenceTokens } from '@/tools/generative-widget/widgetPromptReference';
 import { useDeepReviewConsent } from './DeepReviewConsentDialog';
 import { useAgentCompanionActivity } from '../hooks/useAgentCompanionActivity';
@@ -311,7 +313,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     agentCompanionInInput && !inputState.isActive && !inputState.value.trim();
   const { transition, setQueuedInput } = useSessionStateMachineActions(effectiveTargetSessionId);
 
-  const { workspace, workspacePath } = useCurrentWorkspace();
+  const { workspace, workspacePath, workspaceName } = useCurrentWorkspace();
+
+  const chatStripRepositoryPath = useMemo(() => {
+    const fromContext = (workspacePath || '').trim();
+    const fromSession = (effectiveTargetSession?.workspacePath || '').trim();
+    return fromContext || fromSession;
+  }, [workspacePath, effectiveTargetSession?.workspacePath]);
+
+  const chatStripWorkspaceLabel = useMemo(() => {
+    const name = (workspaceName || '').trim();
+    if (name) return name;
+    if (chatStripRepositoryPath) return path.basename(chatStripRepositoryPath);
+    return '';
+  }, [workspaceName, chatStripRepositoryPath]);
   
   const [tokenUsage, setTokenUsage] = React.useState({ current: 0, max: 128128 });
   const isAssistantWorkspace = workspace?.workspaceKind === WorkspaceKind.Assistant;
@@ -1353,25 +1368,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     t,
   ]);
 
-  const submitUsageFromInput = useCallback(async () => {
+  const runEffectiveSessionUsageReport = useCallback(async () => {
     if (!effectiveTargetSessionId || !effectiveTargetSession) {
       notificationService.error(
         t('chatInput.usageNoSession', { defaultValue: 'No active session for /usage' })
       );
       return;
     }
-
-    const message = inputState.value.trim();
-    if (!/^\/usage\s*$/i.test(message)) {
-      notificationService.warning(
-        t('chatInput.usageCommandUsage', { defaultValue: 'Use /usage without extra arguments.' })
-      );
-      return;
-    }
-
-    dispatchInput({ type: 'CLEAR_VALUE' });
-    setQueuedInput(null);
-    setSlashCommandState({ isActive: false, kind: 'modes', query: '', selectedIndex: 0 });
 
     try {
       const result = await runUsageReportCommand({
@@ -1396,17 +1399,55 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         error,
         sessionId: effectiveTargetSessionId,
       });
-      dispatchInput({ type: 'ACTIVATE' });
-      dispatchInput({ type: 'SET_VALUE', payload: message });
+      throw error;
     }
   }, [
     derivedState?.isProcessing,
     effectiveTargetSession,
     effectiveTargetSessionId,
+    t,
+  ]);
+
+  const submitUsageFromInput = useCallback(async () => {
+    if (!effectiveTargetSessionId || !effectiveTargetSession) {
+      notificationService.error(
+        t('chatInput.usageNoSession', { defaultValue: 'No active session for /usage' })
+      );
+      return;
+    }
+
+    const message = inputState.value.trim();
+    if (!/^\/usage\s*$/i.test(message)) {
+      notificationService.warning(
+        t('chatInput.usageCommandUsage', { defaultValue: 'Use /usage without extra arguments.' })
+      );
+      return;
+    }
+
+    dispatchInput({ type: 'CLEAR_VALUE' });
+    setQueuedInput(null);
+    setSlashCommandState({ isActive: false, kind: 'modes', query: '', selectedIndex: 0 });
+
+    try {
+      await runEffectiveSessionUsageReport();
+    } catch {
+      dispatchInput({ type: 'ACTIVATE' });
+      dispatchInput({ type: 'SET_VALUE', payload: message });
+    }
+  }, [
+    effectiveTargetSession,
+    effectiveTargetSessionId,
     inputState.value,
+    runEffectiveSessionUsageReport,
     setQueuedInput,
     t,
   ]);
+
+  const handleToolbarUsageReport = useCallback(() => {
+    void runEffectiveSessionUsageReport().catch(() => {
+      /* errors surfaced by runUsageReportCommand */
+    });
+  }, [runEffectiveSessionUsageReport]);
 
   const submitInitFromInput = useCallback(async () => {
     if (!effectiveTargetSessionId || !effectiveTargetSession) {
@@ -2998,12 +3039,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   )}
                 </div>
 
-                <ModelSelector
-                  currentMode={modeState.current}
-                  sessionId={effectiveTargetSessionId || undefined}
-                  currentTokens={tokenUsage.current}
-                  maxTokens={tokenUsage.max}
-                />
+                <div className="bitfun-chat-input__model-usage-group">
+                  <ModelSelector
+                    currentMode={modeState.current}
+                    sessionId={effectiveTargetSessionId || undefined}
+                    currentTokens={tokenUsage.current}
+                    maxTokens={tokenUsage.max}
+                  />
+                </div>
               </div>
               <div className="bitfun-chat-input__actions-right">
                 {isCollapsedProcessing && !petReplacesStopChrome && (
@@ -3022,6 +3065,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           </div>
         </div>
       </div>
+      {((chatStripRepositoryPath || chatStripWorkspaceLabel) ||
+        (effectiveTargetSessionId && effectiveTargetSession)) && (
+        <ChatInputWorkspaceStrip
+          repositoryPath={chatStripRepositoryPath}
+          workspaceLabel={chatStripWorkspaceLabel}
+          usageReport={
+            effectiveTargetSessionId && effectiveTargetSession
+              ? { visible: true, onOpen: handleToolbarUsageReport }
+              : undefined
+          }
+        />
+      )}
     </ContextDropZone>
     </>
   );

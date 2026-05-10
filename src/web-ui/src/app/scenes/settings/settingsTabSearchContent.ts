@@ -153,5 +153,12 @@ export const SETTINGS_TAB_SEARCH_CONTENT: Record<ConfigTab, readonly SettingsTab
     { ns: 'settings', key: 'keyboard.shortcuts.tab.switchMergedHint' },
   ],
 
+  'quick-actions': [
+    { ns: 'settings/quick-actions', key: 'page.title' },
+    { ns: 'settings/quick-actions', key: 'page.subtitle' },
+    { ns: 'settings/quick-actions', key: 'sections.builtin.title' },
+    { ns: 'settings/quick-actions', key: 'sections.custom.title' },
+  ],
+
   // lsp: [ ... ], // nav entry temporarily hidden; omit from search index
 };

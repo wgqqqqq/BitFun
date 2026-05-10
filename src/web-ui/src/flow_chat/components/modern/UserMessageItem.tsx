@@ -5,7 +5,7 @@
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Copy, Check, RotateCcw, Loader2, ArrowDownToLine, X } from 'lucide-react';
+import { Copy, Check, RotateCcw, Loader2, ArrowDownToLine, X, CircleUser } from 'lucide-react';
 import type { DialogTurn, FlowUserSteeringItem } from '../../types/flow-chat';
 import { useFlowChatContext } from './FlowChatContext';
 import { useActiveSession } from '../../store/modernFlowChatStore';
@@ -245,54 +245,90 @@ export const UserMessageItem = React.memo<UserMessageItemProps>(
           </div>
         )}
         <div className="user-message-item__main">
-          <div 
-            ref={contentRef}
-            className="user-message-item__content"
-            onClick={handleToggleExpand}
-            title={(hasOverflow || expanded) ? (expanded ? t('message.clickToCollapse') : t('message.clickToExpand')) : undefined}
-            style={{
-              cursor: (hasOverflow || expanded) ? 'pointer' : 'text',
-            }}
-          >
-            {displayText}
-          </div>
-          {steeringTag && (
-            <div className={`user-message-item__steering-tag ${steeringTag.className}`}>
-              {steeringTag.label}
-            </div>
+          {isFailed && (
+            <span className="user-message-item__failed-avatar" aria-hidden>
+              <CircleUser size={18} strokeWidth={1.75} />
+            </span>
           )}
-          <div className="user-message-item__actions">
-            <button
-              className={`user-message-item__copy-btn ${copied ? 'copied' : ''}`}
-              onClick={handleCopy}
-              title={copied ? t('message.copyFailed') : t('message.copy')}
-            >
-              {copied ? <Check size={14} /> : <Copy size={14} />}
-            </button>
+          <div
+            className={
+              isFailed
+                ? 'user-message-item__failed-inline-cluster'
+                : 'user-message-item__main-contents-bridge'
+            }
+          >
             {isFailed ? (
-              <Tooltip content={t('message.fillToInput')}>
-                <button
-                  className="user-message-item__copy-btn"
-                  onClick={handleFillToInput}
+              <div className="user-message-item__failed-body">
+                <div 
+                  ref={contentRef}
+                  className="user-message-item__content"
+                  onClick={handleToggleExpand}
+                  title={(hasOverflow || expanded) ? (expanded ? t('message.clickToCollapse') : t('message.clickToExpand')) : undefined}
+                  style={{
+                    cursor: (hasOverflow || expanded) ? 'pointer' : 'text',
+                  }}
                 >
-                  <ArrowDownToLine size={14} />
-                </button>
-              </Tooltip>
-            ) : allowUserMessageRollback && !steeringStatus ? (
-              <Tooltip content={canRollback ? t('message.rollbackTo', { index: turnIndex + 1 }) : t('message.cannotRollback')}>
-                <button
-                  className="user-message-item__rollback-btn"
-                  onClick={handleRollback}
-                  disabled={!canRollback}
+                  {displayText}
+                </div>
+                {steeringTag && (
+                  <div className={`user-message-item__steering-tag ${steeringTag.className}`}>
+                    {steeringTag.label}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <div 
+                  ref={contentRef}
+                  className="user-message-item__content"
+                  onClick={handleToggleExpand}
+                  title={(hasOverflow || expanded) ? (expanded ? t('message.clickToCollapse') : t('message.clickToExpand')) : undefined}
+                  style={{
+                    cursor: (hasOverflow || expanded) ? 'pointer' : 'text',
+                  }}
                 >
-                  {isRollingBack ? (
-                    <Loader2 size={14} className="user-message-item__rollback-spinner" />
-                  ) : (
-                    <RotateCcw size={14} />
-                  )}
-                </button>
-              </Tooltip>
-            ) : null}
+                  {displayText}
+                </div>
+                {steeringTag && (
+                  <div className={`user-message-item__steering-tag ${steeringTag.className}`}>
+                    {steeringTag.label}
+                  </div>
+                )}
+              </>
+            )}
+            <div className="user-message-item__actions">
+              <button
+                className={`user-message-item__copy-btn ${copied ? 'copied' : ''}`}
+                onClick={handleCopy}
+                title={copied ? t('message.copyFailed') : t('message.copy')}
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+              </button>
+              {isFailed ? (
+                <Tooltip content={t('message.fillToInput')}>
+                  <button
+                    className="user-message-item__copy-btn"
+                    onClick={handleFillToInput}
+                  >
+                    <ArrowDownToLine size={14} />
+                  </button>
+                </Tooltip>
+              ) : allowUserMessageRollback && !steeringStatus ? (
+                <Tooltip content={canRollback ? t('message.rollbackTo', { index: turnIndex + 1 }) : t('message.cannotRollback')}>
+                  <button
+                    className="user-message-item__rollback-btn"
+                    onClick={handleRollback}
+                    disabled={!canRollback}
+                  >
+                    {isRollingBack ? (
+                      <Loader2 size={14} className="user-message-item__rollback-spinner" />
+                    ) : (
+                      <RotateCcw size={14} />
+                    )}
+                  </button>
+                </Tooltip>
+              ) : null}
+            </div>
           </div>
         </div>
 

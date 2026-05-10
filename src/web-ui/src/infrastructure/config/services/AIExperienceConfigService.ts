@@ -5,6 +5,14 @@ import { createLogger } from '@/shared/utils/logger';
 
 const log = createLogger('AIExperienceConfig');
 
+/** A quick action item shown in the post-coding actions menu. */
+export interface QuickAction {
+  id: string;
+  label: string;
+  prompt: string;
+  enabled: boolean;
+}
+
 export interface AIExperienceSettings {
   enable_session_title_generation: boolean;
   enable_visual_mode: boolean;
@@ -16,6 +24,8 @@ export interface AIExperienceSettings {
   agent_companion_pet?: AgentCompanionPetSelection | null;
   /** Flashgrep-backed accelerated workspace search for local workspaces. */
   enable_workspace_search: boolean;
+  /** User-defined quick actions shown in the post-coding actions menu. */
+  quick_actions?: QuickAction[];
 }
 
 export type AgentCompanionDisplayMode = 'input' | 'desktop';
@@ -32,12 +42,28 @@ export interface AgentCompanionPetSelection {
 
 const CONFIG_PATH = 'app.ai_experience';
 
+export const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
+  {
+    id: 'commit',
+    label: 'Commit',
+    prompt: 'Commit all current code changes',
+    enabled: true,
+  },
+  {
+    id: 'create_pr',
+    label: 'Create PR',
+    prompt: 'Create a Pull Request for the current branch',
+    enabled: true,
+  },
+];
+
 const defaultSettings: AIExperienceSettings = {
   enable_session_title_generation: true,
   enable_visual_mode: false,
   enable_agent_companion: true,
   agent_companion_display_mode: 'desktop',
   enable_workspace_search: false,
+  quick_actions: DEFAULT_QUICK_ACTIONS,
 };
 
  
@@ -70,10 +96,15 @@ export class AIExperienceConfigService {
   private async loadSettings(): Promise<void> {
     try {
       const settings = await configManager.getConfig<AIExperienceSettings>(CONFIG_PATH);
-      this.cachedSettings = { ...defaultSettings, ...settings };
+      const merged = { ...defaultSettings, ...settings };
+      // Seed quick_actions with defaults when the stored value is absent.
+      if (!merged.quick_actions || merged.quick_actions.length === 0) {
+        merged.quick_actions = DEFAULT_QUICK_ACTIONS;
+      }
+      this.cachedSettings = merged;
     } catch (error) {
       log.warn('Failed to load config, using defaults', error);
-      this.cachedSettings = defaultSettings;
+      this.cachedSettings = { ...defaultSettings };
     }
   }
 

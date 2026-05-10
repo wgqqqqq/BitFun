@@ -11,6 +11,7 @@ export type ConfigTab =
   | 'models'
   | 'session-personalization'
   | 'session-permissions'
+  | 'quick-actions'
   | 'review'
   | 'ai-context'
   | 'mcp-tools'
@@ -152,6 +153,22 @@ export const SETTINGS_CATEGORIES: ConfigCategoryDef[] = [
           'flashgrep',
           'index',
           '\u6743\u9650',
+        ],
+      },
+      {
+        id: 'quick-actions',
+        labelKey: 'configCenter.tabs.quickActions',
+        descriptionKey: 'configCenter.tabDescriptions.quickActions',
+        keywords: [
+          'quick action',
+          'quick actions',
+          'commit',
+          'pr',
+          'pull request',
+          'post-coding',
+          'shortcut',
+          '快捷动作',
+          '提交',
         ],
       },
       {

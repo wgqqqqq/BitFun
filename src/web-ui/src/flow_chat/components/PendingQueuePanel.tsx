@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Pencil,
-  Send,
+  ArrowUp,
   Trash2,
   Check,
   X as XIcon,
@@ -193,7 +193,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
       }}
     >
       <div className="bitfun-pending-queue-panel__header">
-        <Inbox size={12} className="bitfun-pending-queue-panel__header-icon" />
+        <Inbox size={10} className="bitfun-pending-queue-panel__header-icon" />
         <span className="bitfun-pending-queue-panel__title">
           {t('pendingQueue.title', { count: visibleItems.length })}
           <span className="bitfun-pending-queue-panel__hint">
@@ -203,7 +203,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
         </span>
       </div>
       <ul className="bitfun-pending-queue-panel__list">
-        {visibleItems.map((item, index) => {
+        {visibleItems.map(item => {
           const isEditing = editingId === item.id;
           const isSendingNow = item.status === 'sending_now';
           const isSending = item.status === 'sending' || isSendingNow;
@@ -219,7 +219,6 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
             .join(' ');
           return (
             <li key={item.id} className={itemClass}>
-              <span className="bitfun-pending-queue-panel__index">{index + 1}</span>
               <div className="bitfun-pending-queue-panel__content">
                 {isEditing ? (
                   <>
@@ -299,7 +298,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                         onClick={() => handleEditSave(item)}
                         aria-label={t('pendingQueue.actions.saveEdit')}
                       >
-                        <Check size={14} />
+                        <Check size={12} strokeWidth={2.25} />
                       </IconButton>
                     </Tooltip>
                     <Tooltip content={t('pendingQueue.actions.cancelEdit')}>
@@ -309,7 +308,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                         onClick={handleEditCancel}
                         aria-label={t('pendingQueue.actions.cancelEdit')}
                       >
-                        <XIcon size={14} />
+                        <XIcon size={12} strokeWidth={2.25} />
                       </IconButton>
                     </Tooltip>
                   </>
@@ -323,7 +322,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                         onClick={() => handleEditStart(item)}
                         aria-label={t('pendingQueue.actions.edit')}
                       >
-                        <Pencil size={14} />
+                        <Pencil size={12} strokeWidth={2.25} />
                       </IconButton>
                     </Tooltip>
                     <Tooltip content={t('pendingQueue.tooltip.sendNow')}>
@@ -337,9 +336,9 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                         aria-label={t('pendingQueue.actions.sendNow')}
                       >
                         {isSendingNow ? (
-                          <Loader2 size={14} className="bitfun-pending-queue-panel__spin" />
+                          <Loader2 size={12} strokeWidth={2.5} className="bitfun-pending-queue-panel__spin" />
                         ) : (
-                          <Send size={14} />
+                          <ArrowUp size={12} strokeWidth={2.5} />
                         )}
                       </IconButton>
                     </Tooltip>
@@ -351,7 +350,7 @@ export function PendingQueuePanel({ sessionId, className }: PendingQueuePanelPro
                         onClick={() => handleDelete(item)}
                         aria-label={t('pendingQueue.actions.delete')}
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={12} strokeWidth={2.25} />
                       </IconButton>
                     </Tooltip>
                   </>

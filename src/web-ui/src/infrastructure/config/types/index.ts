@@ -81,6 +81,8 @@ export interface AIExperienceConfig {
 
   /** Whether to enable flashgrep-backed accelerated workspace search for local workspaces. */
   enable_workspace_search: boolean;
+  /** User-defined quick actions shown in the post-coding actions menu. */
+  quick_actions?: Array<{ id: string; label: string; prompt: string; enabled: boolean }>;
 }
 
 export type ModelCapability =

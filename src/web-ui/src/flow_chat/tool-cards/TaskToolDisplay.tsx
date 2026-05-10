@@ -255,13 +255,6 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
     return <Split size={16} />;
   };
 
-  const renderStatusIcon = () => {
-    if (isRunning) {
-      return <CubeLoading size="small" />;
-    }
-    return null;
-  };
-
   const renderHeader = () => (
     <div className="task-header-wrapper">
       <ToolCardIconSlot
@@ -312,8 +305,12 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
               title={t('toolCards.taskTool.openInPanel')}
             />
             <div className="task-header-rail__visual" aria-hidden>
-              <ChevronRight size={16} strokeWidth={2} absoluteStrokeWidth />
-              <ToolCardStatusIcon icon={renderStatusIcon()} className="task-status-icon--rail" />
+              <ChevronRight size={16} strokeWidth={2} absoluteStrokeWidth />{isRunning ? (
+                <ToolCardStatusIcon
+                  icon={<CubeLoading size="small" />}
+                  className="task-status-icon--rail"
+                />
+              ) : null}
             </div>
           </div>
         </div>

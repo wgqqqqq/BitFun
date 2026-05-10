@@ -20,9 +20,9 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin: 8px 0 6px;
-  padding: 8px 10px 10px;
+  gap: 4px;
+  margin: 4px 0 2px;
+  padding: 6px 8px 8px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--color-accent-400) 5%, var(--color-bg-scene));
   border: 1px solid color-mix(in srgb, var(--color-accent-400) 20%, transparent);
@@ -45,8 +45,8 @@
   &__header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 0 4px 2px;
+    gap: 5px;
+    padding: 0 1px 1px;
   }
 
   &__header-icon {
@@ -56,15 +56,17 @@
 
   &__title {
     flex: 1 1 auto;
-    font-size: var(--flowchat-font-size-xs, 11px);
+    font-size: 10px;
+    line-height: 1.25;
     font-weight: 600;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
     text-transform: uppercase;
     color: var(--color-text-secondary);
   }
 
   &__hint {
-    font-size: var(--flowchat-font-size-xxs, 10px);
+    font-size: 9px;
+    line-height: 1.25;
     color: var(--color-text-muted);
     font-weight: 400;
     text-transform: none;
@@ -74,7 +76,7 @@
   &__list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -82,24 +84,22 @@
 
   &__item {
     display: flex;
+    /* Match first text line, not the whole content stack (preview + status). */
     align-items: flex-start;
     gap: 8px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: var(--color-bg-scene);
-    border: 1px solid color-mix(in srgb, var(--color-text-muted) 14%, transparent);
-    transition:
-      background 140ms ease,
-      border-color 140ms ease,
-      box-shadow 140ms ease,
-      transform 140ms ease;
+    padding: 4px 2px;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    transition: opacity 140ms ease;
     animation: bitfun-pending-queue-fade-in 160ms ease-out;
     position: relative;
 
     &:hover {
-      background: color-mix(in srgb, var(--color-accent-400) 4%, var(--color-bg-scene));
-      border-color: color-mix(in srgb, var(--color-accent-400) 28%, transparent);
-      box-shadow: 0 1px 6px color-mix(in srgb, var(--color-accent-400) 10%, transparent);
+      background: transparent;
+      border: none;
+      box-shadow: none;
 
       .bitfun-pending-queue-panel__actions {
         opacity: 1;
@@ -107,8 +107,9 @@
     }
 
     &--editing {
-      background: color-mix(in srgb, var(--color-accent-400) 6%, var(--color-bg-scene));
-      border-color: color-mix(in srgb, var(--color-accent-400) 36%, transparent);
+      align-items: center;
+      background: transparent;
+      border: none;
       box-shadow: none;
 
       .bitfun-pending-queue-panel__actions {
@@ -122,29 +123,10 @@
     }
 
     &--failed {
-      background: color-mix(in srgb, var(--color-error, #ef4444) 6%, var(--color-bg-scene));
-      border-color: color-mix(in srgb, var(--color-error, #ef4444) 32%, transparent);
-
-      .bitfun-pending-queue-panel__index {
-        background: color-mix(in srgb, var(--color-error, #ef4444) 18%, transparent);
-        color: var(--color-error, #ef4444);
-      }
+      background: transparent;
+      border: none;
+      box-shadow: none;
     }
-  }
-
-  &__index {
-    flex: 0 0 auto;
-    min-width: 18px;
-    height: 18px;
-    line-height: 18px;
-    text-align: center;
-    border-radius: 9px;
-    font-size: var(--flowchat-font-size-xxs, 10px);
-    font-weight: 700;
-    background: color-mix(in srgb, var(--color-accent-400) 18%, transparent);
-    color: var(--color-accent-400);
-    margin-top: 2px;
-    user-select: none;
   }
 
   &__content {
@@ -224,18 +206,30 @@
 
   &__actions {
     display: flex;
-    gap: 2px;
+    gap: 1px;
     flex: 0 0 auto;
     align-items: center;
-    margin-top: -2px;
+    margin-top: 0;
     opacity: 0.55;
     transition: opacity 140ms ease;
   }
 
+  /* Compact targets: default IconButton --small is 28px and dominates row height. */
+  .bitfun-pending-queue-panel__btn.icon-btn {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    border-radius: 4px;
+
+    svg {
+      width: 12px;
+      height: 12px;
+    }
+  }
+
   &__btn {
-    --icon-button-size: 26px;
     color: var(--color-text-secondary);
-    border-radius: 6px;
     transition:
       background 140ms ease,
       color 140ms ease,

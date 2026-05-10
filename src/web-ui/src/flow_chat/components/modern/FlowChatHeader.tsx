@@ -5,12 +5,10 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { ChevronDown, ChevronUp, List, GitBranch, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, List, Search, X } from 'lucide-react';
 import { Tooltip, IconButton, Input } from '@/component-library';
 import { useTranslation } from 'react-i18next';
 import { SessionFilesBadge } from './SessionFilesBadge';
-import { useGitBasicInfo } from '@/tools/git/hooks/useGitState';
-import { SessionRuntimeStatusEntry } from '../usage/SessionRuntimeStatusEntry';
 import './FlowChatHeader.scss';
 
 export interface FlowChatHeaderTurnSummary {
@@ -30,8 +28,6 @@ export interface FlowChatHeaderProps {
   visible: boolean;
   /** Session ID. */
   sessionId?: string;
-  /** Workspace root path, used to display the current git branch. */
-  workspacePath?: string;
   /** Ordered turn summaries used by header navigation. */
   turns?: FlowChatHeaderTurnSummary[];
   /** Jump to a specific turn. */
@@ -58,8 +54,6 @@ export interface FlowChatHeaderProps {
   onSearchClose?: () => void;
   /** Increments each time the parent requests to open the search bar. */
   searchOpenRequest?: number;
-  /** Generates a local session usage report. */
-  onOpenRuntimeStatus?: () => void;
 }
 export const FlowChatHeader: React.FC<FlowChatHeaderProps> = ({
   currentTurn,
@@ -67,7 +61,6 @@ export const FlowChatHeader: React.FC<FlowChatHeaderProps> = ({
   currentUserMessage,
   visible,
   sessionId,
-  workspacePath,
   turns = [],
   onJumpToTurn,
   onJumpToCurrentTurn,
@@ -81,10 +74,8 @@ export const FlowChatHeader: React.FC<FlowChatHeaderProps> = ({
   onSearchPrev,
   onSearchClose,
   searchOpenRequest = 0,
-  onOpenRuntimeStatus,
 }) => {
   const { t } = useTranslation('flow-chat');
-  const { currentBranch, isRepository } = useGitBasicInfo(workspacePath ?? '');
   const [isTurnListOpen, setIsTurnListOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const turnListRef = useRef<HTMLDivElement | null>(null);
@@ -227,16 +218,7 @@ export const FlowChatHeader: React.FC<FlowChatHeaderProps> = ({
   return (
     <div className="flowchat-header">
       <div className="flowchat-header__actions flowchat-header__actions--left">
-        {isRepository && currentBranch ? (
-          <span className="flowchat-header__git-branch">
-            <GitBranch size={12} aria-hidden />
-            <span>{currentBranch}</span>
-          </span>
-        ) : null}
         <SessionFilesBadge sessionId={sessionId} />
-        <SessionRuntimeStatusEntry
-          onOpen={onOpenRuntimeStatus}
-        />
       </div>
 
       <Tooltip content={currentUserMessage} placement="bottom">

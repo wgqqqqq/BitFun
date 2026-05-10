@@ -328,6 +328,9 @@
     "openWorkspaceFolderFailed": "打開工作區文件夾失敗：{{error}}",
     "spaceToActivate": "按<space>空格鍵</space>快速鍵入"
   },
+  "workspaceStrip": {
+    "branchTooltipUnavailable": "非 Git 存放庫或目前無分支"
+  },
   "context": {
     "title": "上下文",
     "add": "添加上下文",
@@ -695,10 +698,17 @@
   },
   "sessionFilesBadge": {
     "files": "文件",
+    "filesSummaryCount": "{{count}} 個文件",
+    "expandChangeListCue": "展開列表",
+    "expandChangeListAriaCue": "展開查看文件列表",
+    "collapseFileDiffList": "收起文件變更列表",
     "reviewLabel": "審核",
     "reviewAll": "全部審核",
     "reviewMenuLabel": "審核",
     "reviewMenuHint": "選擇審核深度",
+    "actionsMenuHint": "快捷動作",
+    "actionsButton": "動作",
+    "actionsButtonRunning": "進行中…",
     "reviewModeStandard": "普通審核",
     "reviewModeDeep": "深度審核",
     "reviewRunningStandard": "審核中",
