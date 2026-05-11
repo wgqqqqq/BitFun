@@ -93,7 +93,7 @@
       "unavailable": "未上报"
     },
     "card": {
-      "eyebrow": "本地报告",
+      "heading": "会话统计",
       "turns": "{{count}} 轮",
       "calls": "{{count}} 次调用",
       "operations": "{{count}} 次操作"

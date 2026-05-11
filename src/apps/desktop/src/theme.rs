@@ -90,6 +90,16 @@ impl ThemeConfig {
                 text_muted: "rgba(255, 255, 255, 0.4)".to_string(),
                 accent_color: "#00e6ff".to_string(),
             }),
+            "bitfun-tokyo-night" => Some(Self {
+                id: theme_id.to_string(),
+                bg_primary: "#1a1b26".to_string(),
+                bg_secondary: "#16161e".to_string(),
+                bg_scene: "#1a1b26".to_string(),
+                is_light: false,
+                text_primary: "#c0caf5".to_string(),
+                text_muted: "rgba(255, 255, 255, 0.4)".to_string(),
+                accent_color: "#7aa2f7".to_string(),
+            }),
             "bitfun-china-night" => Some(Self {
                 id: theme_id.to_string(),
                 bg_primary: "#1a1814".to_string(),

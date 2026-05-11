@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use crate::api::app_state::AppState;
 use bitfun_core::service::system;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 
 /// Emitted during `install_update` download; matches `installUpdateWithProgress` / frontend listener.
@@ -307,6 +307,29 @@ pub async fn set_macos_edit_menu_mode(
 pub struct SendNotificationRequest {
     pub title: String,
     pub body: Option<String>,
+}
+
+// ─── Window / Tray behavior commands ─────────────────────────────────────────
+
+/// Immediately exit the application (used by the "ask" dialog when the user
+/// chooses to quit rather than minimize to tray).
+#[tauri::command]
+pub async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
+    log::info!("Quit requested via quit_app command");
+    crate::perform_process_exit_cleanup();
+    app.exit(0);
+    Ok(())
+}
+
+/// Hide the main window so it lives only in the system tray (used by the "ask"
+/// dialog when the user chooses to minimize instead of quitting).
+#[tauri::command]
+pub async fn minimize_to_tray(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.hide().map_err(|e| e.to_string())?;
+        log::info!("Main window minimized to tray via command");
+    }
+    Ok(())
 }
 
 /// Send an OS-level desktop notification (Windows toast / macOS notification center).

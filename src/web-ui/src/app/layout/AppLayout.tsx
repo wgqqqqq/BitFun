@@ -29,6 +29,9 @@ import { AboutDialog } from '../components/AboutDialog';
 import { MCPInteractionDialog } from '../components/MCPInteractionDialog/MCPInteractionDialog';
 import { WorkspaceManager } from '../../tools/workspace';
 import { workspaceAPI } from '@/infrastructure/api';
+import { systemAPI } from '@/infrastructure/api/service-api/SystemAPI';
+import type { CloseBehavior } from '@/infrastructure/api/service-api/SystemAPI';
+import { confirmDialog } from '@/component-library';
 import { createLogger } from '@/shared/utils/logger';
 import { DailyAppUpdateGate } from '@/infrastructure/update';
 import { useI18n } from '@/infrastructure/i18n';
@@ -75,7 +78,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
     useWindowControls({ isToolbarMode });
 
   const { state, switchLeftPanelTab, toggleLeftPanel, toggleRightPanel } = useApp();
-  const allowNextNativeCloseRef = useRef(false);
 
   // ── Load user keybinding overrides from config on startup ────────────────
   useEffect(() => {
@@ -303,62 +305,74 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
   // Save in-progress conversations before the native window is closed/hidden.
   React.useEffect(() => {
     let unlistenFn: (() => void) | null = null;
-    let handlingMacOSClose = false;
+    let handlingClose = false;
 
     const setupWindowCloseListener = async () => {
       if (!canUseNativeWindowControls) return;
 
       try {
-        if (isMacOS) {
-          const [{ listen }, { invoke }] = await Promise.all([
-            import('@tauri-apps/api/event'),
-            import('@tauri-apps/api/core'),
-          ]);
+        // Both macOS and Windows/Linux: Rust intercepts the native close request
+        // and emits this event. We save turns then decide what to do.
+        const [{ listen }, { invoke }] = await Promise.all([
+          import('@tauri-apps/api/event'),
+          import('@tauri-apps/api/core'),
+        ]);
 
-          unlistenFn = await listen('bitfun_main_window_close_requested', async () => {
-            if (handlingMacOSClose) return;
-            handlingMacOSClose = true;
-            try {
-              const flowChatManager = FlowChatManager.getInstance();
-              await flowChatManager.saveAllInProgressTurns();
-            } catch (error) {
-              log.error('Failed to save conversations before hiding main window', error);
-            } finally {
-              try {
-                await invoke('hide_main_window_after_close_request');
-              } catch (error) {
-                log.error('Failed to hide main window after close request', error);
-              } finally {
-                handlingMacOSClose = false;
-              }
-            }
-          });
-          return;
-        }
-
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
-        const currentWindow = getCurrentWindow();
-
-        unlistenFn = await currentWindow.onCloseRequested(async (event: { preventDefault: () => void }) => {
-          if (allowNextNativeCloseRef.current) {
-            allowNextNativeCloseRef.current = false;
-            return;
-          }
+        unlistenFn = await listen('bitfun_main_window_close_requested', async () => {
+          if (handlingClose) return;
+          handlingClose = true;
 
           try {
-            event.preventDefault();
             const flowChatManager = FlowChatManager.getInstance();
             await flowChatManager.saveAllInProgressTurns();
           } catch (error) {
-            log.error('Failed to save conversations, closing anyway', error);
+            log.error('Failed to save conversations before close', error);
+          }
+
+          if (isMacOS) {
+            // macOS always hides to keep the app alive in the dock.
+            try {
+              await invoke('hide_main_window_after_close_request');
+            } catch (error) {
+              log.error('Failed to hide main window after close request', error);
+            }
+            handlingClose = false;
+            return;
+          }
+
+          // Windows / Linux: read the user's close-button preference.
+          let behavior: CloseBehavior = 'quit';
+          try {
+            behavior = (await configManager.getConfig<CloseBehavior>('app.close_button_behavior')) ?? 'quit';
+          } catch {
+            // Fall back to quit if config cannot be read.
           }
 
           try {
-            allowNextNativeCloseRef.current = true;
-            await currentWindow.close();
+            if (behavior === 'minimize_to_tray') {
+              await systemAPI.minimizeToTray();
+            } else if (behavior === 'ask') {
+              const shouldQuit = await confirmDialog({
+                title: tCommon('closeDialog.title'),
+                message: tCommon('closeDialog.message'),
+                confirmText: tCommon('closeDialog.quit'),
+                cancelText: tCommon('closeDialog.minimizeToTray'),
+                showCancel: true,
+              });
+              if (shouldQuit) {
+                await systemAPI.quitApp();
+              } else {
+                await systemAPI.minimizeToTray();
+              }
+            } else {
+              // quit
+              await systemAPI.quitApp();
+            }
           } catch (error) {
-            allowNextNativeCloseRef.current = false;
-            throw error;
+            log.error('Failed to handle close request', { behavior, error });
+            try { await systemAPI.quitApp(); } catch { /* ignore */ }
+          } finally {
+            handlingClose = false;
           }
         });
       } catch (error) {
@@ -368,7 +382,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
 
     setupWindowCloseListener();
     return () => { if (unlistenFn) unlistenFn(); };
-  }, [canUseNativeWindowControls, isMacOS]);
+  }, [canUseNativeWindowControls, isMacOS, tCommon]);
 
   // Handle switch-to-files-panel event
   React.useEffect(() => {
@@ -401,6 +415,65 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
     window.addEventListener('toolbar-send-message', handleToolbarSendMessage);
     return () => window.removeEventListener('toolbar-send-message', handleToolbarSendMessage);
   }, []);
+
+  // Listen for tray "open session" events (fired when user clicks a recent session in the
+  // tray context menu).  Switch workspace if needed, then navigate to the session.
+  const pendingTraySessionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!canUseNativeWindowControls) return;
+    let unlisten: (() => void) | null = null;
+
+    void (async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        unlisten = await listen<{ sessionId: string; workspacePath: string }>(
+          'tray://open-session',
+          async event => {
+            const { sessionId, workspacePath } = event.payload;
+            log.info('Tray open-session received', { sessionId, workspacePath });
+
+            const normalize = (p: string) => p.replace(/\\/g, '/').toLowerCase();
+            const isSameWorkspace =
+              !!currentWorkspace?.rootPath &&
+              normalize(currentWorkspace.rootPath) === normalize(workspacePath);
+
+            if (!isSameWorkspace) {
+              // Switch workspace first; once loaded the second useEffect will
+              // fire openMainSession for the pending session.
+              pendingTraySessionRef.current = sessionId;
+              try {
+                await openWorkspace(workspacePath);
+              } catch (error) {
+                log.error('Tray: failed to open workspace', { workspacePath, error });
+                pendingTraySessionRef.current = null;
+              }
+            } else {
+              const { openMainSession } = await import('@/flow_chat/services/openBtwSession');
+              await openMainSession(sessionId);
+            }
+          }
+        );
+      } catch (error) {
+        log.error('Failed to setup tray open-session listener', error);
+      }
+    })();
+
+    return () => { if (unlisten) unlisten(); };
+  }, [canUseNativeWindowControls, currentWorkspace, openWorkspace]);
+
+  // Once a workspace switch triggered by the tray completes, navigate to the
+  // pending session.
+  useEffect(() => {
+    const pending = pendingTraySessionRef.current;
+    if (!pending || !hasWorkspace) return;
+    pendingTraySessionRef.current = null;
+    void (async () => {
+      // Small delay to let FlowChatManager finish loading sessions.
+      await new Promise(r => setTimeout(r, 800));
+      const { openMainSession } = await import('@/flow_chat/services/openBtwSession');
+      await openMainSession(pending);
+    })();
+  }, [hasWorkspace, currentWorkspace]);
 
   // Toggle left panel: mod+B (VS Code convention)
   useShortcut(

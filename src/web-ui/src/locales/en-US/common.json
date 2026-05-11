@@ -1042,5 +1042,11 @@
     "dialogFailedTitle": "BitFun task stopped",
     "dialogFailedWithSession": "\"{{sessionTitle}}\" stopped unexpectedly. Return to BitFun to review the reason.",
     "dialogFailedFallback": "A BitFun session stopped unexpectedly. Return to BitFun to review the reason."
+  },
+  "closeDialog": {
+    "title": "Close BitFun",
+    "message": "Choose what happens when you click the close button: quit exits the app completely, or minimize to tray keeps it running in the background.",
+    "quit": "Quit",
+    "minimizeToTray": "Minimize to Tray"
   }
 }

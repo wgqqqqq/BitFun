@@ -55,7 +55,7 @@ vi.mock('react-i18next', () => ({
         'usage.status.cacheNotReported': 'Cache not reported',
         'usage.status.noFileChanges': 'No file changes',
         'usage.status.notRecorded': 'Not recorded',
-        'usage.card.eyebrow': 'Local report',
+        'usage.card.heading': 'Session statistics',
         'usage.card.turns': '{{count}} turns',
         'usage.card.calls': '{{count}} calls',
         'usage.card.operations': '{{count}} ops',
@@ -346,7 +346,8 @@ describe('Session usage report UI components', () => {
     const cachedMetric = Array.from(container.querySelectorAll('.session-usage-report-card__metric'))
       .find(metric => metric.textContent?.includes('Cached'));
     expect(container.textContent).toContain('Partial');
-    expect(container.textContent).toContain('Hover underlined values');
+    const partialCoverageBadge = container.querySelector('.session-usage-report-card__coverage');
+    expect(partialCoverageBadge?.parentElement?.getAttribute('data-tooltip')).toContain('Hover underlined values');
     expect(cachedMetric?.textContent).toContain('Cache not reported');
     expect(cachedMetric?.textContent).not.toMatch(/Cached\s*0/);
     expect(cachedMetric?.querySelector('[data-tooltip]')?.getAttribute('data-tooltip'))

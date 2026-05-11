@@ -43,6 +43,10 @@
       "bitfun-slate": {
         "name": "石板灰",
         "description": "石板灰几何主题 - 极深沉浸，高对比度灰度美学"
+      },
+      "bitfun-tokyo-night": {
+        "name": "东京夜",
+        "description": "Tokyo Night 经典配色 - 靛蓝夜色，蓝紫高光"
       }
     },
     "fontSize": {
@@ -166,8 +170,26 @@
       "refreshed": "已刷新可用终端列表"
     }
   },
-  "notifications": {
-    "title": "通知",
+  "windowBehavior": {
+    "sections": {
+      "title": "窗口行为",
+      "hint": "点击关闭按钮时的操作"
+    },
+    "closeButtonLabel": "关闭按钮行为",
+    "closeButtonDescription": "点击窗口关闭按钮（×）时的默认操作。",
+    "options": {
+      "quit": "退出程序",
+      "minimizeToTray": "最小化到系统托盘",
+      "ask": "每次询问"
+    },
+    "messages": {
+      "loading": "加载中…",
+      "loadFailed": "无法读取窗口行为设置",
+      "saveFailed": "无法保存窗口行为设置",
+      "saved": "窗口行为设置已保存"
+    }
+  },
+  "notifications": {    "title": "通知",
     "hint": "Toast 弹窗通知偏好设置",
     "dialogCompletion": {
       "label": "任务完成通知",

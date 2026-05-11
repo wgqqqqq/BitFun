@@ -93,7 +93,7 @@
       "unavailable": "Not reported"
     },
     "card": {
-      "eyebrow": "Local report",
+      "heading": "Session statistics",
       "turns": "{{count}} turns",
       "calls": "{{count}} calls",
       "operations": "{{count}} ops"

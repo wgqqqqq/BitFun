@@ -665,6 +665,7 @@ pub fn set_theme_preference(theme_preference: String) -> Result<(), String> {
         "bitfun-china-night",
         "bitfun-cyber",
         "bitfun-slate",
+        "bitfun-tokyo-night",
     ];
     if !allowed.contains(&theme_preference.as_str()) {
         return Err("Unsupported theme preference".to_string());

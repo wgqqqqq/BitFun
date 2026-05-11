@@ -77,6 +77,10 @@ impl ProjectConfig {
 }
 
 /// App configuration.
+fn default_close_button_behavior() -> String {
+    "quit".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
@@ -100,6 +104,10 @@ pub struct AppConfig {
     /// the frontend owns the versioned format (StoredKeybindingsV1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keybindings: Option<serde_json::Value>,
+    /// What happens when the window close button is clicked on Windows / Linux.
+    /// Allowed values: "quit" | "minimize_to_tray" | "ask".
+    #[serde(default = "default_close_button_behavior")]
+    pub close_button_behavior: String,
 }
 
 /// App logging configuration.
@@ -1266,6 +1274,7 @@ impl Default for AppConfig {
             session_config: AppSessionConfig::default(),
             ai_experience: AIExperienceConfig::default(),
             keybindings: None,
+            close_button_behavior: default_close_button_behavior(),
         }
     }
 }
