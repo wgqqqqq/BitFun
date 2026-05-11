@@ -1,6 +1,6 @@
 //! Tool framework - Tool interface definition and execution context
 use crate::agentic::coordination::get_global_coordinator;
-use crate::agentic::deep_review_policy::record_deep_review_shared_context_tool_use;
+use crate::agentic::deep_review::tool_measurement;
 use crate::agentic::session::EvidenceLedgerCheckpoint;
 use crate::agentic::tools::restrictions::{
     is_local_path_within_root, is_remote_posix_path_within_root, ToolPathOperation,
@@ -76,7 +76,7 @@ pub struct ToolUseContext {
     // Cancel tool execution more timely, especially for tools like TaskTool that need to run for a long time
     pub cancellation_token: Option<CancellationToken>,
     pub runtime_tool_restrictions: ToolRuntimeRestrictions,
-    /// Workspace I/O services (filesystem + shell) — use these instead of
+    /// Workspace I/O services (filesystem + shell) - use these instead of
     /// checking `get_remote_workspace_manager()` inside individual tools.
     pub workspace_services: Option<WorkspaceServices>,
 }
@@ -633,59 +633,6 @@ fn git_relative_path(workspace_root: &Path, path: &str) -> Option<String> {
     Some(relative.to_string_lossy().replace('\\', "/"))
 }
 
-fn custom_data_str<'a>(context: &'a ToolUseContext, key: &str) -> Option<&'a str> {
-    context
-        .custom_data
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-}
-
-fn maybe_record_deep_review_shared_context_tool_use(
-    tool_name: &str,
-    input: &Value,
-    context: &ToolUseContext,
-) {
-    if !tool_name.eq_ignore_ascii_case("Read") && !tool_name.eq_ignore_ascii_case("GetFileDiff") {
-        return;
-    }
-    if !custom_data_str(context, "deep_review_subagent_role")
-        .is_some_and(|role| role.eq_ignore_ascii_case("reviewer"))
-    {
-        return;
-    }
-    let Some(parent_turn_id) = custom_data_str(context, "deep_review_parent_dialog_turn_id") else {
-        return;
-    };
-    let Some(file_path) = input
-        .get("file_path")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return;
-    };
-    let measured_path = if context.is_remote() {
-        None
-    } else {
-        context
-            .workspace_root()
-            .and_then(|workspace_root| git_relative_path(workspace_root, file_path))
-    }
-    .unwrap_or_else(|| file_path.to_string());
-    let subagent_type = custom_data_str(context, "deep_review_subagent_type")
-        .or(context.agent_type.as_deref())
-        .unwrap_or("unknown");
-
-    record_deep_review_shared_context_tool_use(
-        parent_turn_id,
-        subagent_type,
-        tool_name,
-        &measured_path,
-    );
-}
-
 /// Tool trait
 #[async_trait]
 pub trait Tool: Send + Sync {
@@ -827,7 +774,7 @@ pub trait Tool: Send + Sync {
             self.call_impl(input, context).await
         };
         if result.is_ok() {
-            maybe_record_deep_review_shared_context_tool_use(self.name(), input, context);
+            tool_measurement::maybe_record_shared_context_tool_use(self.name(), input, context);
         }
         result
     }
