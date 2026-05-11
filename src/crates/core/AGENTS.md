@@ -40,6 +40,14 @@ Narrower rules already exist:
 
 - `src/crates/ai-adapters/AGENTS.md`
 - `src/agentic/execution/AGENTS.md`
+- `src/agentic/deep_review/AGENTS.md`
+
+## DeepReview notes
+
+- Keep policy, manifest gate, queue state, Task adapter, and report enrichment
+  aligned when changing `src/agentic/deep_review*` or review agents.
+- Keep reviewer subagents read-only; user-approved remediation is outside the
+  reviewer pass.
 
 ## Commands
 

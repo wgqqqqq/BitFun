@@ -89,6 +89,12 @@ For `bitfun-core` decomposition or build-speed refactors, follow
 [`docs/architecture/core-decomposition.md`](docs/architecture/core-decomposition.md)
 and do not change product feature sets or release scripts as a side effect.
 
+For Deep Review / Code Review Team changes, keep
+[`docs/architecture/deep-review.md`](docs/architecture/deep-review.md),
+`src/crates/core/src/agentic/deep_review/CONTRIBUTING.md`, and
+`src/web-ui/src/flow_chat/deep-review/CONTRIBUTING.md` aligned with the
+implementation.
+
 ### Tauri command conventions
 
 - Command names use `snake_case`
