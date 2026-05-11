@@ -15,7 +15,7 @@ use crate::util::errors::{BitFunError, BitFunResult};
 use dashmap::DashMap;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 use tokio::sync::{oneshot, RwLock as TokioRwLock};
@@ -26,6 +26,23 @@ use tokio_util::sync::CancellationToken;
 struct ToolBatch {
     task_ids: Vec<String>,
     is_concurrent: bool,
+}
+
+/// Number of *consecutive* identical tool calls (same name + deep-equal
+/// arguments) tolerated before the pipeline blocks further attempts as a
+/// detected loop. The (N+1)-th identical call is the one that gets blocked.
+const TOOL_CALL_LOOP_THRESHOLD: usize = 3;
+
+/// Cap on per-session recent tool call history. Bounded so a long-lived
+/// session does not accumulate unbounded memory; only the tail of the window
+/// participates in loop detection anyway.
+const TOOL_CALL_HISTORY_WINDOW: usize = 10;
+
+/// Snapshot of a recently attempted tool call, used to detect agent loops.
+#[derive(Debug, Clone)]
+struct RecentToolCall {
+    tool_name: String,
+    arguments: serde_json::Value,
 }
 
 /// Convert framework::ToolResult to core::ToolResult
@@ -287,6 +304,10 @@ pub struct ToolPipeline {
     confirmation_channels: Arc<DashMap<String, oneshot::Sender<ConfirmationResponse>>>,
     /// Cancellation token management (tool_id -> CancellationToken)
     cancellation_tokens: Arc<DashMap<String, CancellationToken>>,
+    /// Per-session ring buffer of recent tool calls for loop detection.
+    /// Keyed by session_id; entries store (tool_name, arguments) so that
+    /// "same tool with deep-equal arguments" can be recognized across rounds.
+    recent_tool_calls: Arc<DashMap<String, VecDeque<RecentToolCall>>>,
     computer_use_host: Option<ComputerUseHostRef>,
 }
 
@@ -301,8 +322,54 @@ impl ToolPipeline {
             state_manager,
             confirmation_channels: Arc::new(DashMap::new()),
             cancellation_tokens: Arc::new(DashMap::new()),
+            recent_tool_calls: Arc::new(DashMap::new()),
             computer_use_host,
         }
+    }
+
+    /// Check whether this tool call forms a loop (the last
+    /// `TOOL_CALL_LOOP_THRESHOLD` consecutive calls in this session all had
+    /// the same name AND deep-equal arguments). Always records the call into
+    /// the per-session history so that persistent loops continue to register.
+    /// Returns `true` if this call should be blocked.
+    fn check_and_record_tool_call(
+        &self,
+        session_id: &str,
+        tool_name: &str,
+        arguments: &serde_json::Value,
+    ) -> bool {
+        let mut entry = self
+            .recent_tool_calls
+            .entry(session_id.to_string())
+            .or_default();
+        let history = entry.value_mut();
+
+        // Count *consecutive* matches from the tail. A non-matching call
+        // anywhere in the window resets the streak.
+        let identical_priors = history
+            .iter()
+            .rev()
+            .take(TOOL_CALL_LOOP_THRESHOLD)
+            .take_while(|past| past.tool_name == tool_name && &past.arguments == arguments)
+            .count();
+        let is_loop = identical_priors >= TOOL_CALL_LOOP_THRESHOLD;
+
+        history.push_back(RecentToolCall {
+            tool_name: tool_name.to_string(),
+            arguments: arguments.clone(),
+        });
+        while history.len() > TOOL_CALL_HISTORY_WINDOW {
+            history.pop_front();
+        }
+
+        is_loop
+    }
+
+    /// Drop the loop-detection history for a session that is ending. Bounded
+    /// memory either way (max 10 entries per session) but this prevents
+    /// long-lived processes from accumulating stale sessions.
+    pub fn clear_session_tool_call_history(&self, session_id: &str) {
+        self.recent_tool_calls.remove(session_id);
     }
 
     pub fn computer_use_host(&self) -> Option<ComputerUseHostRef> {
@@ -624,6 +691,43 @@ impl ToolPipeline {
             return Err(BitFunError::Validation(error_msg));
         }
 
+        // Loop detection: refuse to execute the same tool call repeatedly with
+        // identical arguments. Triggered on the (THRESHOLD + 1)-th consecutive
+        // identical call within the per-session sliding window.
+        if self.check_and_record_tool_call(
+            &task.context.session_id,
+            &tool_name,
+            &tool_args,
+        ) {
+            let error_msg = format!(
+                "Tool-call loop blocked: '{}' was already called {} times in a row in this session with identical arguments. Refusing to execute this {}th identical call. Issue a different tool call, or stop tool-calling and respond to the user. If you wrote a file recently and want to continue it, its full content is already visible in your earlier tool_use message — use Edit with `old_string` taken from the end of that content; do not Read the file again.",
+                tool_name,
+                TOOL_CALL_LOOP_THRESHOLD,
+                TOOL_CALL_LOOP_THRESHOLD + 1
+            );
+            warn!(
+                "Tool-call loop blocked: tool_name={}, tool_id={}, session_id={}, threshold={}",
+                tool_name, tool_id, task.context.session_id, TOOL_CALL_LOOP_THRESHOLD
+            );
+
+            self.state_manager
+                .update_state(
+                    &tool_id,
+                    ToolExecutionState::Failed {
+                        error: error_msg.clone(),
+                        is_retryable: false,
+                        duration_ms: None,
+                        queue_wait_ms: None,
+                        preflight_ms: None,
+                        confirmation_wait_ms: None,
+                        execution_ms: None,
+                    },
+                )
+                .await;
+
+            return Err(BitFunError::Validation(error_msg));
+        }
+
         // Security check: check if the tool is in the allowed list
         // If allowed_tools is not empty, only allow execution of tools in the whitelist
         if !task.context.allowed_tools.is_empty()
@@ -923,7 +1027,7 @@ impl ToolPipeline {
                 if recovered_from_truncation {
                     let original = tool_result.result_for_assistant.unwrap_or_default();
                     let notice = format!(
-                        "[WARNING: tool arguments were truncated by the model (likely hit max_tokens) and were auto-repaired before this {} call executed. The written content stops at the truncation point and may be incomplete; verify the result and, if needed, continue with a follow-up call that appends the remaining content (do not rewrite the whole file from scratch). Original tool result follows.]\n\n",
+                        "[Your previous {} call was truncated mid-stream by max_tokens and was auto-repaired before execution; the file was written with the partial content. The full truncated content — including the exact stopping point — is visible in the `input` of your previous tool_use message, so you do NOT need to read the file again. To finish it, issue ONE Edit call where `old_string` is the final unique substring of your truncated content and `new_string` is that same substring plus the continuation. If you do not have a concrete plan for the continuation, stop tool-calling and tell the user the output was truncated (suggest raising max_tokens). Do NOT call Read on this file and do NOT rewrite the whole file with Write.]\n\nOriginal tool result follows.\n\n",
                         tool_name
                     );
                     tool_result.result_for_assistant = Some(if original.is_empty() {

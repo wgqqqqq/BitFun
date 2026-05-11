@@ -27,6 +27,10 @@ impl DeepResearchAgent {
                 "LS".to_string(),
                 // File output (save report)
                 "Write".to_string(),
+                // Needed to append/continue a report when a prior Write was
+                // truncated by max_tokens (recovery path injects an "use Edit
+                // to continue" hint into result_for_assistant).
+                "Edit".to_string(),
                 // Terminal — run commands to gather data (e.g. git log, curl, jq)
                 "Bash".to_string(),
                 "TerminalControl".to_string(),
@@ -86,6 +90,10 @@ mod tests {
         assert!(tools.contains(&"WebSearch".to_string()));
         assert!(tools.contains(&"WebFetch".to_string()));
         assert!(tools.contains(&"Write".to_string()));
+        assert!(
+            tools.contains(&"Edit".to_string()),
+            "Edit required so the agent can continue a Write that was truncated by max_tokens"
+        );
         assert!(tools.contains(&"Bash".to_string()));
         assert!(tools.contains(&"TerminalControl".to_string()));
         assert!(tools.contains(&"ControlHub".to_string()));
