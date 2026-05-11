@@ -246,6 +246,8 @@ pub(crate) enum SearchModeConfig {
     FirstHitOnly,
     #[default]
     MaterializeMatches,
+    FilesWithMatches,
+    LineMatches,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]

@@ -11,7 +11,8 @@ use crate::service::search::flashgrep::{
     drain_content_length_messages, ClientCapabilities, ClientInfo, ConsistencyMode, GlobOutcome,
     GlobParams, GlobRequest, InitializeParams, OpenRepoParams, PathScope, ProtocolClient,
     QuerySpec, RefreshPolicyConfig, RepoConfig, RepoRef, RepoStatus, Request, Response,
-    SearchOutcome, SearchParams, SearchRequest, SearchResults, TaskRef, TaskStatus,
+    SearchModeConfig, SearchOutcome, SearchParams, SearchRequest, SearchResults, TaskRef,
+    TaskStatus,
 };
 use crate::service::search::flashgrep::{error::AppError, FlashgrepRepoSession};
 use crate::service::search::{
@@ -20,6 +21,7 @@ use crate::service::search::{
     WorkspaceSearchHit, WorkspaceSearchRepoStatus,
 };
 use async_trait::async_trait;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -208,6 +210,10 @@ impl RemoteStdioRepoSession {
 
     async fn status(&self) -> Result<RepoStatus, String> {
         let _lease = self.acquire_operation();
+        self.status_without_activity_lease().await
+    }
+
+    async fn status_without_activity_lease(&self) -> Result<RepoStatus, String> {
         match self
             .client
             .send_request(Request::GetRepoStatus {
@@ -610,7 +616,7 @@ impl RemoteWorkspaceSearchService {
             top_k_tokens: 6,
             max_count: None,
             global_max_results: max_results,
-            search_mode: request.output_mode.search_mode(),
+            search_mode: remote_stdio_search_mode(request.output_mode),
         };
 
         let output_mode = request.output_mode;
@@ -857,21 +863,6 @@ impl RemoteWorkspaceSearchService {
             }
         };
 
-        let (stdout, _, exit_code) = self
-            .ssh_manager
-            .execute_command(
-                connection_id,
-                "command -v flashgrep >/dev/null 2>&1 && command -v flashgrep",
-            )
-            .await
-            .map_err(|error| format!("Failed to probe remote flashgrep binary: {error}"))?;
-        if exit_code == 0 {
-            let path = stdout.trim();
-            if !path.is_empty() {
-                return Ok(path.to_string());
-            }
-        }
-
         let (bundled_binary_name, local_binary_path) = bundled_binary_names
             .iter()
             .find_map(|binary_name| {
@@ -889,6 +880,13 @@ impl RemoteWorkspaceSearchService {
             })?;
         let install_dir = remote_flashgrep_install_dir(repo_root);
         let remote_binary_path = join_remote_path(&install_dir, bundled_binary_name);
+        let bytes = tokio::fs::read(&local_binary_path).await.map_err(|error| {
+            format!(
+                "Failed to read bundled flashgrep binary {}: {error}",
+                local_binary_path.display()
+            )
+        })?;
+        let local_sha256 = hex::encode(Sha256::digest(&bytes));
 
         self.remote_file_service
             .create_dir_all(connection_id, &install_dir)
@@ -896,18 +894,18 @@ impl RemoteWorkspaceSearchService {
             .map_err(|error| {
                 format!("Failed to create remote flashgrep install directory: {error}")
             })?;
-        if !self
-            .remote_file_service
-            .exists(connection_id, &remote_binary_path)
-            .await
-            .map_err(|error| format!("Failed to inspect remote flashgrep binary path: {error}"))?
-        {
-            let bytes = tokio::fs::read(&local_binary_path).await.map_err(|error| {
-                format!(
-                    "Failed to read bundled flashgrep binary {}: {error}",
-                    local_binary_path.display()
-                )
-            })?;
+        let remote_sha256 = self
+            .remote_flashgrep_sha256(connection_id, &remote_binary_path)
+            .await?;
+        if remote_sha256.as_deref() != Some(local_sha256.as_str()) {
+            log::info!(
+                "Uploading bundled remote flashgrep binary: connection_id={}, path={}, bundle={}, local_sha256={}, remote_sha256={}",
+                connection_id,
+                remote_binary_path,
+                bundled_binary_name,
+                local_sha256,
+                remote_sha256.as_deref().unwrap_or("missing")
+            );
             self.remote_file_service
                 .write_file(connection_id, &remote_binary_path, &bytes)
                 .await
@@ -922,6 +920,32 @@ impl RemoteWorkspaceSearchService {
             .map_err(|error| format!("Failed to mark remote flashgrep as executable: {error}"))?;
 
         Ok(remote_binary_path)
+    }
+
+    async fn remote_flashgrep_sha256(
+        &self,
+        connection_id: &str,
+        remote_binary_path: &str,
+    ) -> Result<Option<String>, String> {
+        let escaped_path = shell_escape(remote_binary_path);
+        let command = format!(
+            "if [ -f {path} ]; then if command -v sha256sum >/dev/null 2>&1; then sha256sum {path} | awk '{{print $1}}'; elif command -v shasum >/dev/null 2>&1; then shasum -a 256 {path} | awk '{{print $1}}'; fi; fi",
+            path = escaped_path
+        );
+        let (stdout, _stderr, exit_code) = self
+            .ssh_manager
+            .execute_command(connection_id, &command)
+            .await
+            .map_err(|error| format!("Failed to hash remote flashgrep binary: {error}"))?;
+        if exit_code != 0 {
+            return Ok(None);
+        }
+        let hash = stdout.trim();
+        if hash.len() == 64 && hash.chars().all(|character| character.is_ascii_hexdigit()) {
+            Ok(Some(hash.to_ascii_lowercase()))
+        } else {
+            Ok(None)
+        }
     }
 
     async fn max_file_size(&self) -> u64 {
@@ -980,10 +1004,10 @@ fn remote_stdio_session_key(connection_id: &str, repo_root: &str) -> String {
 
 fn schedule_remote_stdio_session_release(key: String, activity_epoch: Arc<AtomicU64>) {
     tokio::spawn(async move {
-        sleep(REMOTE_STDIO_SESSION_IDLE_GRACE).await;
         let expected_epoch = activity_epoch.load(Ordering::Relaxed);
+        sleep(REMOTE_STDIO_SESSION_IDLE_GRACE).await;
         let entry = {
-            let mut sessions = REMOTE_STDIO_SESSIONS.write().await;
+            let sessions = REMOTE_STDIO_SESSIONS.read().await;
             let Some(entry) = sessions.get(&key) else {
                 return;
             };
@@ -993,6 +1017,51 @@ fn schedule_remote_stdio_session_release(key: String, activity_epoch: Arc<Atomic
             }
             if entry.activity_epoch.load(Ordering::Relaxed) != expected_epoch {
                 schedule_remote_stdio_session_release(key.clone(), entry.activity_epoch.clone());
+                return;
+            }
+            entry.clone()
+        };
+
+        match entry.session.status_without_activity_lease().await {
+            Ok(status) if status.active_task_id.is_some() => {
+                schedule_remote_stdio_session_release(key.clone(), entry.activity_epoch.clone());
+                return;
+            }
+            Ok(_) => {}
+            Err(error) => {
+                log::warn!(
+                    "Failed to check idle remote workspace search status before release: key={}, error={}",
+                    key.replace('\0', ":"),
+                    error
+                );
+            }
+        }
+
+        let entry = {
+            let mut sessions = REMOTE_STDIO_SESSIONS.write().await;
+            let Some(current_entry) = sessions.get(&key) else {
+                return;
+            };
+            if !Arc::ptr_eq(&current_entry.session, &entry.session) {
+                return;
+            }
+            if current_entry
+                .session
+                .active_operations
+                .load(Ordering::Relaxed)
+                > 0
+            {
+                schedule_remote_stdio_session_release(
+                    key.clone(),
+                    current_entry.activity_epoch.clone(),
+                );
+                return;
+            }
+            if current_entry.activity_epoch.load(Ordering::Relaxed) != expected_epoch {
+                schedule_remote_stdio_session_release(
+                    key.clone(),
+                    current_entry.activity_epoch.clone(),
+                );
                 return;
             }
             sessions.remove(&key)
@@ -1156,6 +1225,14 @@ fn convert_stdio_search_results(
         ContentSearchOutputMode::FilesWithMatches => {
             convert_stdio_hits_to_file_only_results(search_results)
         }
+    }
+}
+
+fn remote_stdio_search_mode(output_mode: ContentSearchOutputMode) -> SearchModeConfig {
+    match output_mode {
+        ContentSearchOutputMode::Content => SearchModeConfig::LineMatches,
+        ContentSearchOutputMode::Count => SearchModeConfig::CountOnly,
+        ContentSearchOutputMode::FilesWithMatches => SearchModeConfig::FilesWithMatches,
     }
 }
 
@@ -1371,5 +1448,17 @@ mod tests {
 
         assert_eq!(messages.len(), 1);
         assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn drains_remote_stdio_initialize_response_with_legacy_search_modes() {
+        let body = r#"{"jsonrpc":"2.0","id":1,"result":{"kind":"initialize_result","protocol_version":1,"server_info":{"name":"flashgrep","version":"0.1.0"},"capabilities":{"workspace_open":true,"workspace_ensure":true,"workspace_list":false,"workspace_refresh":true,"base_snapshot_build":true,"base_snapshot_rebuild":true,"task_status":true,"task_cancel":true,"search_query":true,"glob_query":true,"progress_notifications":true,"status_notifications":true},"search":{"search_modes":["files_with_matches","line_matches","count_only","count_matches"]}}}"#;
+        let mut buffer = format!("Content-Length: {}\r\n\r\n{}", body.len(), body).into_bytes();
+        let messages = drain_content_length_messages(&mut buffer)
+            .expect("expected initialize response to decode");
+
+        assert_eq!(messages.len(), 1);
+        let debug = format!("{:?}", messages[0]);
+        assert!(debug.contains("InitializeResult"));
     }
 }
