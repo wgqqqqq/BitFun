@@ -179,17 +179,33 @@ export const SessionUsageReportCard: React.FC<SessionUsageReportCardProps> = ({
     },
   ];
 
+  const coverageBadgeClassName =
+    `session-usage-report-card__coverage session-usage-report-card__coverage--${coverageTone}` +
+    (report.coverage.level !== 'complete' ? ' session-usage-report-card__coverage--hint' : '');
+
   return (
     <div className="session-usage-report-card" data-report-id={report.reportId}>
       <div className="session-usage-report-card__header">
         <div className="session-usage-report-card__title-block">
-          <div className="session-usage-report-card__eyebrow">{t('usage.card.eyebrow')}</div>
-          <h3 className="session-usage-report-card__title">{t('usage.title')}</h3>
+          <h3 className="session-usage-report-card__title">{t('usage.card.heading')}</h3>
+          <div className="session-usage-report-card__meta">
+            <span>{formatUsageTimestamp(generatedAt ?? report.generatedAt, t)}</span>
+            <span>{t('usage.card.turns', { count: report.scope.turnCount })}</span>
+            <span>{report.workspace.pathLabel || t('usage.unavailable')}</span>
+          </div>
         </div>
         <div className="session-usage-report-card__actions">
-          <span className={`session-usage-report-card__coverage session-usage-report-card__coverage--${coverageTone}`}>
-            {getCoverageLabel(report.coverage.level, t)}
-          </span>
+          {report.coverage.level !== 'complete' ? (
+            <Tooltip content={t('usage.coverage.partialNotice')} placement="top">
+              <span className={coverageBadgeClassName}>
+                {getCoverageLabel(report.coverage.level, t)}
+              </span>
+            </Tooltip>
+          ) : (
+            <span className={coverageBadgeClassName}>
+              {getCoverageLabel(report.coverage.level, t)}
+            </span>
+          )}
           <Tooltip content={copied ? t('usage.actions.copied') : t('usage.actions.copyMarkdown')}>
             <IconButton
               variant="ghost"
@@ -213,19 +229,6 @@ export const SessionUsageReportCard: React.FC<SessionUsageReportCardProps> = ({
           </Tooltip>
         </div>
       </div>
-
-      <div className="session-usage-report-card__meta">
-        <span>{formatUsageTimestamp(generatedAt ?? report.generatedAt, t)}</span>
-        <span>{t('usage.card.turns', { count: report.scope.turnCount })}</span>
-        <span>{report.workspace.pathLabel || t('usage.unavailable')}</span>
-      </div>
-
-      {report.coverage.level !== 'complete' && (
-        <div className="session-usage-report-card__notice">
-          <AlertTriangle size={14} aria-hidden />
-          <span>{t('usage.coverage.partialNotice')}</span>
-        </div>
-      )}
 
       <div className="session-usage-report-card__metrics">
         {metrics.map(metric => {

@@ -93,7 +93,7 @@
       "unavailable": "未回報"
     },
     "card": {
-      "eyebrow": "本機報告",
+      "heading": "會話統計",
       "turns": "{{count}} 輪",
       "calls": "{{count}} 次呼叫",
       "operations": "{{count}} 次操作"

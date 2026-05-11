@@ -6,6 +6,7 @@ pub mod computer_use;
 pub mod logging;
 pub mod macos_menubar;
 pub mod theme;
+pub mod tray;
 
 use bitfun_core::agentic::tools::computer_use_capability::set_computer_use_desktop_available;
 use bitfun_core::agentic::tools::computer_use_host::ComputerUseHostRef;
@@ -21,7 +22,6 @@ use std::sync::{
     Arc,
 };
 use std::time::Instant;
-#[cfg(target_os = "macos")]
 use tauri::Emitter;
 use tauri::Manager;
 
@@ -76,11 +76,15 @@ static MAIN_WINDOW_HIDDEN_ON_MACOS: AtomicBool = AtomicBool::new(false);
 #[cfg(target_os = "macos")]
 static MAIN_WINDOW_CLOSE_PENDING_ON_MACOS: AtomicBool = AtomicBool::new(false);
 
-#[cfg(target_os = "macos")]
 const MAIN_WINDOW_CLOSE_REQUESTED_EVENT: &str = "bitfun_main_window_close_requested";
 
 #[cfg(target_os = "macos")]
 const MAIN_WINDOW_CLOSE_FALLBACK_HIDE_MS: u64 = 2_500;
+
+// ─── Close-button behavior ────────────────────────────────────────────────────
+// The close-button behavior is owned by the frontend; the Rust window-event
+// handler only emits a notification event and the frontend decides what to do.
+// No per-platform caching needed here.
 
 #[cfg(target_os = "macos")]
 pub(crate) fn mark_main_window_hidden_on_macos(hidden: bool) {
@@ -481,6 +485,11 @@ pub async fn run() {
 
             logging::spawn_log_cleanup_task();
 
+            // Set up system tray icon.
+            if let Err(error) = crate::tray::setup_tray(app) {
+                log::warn!("Failed to set up system tray: {}", error);
+            }
+
             log::info!("BitFun Desktop started successfully");
             Ok(())
         })
@@ -525,11 +534,16 @@ pub async fn run() {
                 }
 
                 #[cfg(not(target_os = "macos"))]
-                if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     if window.label() == "main" {
-                        if perform_process_exit_cleanup() {
-                            log::info!("Main window close requested, cleaning up");
-                            window.app_handle().exit(0);
+                        // Prevent the OS from closing the window; let the frontend
+                        // decide whether to minimize to tray, show a dialog, or quit.
+                        api.prevent_close();
+                        if let Err(error) = window.emit(MAIN_WINDOW_CLOSE_REQUESTED_EVENT, ()) {
+                            log::warn!(
+                                "Failed to emit main window close request event: {}",
+                                error
+                            );
                         }
                     }
                 }
@@ -878,6 +892,8 @@ pub async fn run() {
             install_update,
             restart_app,
             send_system_notification,
+            api::system_api::quit_app,
+            api::system_api::minimize_to_tray,
             check_command_exists,
             check_commands_exist,
             run_system_command,
@@ -1195,7 +1211,7 @@ fn setup_panic_hook() {
     }));
 }
 
-fn perform_process_exit_cleanup() -> bool {
+pub(crate) fn perform_process_exit_cleanup() -> bool {
     static CLEANUP_DONE: AtomicBool = AtomicBool::new(false);
 
     if CLEANUP_DONE

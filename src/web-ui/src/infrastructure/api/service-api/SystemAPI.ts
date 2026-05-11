@@ -18,6 +18,9 @@ export interface CheckForUpdatesResponse {
   releaseDate: string | null;
 }
 
+/** Close-button behavior values (matches `app.close_button_behavior` config key). */
+export type CloseBehavior = 'quit' | 'minimize_to_tray' | 'ask';
+
 export class SystemAPI {
    
   async getSystemInfo(): Promise<any> {
@@ -197,6 +200,26 @@ export class SystemAPI {
     } catch (error) {
       log.error('Failed to set launch-at-login', { enabled, error });
       throw createTauriCommandError('autostart_set', error, { enabled });
+    }
+  }
+
+  // ─── Window / Tray behavior ────────────────────────────────────────────────
+
+  /** Desktop only: immediately quit the application. */
+  async quitApp(): Promise<void> {
+    try {
+      await api.invoke('quit_app', { request: {} });
+    } catch (error) {
+      throw createTauriCommandError('quit_app', error);
+    }
+  }
+
+  /** Desktop only: hide the main window to the system tray. */
+  async minimizeToTray(): Promise<void> {
+    try {
+      await api.invoke('minimize_to_tray', { request: {} });
+    } catch (error) {
+      throw createTauriCommandError('minimize_to_tray', error);
     }
   }
 }

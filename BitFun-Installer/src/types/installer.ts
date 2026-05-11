@@ -30,7 +30,8 @@ export type ThemeId =
   | 'bitfun-china-style'
   | 'bitfun-china-night'
   | 'bitfun-cyber'
-  | 'bitfun-slate';
+  | 'bitfun-slate'
+  | 'bitfun-tokyo-night';
 
 /** Matches main app `themes.current` when following OS appearance. */
 export const SYSTEM_THEME_ID = 'system' as const;

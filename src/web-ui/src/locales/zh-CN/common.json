@@ -1042,5 +1042,11 @@
     "dialogFailedTitle": "BitFun 任务已中断",
     "dialogFailedWithSession": "“{{sessionTitle}}” 已异常停止，可以回到 BitFun 查看原因。",
     "dialogFailedFallback": "有一个 BitFun 会话已异常停止，可以回到应用查看原因。"
+  },
+  "closeDialog": {
+    "title": "关闭 BitFun",
+    "message": "请选择关闭操作：退出程序将完全停止运行，最小化到托盘可保持后台运行随时唤回。",
+    "quit": "退出程序",
+    "minimizeToTray": "最小化到托盘"
   }
 }

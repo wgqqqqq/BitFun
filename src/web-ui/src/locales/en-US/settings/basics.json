@@ -43,6 +43,10 @@
       "bitfun-slate": {
         "name": "Slate",
         "description": "Slate gray geometric theme - Deep immersion, high contrast grayscale aesthetics"
+      },
+      "bitfun-tokyo-night": {
+        "name": "Tokyo Night",
+        "description": "Popular Tokyo Night palette - Indigo night, blue and violet highlights"
       }
     },
     "fontSize": {
@@ -164,6 +168,25 @@
       "updated": "Default terminal updated",
       "saveFailed": "Failed to save configuration",
       "refreshed": "Available terminals list refreshed"
+    }
+  },
+  "windowBehavior": {
+    "sections": {
+      "title": "Window Behavior",
+      "hint": "What happens when the close button is clicked"
+    },
+    "closeButtonLabel": "Close button action",
+    "closeButtonDescription": "Default action when the window close button (×) is clicked.",
+    "options": {
+      "quit": "Quit",
+      "minimizeToTray": "Minimize to System Tray",
+      "ask": "Ask every time"
+    },
+    "messages": {
+      "loading": "Loading...",
+      "loadFailed": "Failed to read window behavior settings",
+      "saveFailed": "Failed to save window behavior settings",
+      "saved": "Window behavior settings saved"
     }
   },
   "notifications": {
