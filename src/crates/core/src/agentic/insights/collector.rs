@@ -449,6 +449,7 @@ fn rebuild_messages_from_turns(turns: &[DialogTurnData]) -> Vec<Message> {
                     arguments: ti.tool_call.input.clone(),
                     raw_arguments: None,
                     is_error: false,
+                    recovered_from_truncation: false,
                 })
                 .collect();
 

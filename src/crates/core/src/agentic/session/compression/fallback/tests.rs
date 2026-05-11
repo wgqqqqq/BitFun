@@ -29,6 +29,7 @@ fn clears_tool_results_from_compressed_history() {
             }),
             raw_arguments: None,
             is_error: false,
+            recovered_from_truncation: false,
         }],
     );
     let tool_result = Message::tool_result(ToolResult {
@@ -142,6 +143,7 @@ fn groups_consecutive_assistant_messages_under_single_role_header() {
                     }),
                     raw_arguments: None,
                     is_error: false,
+                    recovered_from_truncation: false,
                 }],
             ),
             Message::assistant_with_tools(
@@ -156,6 +158,7 @@ fn groups_consecutive_assistant_messages_under_single_role_header() {
                     }),
                     raw_arguments: None,
                     is_error: false,
+                    recovered_from_truncation: false,
                 }],
             ),
             Message::assistant("Updated the styling changes.".to_string()),

@@ -626,7 +626,7 @@ mod tests {
 
 // ============ Tool Calls and Results ============
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ToolCall {
     pub tool_id: String,
     pub tool_name: String,
@@ -635,7 +635,13 @@ pub struct ToolCall {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub raw_arguments: Option<String>,
     /// Record whether tool parameters are valid
+    #[serde(default)]
     pub is_error: bool,
+    /// True when the raw JSON arguments were truncated mid-stream and we
+    /// successfully repaired them. Downstream consumers can flag this to the
+    /// model so it understands the content may be incomplete.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub recovered_from_truncation: bool,
 }
 
 impl ToolCall {

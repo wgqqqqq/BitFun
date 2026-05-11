@@ -265,6 +265,7 @@ impl StreamContext {
             raw_arguments: (!finalized.raw_arguments.is_empty())
                 .then_some(finalized.raw_arguments.clone()),
             is_error: finalized.is_error,
+            recovered_from_truncation: finalized.recovered_from_truncation,
         });
     }
 

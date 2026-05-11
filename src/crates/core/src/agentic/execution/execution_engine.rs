@@ -2144,6 +2144,7 @@ mod tests {
                 arguments: json!({ "path": "README.md" }),
                 raw_arguments: None,
                 is_error: false,
+                recovered_from_truncation: false,
             }],
         );
 
@@ -2163,6 +2164,7 @@ mod tests {
                 arguments: json!({ "path": "README.md" }),
                 raw_arguments: None,
                 is_error: false,
+                recovered_from_truncation: false,
             }],
         );
         let tool_result = Message::tool_result(ToolResult {

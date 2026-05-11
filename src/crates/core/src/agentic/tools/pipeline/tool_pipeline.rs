@@ -566,6 +566,7 @@ impl ToolPipeline {
         let tool_name = task.tool_call.tool_name.clone();
         let tool_args = task.tool_call.arguments.clone();
         let tool_is_error = task.tool_call.is_error;
+        let recovered_from_truncation = task.tool_call.recovered_from_truncation;
         let queue_wait_ms = elapsed_ms_since(task.created_at);
         let mut confirmation_wait_ms = 0;
 
@@ -573,6 +574,13 @@ impl ToolPipeline {
             "Tool task details: tool_name={}, tool_id={}, queue_wait_ms={}",
             tool_name, tool_id, queue_wait_ms
         );
+
+        if recovered_from_truncation {
+            warn!(
+                "Tool '{}' arguments were recovered from a truncated stream (tool_id={}, session_id={}). Executing with patched arguments — content may be incomplete.",
+                tool_name, tool_id, task.context.session_id
+            );
+        }
 
         if tool_name.is_empty() || tool_is_error {
             let raw_arguments_preview = task
@@ -584,6 +592,11 @@ impl ToolPipeline {
                 "Missing valid tool name and arguments are invalid JSON.".to_string()
             } else if tool_name.is_empty() {
                 "Missing valid tool name.".to_string()
+            } else if recovered_from_truncation {
+                format!(
+                    "Tool arguments were truncated by the model (likely hit max_tokens). Refusing to execute a partial '{}' call. Increase max_tokens, split the work into smaller calls, or retry.",
+                    tool_name
+                )
             } else {
                 "Arguments are invalid JSON.".to_string()
             };
@@ -592,6 +605,7 @@ impl ToolPipeline {
             } else {
                 error_msg
             };
+
             self.state_manager
                 .update_state(
                     &tool_id,
@@ -901,6 +915,23 @@ impl ToolPipeline {
                 let duration_ms = elapsed_ms_u64(start_time);
                 let mut tool_result = tool_result;
                 tool_result.duration_ms = Some(duration_ms);
+
+                // The tool call succeeded with arguments that we patched
+                // because the model's output was truncated mid-stream. Tell
+                // the model so it can decide whether the partial write needs
+                // to be continued or regenerated.
+                if recovered_from_truncation {
+                    let original = tool_result.result_for_assistant.unwrap_or_default();
+                    let notice = format!(
+                        "[WARNING: tool arguments were truncated by the model (likely hit max_tokens) and were auto-repaired before this {} call executed. The written content stops at the truncation point and may be incomplete; verify the result and, if needed, continue with a follow-up call that appends the remaining content (do not rewrite the whole file from scratch). Original tool result follows.]\n\n",
+                        tool_name
+                    );
+                    tool_result.result_for_assistant = Some(if original.is_empty() {
+                        notice.trim_end().to_string()
+                    } else {
+                        format!("{notice}{original}")
+                    });
+                }
 
                 self.state_manager
                     .update_state(
@@ -1390,6 +1421,7 @@ mod tests {
                 arguments: json!({ "path": "src/main.rs" }),
                 raw_arguments: None,
                 is_error: false,
+                recovered_from_truncation: false,
             },
             ToolExecutionContext {
                 session_id: "session_1".to_string(),

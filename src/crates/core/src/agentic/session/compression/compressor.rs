@@ -757,6 +757,7 @@ mod tests {
                     }),
                     raw_arguments: None,
                     is_error: false,
+                    recovered_from_truncation: false,
                 }],
             ),
         ])

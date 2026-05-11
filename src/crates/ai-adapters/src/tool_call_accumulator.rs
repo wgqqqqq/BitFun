@@ -1,4 +1,4 @@
-use log::error;
+use log::{error, warn};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
@@ -53,6 +53,11 @@ pub struct FinalizedToolCall {
     pub raw_arguments: String,
     pub arguments: Value,
     pub is_error: bool,
+    /// True when the raw stream produced unparseable JSON (e.g. truncated by
+    /// `max_tokens`) and we successfully patched the trailing brackets/strings
+    /// to make it parse. The recovered call still executes, but downstream
+    /// consumers should warn the model that the content may be incomplete.
+    pub recovered_from_truncation: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,6 +83,100 @@ pub struct ToolCallDeltaOutcome {
 #[derive(Debug, Clone, Default)]
 pub struct PendingToolCalls {
     pending: BTreeMap<ToolCallStreamKey, PendingToolCall>,
+}
+
+/// Tools where executing a truncated tool call is **safe and meaningful** —
+/// the model intended to write content and a partial file is strictly more
+/// useful than a hard failure. For everything else (Bash, Edit, Task, ...) we
+/// surface the truncation as an error: a partial shell command or a partial
+/// `old_string`/`new_string` for Edit can change semantics destructively.
+fn is_truncation_safe_to_recover(tool_name: &str) -> bool {
+    matches!(tool_name, "Write" | "file_write" | "write_notebook")
+}
+
+/// Attempt to repair a JSON document that was truncated mid-stream (typically
+/// because the model hit `max_tokens`). Closes any open string literal and any
+/// unclosed `{`/`[` brackets in their correct nesting order. Returns `None`
+/// when the truncation occurs at a position where we would have to invent a
+/// missing value (e.g. trailing `,` or `:`) since blindly closing in those
+/// states would silently corrupt the semantics.
+fn repair_truncated_json(raw: &str) -> Option<String> {
+    let mut in_string = false;
+    let mut escape = false;
+    let mut stack: Vec<u8> = Vec::new();
+    let mut last_significant: Option<u8> = None;
+
+    for &b in raw.as_bytes() {
+        if escape {
+            escape = false;
+            continue;
+        }
+        if in_string {
+            match b {
+                b'\\' => escape = true,
+                b'"' => {
+                    in_string = false;
+                    last_significant = Some(b'"');
+                }
+                _ => {}
+            }
+            continue;
+        }
+        match b {
+            b'"' => {
+                in_string = true;
+                last_significant = Some(b'"');
+            }
+            b'{' => {
+                stack.push(b'{');
+                last_significant = Some(b'{');
+            }
+            b'[' => {
+                stack.push(b'[');
+                last_significant = Some(b'[');
+            }
+            b'}' => {
+                if stack.pop() != Some(b'{') {
+                    return None;
+                }
+                last_significant = Some(b'}');
+            }
+            b']' => {
+                if stack.pop() != Some(b'[') {
+                    return None;
+                }
+                last_significant = Some(b']');
+            }
+            b' ' | b'\t' | b'\n' | b'\r' => {}
+            other => last_significant = Some(other),
+        }
+    }
+
+    // Nothing to repair (parser failed for some other reason).
+    if !in_string && stack.is_empty() {
+        return None;
+    }
+
+    // Refuse to fabricate values when truncated mid-pair.
+    if !in_string {
+        if let Some(b',') | Some(b':') = last_significant {
+            return None;
+        }
+    }
+
+    let mut out = String::with_capacity(raw.len() + stack.len() + 1);
+    out.push_str(raw);
+    if in_string {
+        out.push('"');
+    }
+    while let Some(c) = stack.pop() {
+        out.push(match c {
+            b'{' => '}',
+            b'[' => ']',
+            _ => unreachable!(),
+        });
+    }
+    Some(out)
 }
 
 impl PendingToolCall {
@@ -141,25 +240,58 @@ impl PendingToolCall {
         let raw_arguments = std::mem::take(&mut self.raw_arguments);
         self.early_detected_emitted = false;
         let parsed_arguments = Self::parse_arguments(&tool_name, &raw_arguments);
-        let is_error = parsed_arguments.is_err();
 
-        if let Err(error) = &parsed_arguments {
-            error!(
-                "Tool call arguments parsing failed at boundary={}: tool_id={}, tool_name={}, error={}, raw_arguments={}",
-                boundary.as_str(),
-                tool_id,
-                tool_name,
-                error,
-                raw_arguments
-            );
-        }
+        let (arguments, is_error, recovered_from_truncation) = match parsed_arguments {
+            Ok(value) => (value, false, false),
+            Err(parse_err) => {
+                let repaired = repair_truncated_json(&raw_arguments)
+                    .and_then(|candidate| Self::parse_arguments(&tool_name, &candidate).ok());
+                match repaired {
+                    Some(value) if is_truncation_safe_to_recover(&tool_name) => {
+                        warn!(
+                            "Tool call arguments recovered from truncation at boundary={}: tool_id={}, tool_name={}, raw_len={}",
+                            boundary.as_str(),
+                            tool_id,
+                            tool_name,
+                            raw_arguments.len()
+                        );
+                        (value, false, true)
+                    }
+                    Some(_) => {
+                        // We *could* repair but the tool's semantics make
+                        // executing a partial call unsafe (Bash, Edit, ...).
+                        // Surface as an error so the user/model knows the
+                        // truncation happened and can retry sensibly.
+                        warn!(
+                            "Tool call arguments truncated at boundary={}: tool_id={}, tool_name={} — refusing to execute partial call (tool not in safe-recovery list)",
+                            boundary.as_str(),
+                            tool_id,
+                            tool_name
+                        );
+                        (json!({}), true, true)
+                    }
+                    None => {
+                        error!(
+                            "Tool call arguments parsing failed at boundary={}: tool_id={}, tool_name={}, error={}, raw_arguments={}",
+                            boundary.as_str(),
+                            tool_id,
+                            tool_name,
+                            parse_err,
+                            raw_arguments
+                        );
+                        (json!({}), true, false)
+                    }
+                }
+            }
+        };
 
         Some(FinalizedToolCall {
             tool_id,
             tool_name,
             raw_arguments,
-            arguments: parsed_arguments.unwrap_or_else(|_| json!({})),
+            arguments,
             is_error,
+            recovered_from_truncation,
         })
     }
 }
@@ -252,8 +384,8 @@ impl PendingToolCalls {
 #[cfg(test)]
 mod tests {
     use super::{
-        EarlyDetectedToolCall, PendingToolCall, PendingToolCalls, ToolCallBoundary,
-        ToolCallParamsChunk, ToolCallStreamKey,
+        repair_truncated_json, EarlyDetectedToolCall, PendingToolCall, PendingToolCalls,
+        ToolCallBoundary, ToolCallParamsChunk, ToolCallStreamKey,
     };
     use serde_json::json;
 
@@ -697,5 +829,111 @@ mod tests {
         assert!(empty_delta.finalized_previous.is_none());
         assert!(empty_delta.early_detected.is_none());
         assert!(empty_delta.params_partial.is_none());
+    }
+
+    // ------------------------------------------------------------------
+    // Truncation recovery tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn write_truncated_mid_content_string_is_recovered() {
+        // Reproduces the deep-research dump: the model hit max_tokens while
+        // streaming `content`, so the JSON ends inside the string literal
+        // with no closing `"` and no closing `}`.
+        let raw = "{\"file_path\": \"/tmp/report.md\", \"content\": \"# Report\\n\\nA long body that was cut";
+        let mut pending = PendingToolCall::default();
+        pending.start_new("call_1".to_string(), Some("Write".to_string()));
+        pending.append_arguments(raw);
+
+        let finalized = pending
+            .finalize(ToolCallBoundary::FinishReason)
+            .expect("finalized tool");
+
+        assert!(!finalized.is_error, "Write recovery should succeed");
+        assert!(finalized.recovered_from_truncation);
+        assert_eq!(
+            finalized.arguments,
+            json!({
+                "file_path": "/tmp/report.md",
+                "content": "# Report\n\nA long body that was cut"
+            })
+        );
+    }
+
+    #[test]
+    fn write_truncated_with_chinese_multibyte_is_recovered() {
+        let raw = "{\"file_path\": \"/tmp/r.md\", \"content\": \"深度研究报告：未完";
+        let mut pending = PendingToolCall::default();
+        pending.start_new("call_1".to_string(), Some("Write".to_string()));
+        pending.append_arguments(raw);
+
+        let finalized = pending
+            .finalize(ToolCallBoundary::FinishReason)
+            .expect("finalized tool");
+
+        assert!(!finalized.is_error);
+        assert!(finalized.recovered_from_truncation);
+        assert_eq!(
+            finalized.arguments["content"].as_str(),
+            Some("深度研究报告：未完")
+        );
+    }
+
+    #[test]
+    fn bash_truncated_mid_command_still_errors_but_records_truncation() {
+        let raw = r#"{"command": "git log --since=\"2026-05-02\" --on"#;
+        let mut pending = PendingToolCall::default();
+        pending.start_new("call_1".to_string(), Some("Bash".to_string()));
+        pending.append_arguments(raw);
+
+        let finalized = pending
+            .finalize(ToolCallBoundary::FinishReason)
+            .expect("finalized tool");
+
+        // We never execute a partial shell command.
+        assert!(finalized.is_error);
+        assert_eq!(finalized.arguments, json!({}));
+        // But the truncation is recorded so the surface error message and
+        // diagnostic dump can distinguish "truncated" from "model emitted
+        // bad JSON".
+        assert!(finalized.recovered_from_truncation);
+    }
+
+    #[test]
+    fn repair_refuses_truncation_after_colon() {
+        // We can't invent the missing value, so this must not auto-repair.
+        assert!(repair_truncated_json(r#"{"a": 1, "b":"#).is_none());
+    }
+
+    #[test]
+    fn repair_refuses_truncation_after_comma() {
+        assert!(repair_truncated_json(r#"{"a": 1,"#).is_none());
+    }
+
+    #[test]
+    fn repair_returns_none_for_already_valid_json() {
+        // Already balanced — repair has nothing to do (parser would have
+        // succeeded anyway).
+        assert!(repair_truncated_json(r#"{"a": 1}"#).is_none());
+    }
+
+    #[test]
+    fn repair_closes_nested_brackets_in_correct_order() {
+        let raw = r#"{"a": [1, 2, {"b": "incomplete"#;
+        let repaired = repair_truncated_json(raw).expect("repaired");
+        let parsed: serde_json::Value =
+            serde_json::from_str(&repaired).expect("repaired is valid JSON");
+        assert_eq!(parsed, json!({"a": [1, 2, {"b": "incomplete"}]}));
+    }
+
+    #[test]
+    fn repair_preserves_escaped_quote_inside_truncated_string() {
+        let raw = r#"{"content": "she said \"hello\" and then"#;
+        let repaired = repair_truncated_json(raw).expect("repaired");
+        let parsed: serde_json::Value = serde_json::from_str(&repaired).expect("valid JSON");
+        assert_eq!(
+            parsed["content"].as_str(),
+            Some("she said \"hello\" and then")
+        );
     }
 }
