@@ -302,7 +302,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
     t,
   ]);
 
-  // Save in-progress conversations before the native window is closed/hidden.
+  // When the user hides the main window (tray / macOS dock), the app keeps running.
+  // `saveAllInProgressTurns` settles in-flight dialog turns for disk persistence, which
+  // clears Agent companion desktop bubbles until the next chat update—so only run it
+  // immediately before we actually exit the process.
   React.useEffect(() => {
     let unlistenFn: (() => void) | null = null;
     let handlingClose = false;
@@ -312,22 +315,23 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
 
       try {
         // Both macOS and Windows/Linux: Rust intercepts the native close request
-        // and emits this event. We save turns then decide what to do.
+        // and emits this event. We decide hide vs quit; persist interrupted turns only on quit.
         const [{ listen }, { invoke }] = await Promise.all([
           import('@tauri-apps/api/event'),
           import('@tauri-apps/api/core'),
         ]);
 
+        const persistInterruptedTurnsForExit = async () => {
+          try {
+            await FlowChatManager.getInstance().saveAllInProgressTurns();
+          } catch (error) {
+            log.error('Failed to save conversations before quit', error);
+          }
+        };
+
         unlistenFn = await listen('bitfun_main_window_close_requested', async () => {
           if (handlingClose) return;
           handlingClose = true;
-
-          try {
-            const flowChatManager = FlowChatManager.getInstance();
-            await flowChatManager.saveAllInProgressTurns();
-          } catch (error) {
-            log.error('Failed to save conversations before close', error);
-          }
 
           if (isMacOS) {
             // macOS always hides to keep the app alive in the dock.
@@ -360,17 +364,22 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
                 showCancel: true,
               });
               if (shouldQuit) {
+                await persistInterruptedTurnsForExit();
                 await systemAPI.quitApp();
               } else {
                 await systemAPI.minimizeToTray();
               }
             } else {
               // quit
+              await persistInterruptedTurnsForExit();
               await systemAPI.quitApp();
             }
           } catch (error) {
             log.error('Failed to handle close request', { behavior, error });
-            try { await systemAPI.quitApp(); } catch { /* ignore */ }
+            try {
+              await persistInterruptedTurnsForExit();
+              await systemAPI.quitApp();
+            } catch { /* ignore */ }
           } finally {
             handlingClose = false;
           }

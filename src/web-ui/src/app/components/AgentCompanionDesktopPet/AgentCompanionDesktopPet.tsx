@@ -22,6 +22,8 @@ const BUBBLE_MIN_WIDTH = 132;
 const BUBBLE_MAX_WIDTH = 252;
 const WINDOW_EDGE_BUFFER = 4;
 const POINTER_HOVER_POLL_INTERVAL_MS = 120;
+/** Clicks shorter/smaller than this use `show_main_window`; beyond it we start a native drag. */
+const PET_DRAG_THRESHOLD_PX = 8;
 
 export const AgentCompanionDesktopPet: React.FC = () => {
   const { t } = useTranslation('flow-chat');
@@ -37,6 +39,12 @@ export const AgentCompanionDesktopPet: React.FC = () => {
   const bubblesRef = useRef<HTMLDivElement>(null);
   const lastActivitySequenceRef = useRef(0);
   const lastActivityEmittedAtRef = useRef(0);
+  const petPointerSessionRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    dragStarted: boolean;
+  } | null>(null);
   const displayTasks = [...tasks].reverse();
   const activePetSize = pet && petFrameSize
     ? petFrameSize
@@ -237,11 +245,56 @@ export const AgentCompanionDesktopPet: React.FC = () => {
     };
   }, []);
 
-  const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+  const showMainWindowFromPet = useCallback(async () => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('show_main_window');
+    } catch (error) {
+      log.warn('Failed to show main window from Agent companion pet', error);
+    }
+  }, []);
+
+  const clearPetPointerSession = (target: HTMLDivElement, pointerId: number) => {
+    const session = petPointerSessionRef.current;
+    if (!session || session.pointerId !== pointerId) {
+      return;
+    }
+    petPointerSessionRef.current = null;
+    try {
+      target.releasePointerCapture(pointerId);
+    } catch {
+      /* already released */
+    }
+  };
+
+  const onPetPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) {
       return;
     }
+    petPointerSessionRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      dragStarted: false,
+    };
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      /* ignore */
+    }
+  };
 
+  const onPetPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const session = petPointerSessionRef.current;
+    if (!session || event.pointerId !== session.pointerId || session.dragStarted) {
+      return;
+    }
+    const dx = event.clientX - session.startX;
+    const dy = event.clientY - session.startY;
+    if (dx * dx + dy * dy < PET_DRAG_THRESHOLD_PX * PET_DRAG_THRESHOLD_PX) {
+      return;
+    }
+    session.dragStarted = true;
     event.preventDefault();
     setIsDraggingPet(true);
     void getCurrentWindow().startDragging()
@@ -251,6 +304,26 @@ export const AgentCompanionDesktopPet: React.FC = () => {
       .finally(() => {
         setIsDraggingPet(false);
       });
+  };
+
+  const onPetPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const session = petPointerSessionRef.current;
+    if (!session || event.pointerId !== session.pointerId) {
+      return;
+    }
+    const shouldShowMain = !session.dragStarted;
+    clearPetPointerSession(event.currentTarget, event.pointerId);
+    if (shouldShowMain) {
+      void showMainWindowFromPet();
+    }
+  };
+
+  const onPetPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    const session = petPointerSessionRef.current;
+    if (!session || event.pointerId !== session.pointerId) {
+      return;
+    }
+    clearPetPointerSession(event.currentTarget, event.pointerId);
   };
 
   const displayMood: ChatInputPixelPetMood = isDraggingPet
@@ -322,7 +395,10 @@ export const AgentCompanionDesktopPet: React.FC = () => {
           className="bitfun-agent-companion-window__pet-hitbox"
           onPointerEnter={() => setIsHoveringPet(true)}
           onPointerLeave={() => setIsHoveringPet(false)}
-          onPointerDown={startDrag}
+          onPointerDown={onPetPointerDown}
+          onPointerMove={onPetPointerMove}
+          onPointerUp={onPetPointerUp}
+          onPointerCancel={onPetPointerCancel}
         >
           <ChatInputPixelPet
             mood={displayMood}
