@@ -1854,7 +1854,10 @@ mod tests {
         assert_eq!(actions[0].label, "Run tests");
 
         let serialized = serde_json::to_value(&config).expect("config should serialize");
-        assert_eq!(serialized["app"]["ai_experience"]["quick_actions"][0]["id"], "custom_1");
+        assert_eq!(
+            serialized["app"]["ai_experience"]["quick_actions"][0]["id"],
+            "custom_1"
+        );
     }
 
     #[test]

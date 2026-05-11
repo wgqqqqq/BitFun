@@ -37,6 +37,11 @@ export interface ReplaceModeSkillSelectionParams {
   workspacePath?: string;
 }
 
+export interface ResetModeSkillSelectionParams {
+  modeId: string;
+  workspacePath?: string;
+}
+
 export interface AddSkillParams {
   sourcePath: string;
   level: SkillLevel;
@@ -301,6 +306,22 @@ export class ConfigAPI {
       throw createTauriCommandError('replace_mode_skill_selection', error, {
         modeId,
         enabledSkillKeys,
+        workspacePath,
+      });
+    }
+  }
+
+  async resetModeSkillSelection({
+    modeId,
+    workspacePath,
+  }: ResetModeSkillSelectionParams): Promise<string> {
+    try {
+      return await api.invoke('reset_mode_skill_selection', {
+        request: { modeId, workspacePath },
+      });
+    } catch (error) {
+      throw createTauriCommandError('reset_mode_skill_selection', error, {
+        modeId,
         workspacePath,
       });
     }

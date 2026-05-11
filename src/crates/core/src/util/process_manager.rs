@@ -4,9 +4,9 @@ use std::io;
 use std::process::Command;
 use std::sync::LazyLock;
 use tokio::process::{Child, Command as TokioCommand};
-use tokio::time::Duration;
 #[cfg(unix)]
 use tokio::time::timeout;
+use tokio::time::Duration;
 
 #[cfg(windows)]
 use log::warn;

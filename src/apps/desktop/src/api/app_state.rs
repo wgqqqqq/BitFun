@@ -10,9 +10,7 @@ use bitfun_core::miniapp::{
 use bitfun_core::service::remote_ssh::{
     init_remote_workspace_manager, RemoteFileService, RemoteTerminalManager, SSHConnectionManager,
 };
-use bitfun_core::service::{
-    announcement, config, filesystem, mcp, search, token_usage, workspace,
-};
+use bitfun_core::service::{announcement, config, filesystem, mcp, search, token_usage, workspace};
 use bitfun_core::util::errors::*;
 
 use serde::{Deserialize, Serialize};

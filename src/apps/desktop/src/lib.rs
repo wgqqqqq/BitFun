@@ -675,6 +675,7 @@ pub async fn run() {
             download_skill_market,
             set_mode_skill_disabled,
             replace_mode_skill_selection,
+            reset_mode_skill_selection,
             validate_skill_path,
             add_skill,
             delete_skill,

@@ -70,8 +70,8 @@ const DISABLE_OFFICE: SkillPolicyRule = SkillPolicyRule {
     effect: PolicyEffect::Disable,
 };
 
-const DISABLE_TEAM: SkillPolicyRule = SkillPolicyRule {
-    selector: SkillSelector::Group(BuiltinSkillGroup::Team),
+const DISABLE_GSTACK: SkillPolicyRule = SkillPolicyRule {
+    selector: SkillSelector::Group(BuiltinSkillGroup::Gstack),
     effect: PolicyEffect::Disable,
 };
 
@@ -101,7 +101,7 @@ const DEBUG_POLICY: ModeSkillPolicy = PLAN_POLICY;
 
 const AGENTIC_POLICY: ModeSkillPolicy = ModeSkillPolicy {
     builtin_default: PolicyEffect::Enable,
-    rules: &[DISABLE_OFFICE, DISABLE_TEAM],
+    rules: &[DISABLE_OFFICE, DISABLE_GSTACK],
 };
 
 const COWORK_POLICY: ModeSkillPolicy = ModeSkillPolicy {

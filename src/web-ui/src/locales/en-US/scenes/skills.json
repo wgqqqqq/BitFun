@@ -51,7 +51,7 @@
     "builtin": "Core skills shipped with the app. They cannot be deleted.",
     "user": "User-level skills installed globally for your account.",
     "project": "Project-level skills for the current workspace.",
-    "suite": "Curated skill bundles that package related skills together (coming soon)."
+    "suite": "Built-in skill suites grouped by mode, with one-click visibility controls."
   },
   "section": {
     "user": {
@@ -98,6 +98,64 @@
     "detail": {
       "installsLabel": "Installs",
       "linkLabel": "Link"
+    }
+  },
+  "suite": {
+    "title": "Built-in Skill Suites",
+    "subtitle": "Pick a mode to manage built-in skill groups. Group actions apply immediately, while individual skill edits can be saved per group.",
+    "modeLabel": "Mode",
+    "refreshTooltip": "Refresh current mode",
+    "refreshAction": "Refresh",
+    "loading": "Loading built-in skill suites...",
+    "empty": "No built-in skills are available.",
+    "groups": {
+      "office": "Office",
+      "computerUse": "Computer Use",
+      "meta": "Meta",
+      "gstack": "gstack",
+      "other": "Other"
+    },
+    "modes": {
+      "agentic": "agentic",
+      "cowork": "Cowork",
+      "claw": "Claw",
+      "team": "Team"
+    },
+    "modeDescriptions": {
+      "agentic": "Coding-first default profile",
+      "cowork": "Office workflow profile",
+      "claw": "Assistant mode",
+      "team": "Team mode"
+    },
+    "modeActions": {
+      "reset": "Reset {{mode}}",
+      "resetShort": "Reset"
+    },
+    "groupActions": {
+      "save": "Save",
+      "enableGroup": "Enable group",
+      "disableGroup": "Disable group"
+    },
+    "resetDialog": {
+      "title": "Reset {{mode}}?",
+      "message": "This will restore the mode's skill visibility to the default state.",
+      "messageWithUnsaved": "This will restore the mode's skill visibility to the default state and discard the current unsaved edits.",
+      "confirm": "Reset",
+      "cancel": "Cancel"
+    },
+    "groupState": {
+      "enabled": "Visible",
+      "disabled": "Hidden",
+      "partial": "Partial"
+    },
+    "groupCount": "{{total}} skills",
+    "messages": {
+      "saveSuccess": "Updated {{mode}} suite visibility",
+      "saveFailed": "Failed to update suite: {{error}}",
+      "resetSuccess": "Restored {{mode}} suite defaults",
+      "resetFailed": "Failed to reset suite: {{error}}",
+      "refreshFailed": "Failed to refresh suite: {{error}}",
+      "saveFirst": "Save the current skill edits first."
     }
   },
   "form": {

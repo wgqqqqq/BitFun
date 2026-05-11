@@ -149,11 +149,7 @@ async fn collect_recent_sessions(app: &AppHandle, limit: usize) -> Vec<TraySessi
             if session.session_kind != SessionKind::Standard {
                 continue;
             }
-            let label = session_label(
-                &session.session_name,
-                &session.session_id,
-                &workspace_name,
-            );
+            let label = session_label(&session.session_name, &session.session_id, &workspace_name);
             all.push((
                 session.last_active_at,
                 TraySessionItem {
@@ -202,14 +198,13 @@ async fn rebuild_tray_menu(app: &AppHandle) {
 
     // ── Session items ─────────────────────────────────────────────────────────
     if sessions.is_empty() {
-        let no_sessions =
-            match MenuItemBuilder::with_id("no_sessions", s.no_recent_sessions)
-                .enabled(false)
-                .build(app)
-            {
-                Ok(i) => i,
-                Err(_) => return,
-            };
+        let no_sessions = match MenuItemBuilder::with_id("no_sessions", s.no_recent_sessions)
+            .enabled(false)
+            .build(app)
+        {
+            Ok(i) => i,
+            Err(_) => return,
+        };
         builder = builder.item(&no_sessions);
     } else {
         for item in &sessions {
@@ -257,9 +252,10 @@ async fn rebuild_tray_menu(app: &AppHandle) {
 pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Build the initial (placeholder) menu; it will be replaced by rebuild_tray_menu
     // shortly after startup once the locale and sessions are known.
-    let no_sessions_item = MenuItemBuilder::with_id("no_sessions", STRINGS_EN_US.no_recent_sessions)
-        .enabled(false)
-        .build(app)?;
+    let no_sessions_item =
+        MenuItemBuilder::with_id("no_sessions", STRINGS_EN_US.no_recent_sessions)
+            .enabled(false)
+            .build(app)?;
     let show_item = MenuItemBuilder::with_id("show_window", STRINGS_EN_US.show_app).build(app)?;
     let quit_item = MenuItemBuilder::with_id("quit", STRINGS_EN_US.quit_app).build(app)?;
 

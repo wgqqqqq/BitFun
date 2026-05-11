@@ -176,7 +176,7 @@ export function useInstalledSkills({ searchQuery, activeFilter }: UseInstalledSk
       } else if (activeFilter === 'builtin') {
         matchesFilter = skill.isBuiltin;
       } else if (activeFilter === 'suite') {
-        matchesFilter = false;
+        matchesFilter = skill.isBuiltin;
       }
 
       const matchesQuery = !normalizedQuery || [
@@ -193,7 +193,7 @@ export function useInstalledSkills({ searchQuery, activeFilter }: UseInstalledSk
     builtin: skills.filter((skill) => skill.isBuiltin).length,
     user: skills.filter((skill) => skill.level === 'user' && !skill.isBuiltin).length,
     project: skills.filter((skill) => skill.level === 'project' && !skill.isBuiltin).length,
-    suite: 0,
+    suite: skills.filter((skill) => skill.isBuiltin).length,
   }), [skills]);
 
   return {

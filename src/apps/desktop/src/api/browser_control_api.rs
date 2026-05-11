@@ -119,7 +119,11 @@ pub async fn browser_control_get_status(
         let pages = CdpClient::list_pages(port)
             .await
             .ok()
-            .map(|p| p.iter().filter(|t| t.page_type.as_deref() == Some("page")).count())
+            .map(|p| {
+                p.iter()
+                    .filter(|t| t.page_type.as_deref() == Some("page"))
+                    .count()
+            })
             .unwrap_or(0);
         (ver, pages, kind)
     } else {

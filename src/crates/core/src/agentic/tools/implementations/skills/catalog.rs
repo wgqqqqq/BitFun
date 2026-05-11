@@ -35,7 +35,7 @@ pub enum BuiltinSkillGroup {
     Office,
     Meta,
     ComputerUse,
-    Team,
+    Gstack,
 }
 
 impl BuiltinSkillGroup {
@@ -44,7 +44,7 @@ impl BuiltinSkillGroup {
             Self::Office => "office",
             Self::Meta => "meta",
             Self::ComputerUse => "computer-use",
-            Self::Team => "team",
+            Self::Gstack => "gstack",
         }
     }
 }
@@ -75,77 +75,77 @@ const BUILTIN_SKILL_SPECS: &[BuiltinSkillSpec] = &[
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackAutoplan,
         dir_name: "gstack-autoplan",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackCso,
         dir_name: "gstack-cso",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackDesignConsultation,
         dir_name: "gstack-design-consultation",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackDesignReview,
         dir_name: "gstack-design-review",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackDocumentRelease,
         dir_name: "gstack-document-release",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackInvestigate,
         dir_name: "gstack-investigate",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackOfficeHours,
         dir_name: "gstack-office-hours",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackPlanCeoReview,
         dir_name: "gstack-plan-ceo-review",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackPlanDesignReview,
         dir_name: "gstack-plan-design-review",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackPlanEngReview,
         dir_name: "gstack-plan-eng-review",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackQa,
         dir_name: "gstack-qa",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackQaOnly,
         dir_name: "gstack-qa-only",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackRetro,
         dir_name: "gstack-retro",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackReview,
         dir_name: "gstack-review",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::GstackShip,
         dir_name: "gstack-ship",
-        group: BuiltinSkillGroup::Team,
+        group: BuiltinSkillGroup::Gstack,
     },
     BuiltinSkillSpec {
         id: BuiltinSkillId::Pdf,
@@ -201,7 +201,7 @@ mod tests {
             builtin_skill_group_key("agent-browser"),
             Some("computer-use")
         );
-        assert_eq!(builtin_skill_group_key("gstack-review"), Some("team"));
+        assert_eq!(builtin_skill_group_key("gstack-review"), Some("gstack"));
         assert_eq!(builtin_skill_group("unknown-skill"), None);
     }
 

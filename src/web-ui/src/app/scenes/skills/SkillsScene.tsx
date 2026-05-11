@@ -31,6 +31,7 @@ import { getCardGradient } from '@/shared/utils/cardGradients';
 import { useInstalledSkills } from './hooks/useInstalledSkills';
 import { useSkillMarket } from './hooks/useSkillMarket';
 import SkillCard from './components/SkillCard';
+import SkillsSuiteView from './components/SkillsSuiteView';
 import './SkillsScene.scss';
 import { useSkillsSceneStore, type InstalledFilter } from './skillsSceneStore';
 import { useGallerySceneAutoRefresh } from '@/app/hooks/useGallerySceneAutoRefresh';
@@ -216,188 +217,194 @@ const SkillsScene: React.FC = () => {
             </aside>
 
             <div className="skills-main">
-              <div className="skills-main__toolbar">
-                <Search
-                  className="skills-main__toolbar-search"
-                  value={installedSearch}
-                  onChange={setInstalledSearch}
-                  onClear={() => setInstalledSearch('')}
-                  placeholder={t('toolbar.searchPlaceholder')}
-                  size="small"
-                  clearable
-                />
-                <button
-                  type="button"
-                  className={`skills-main__chip-btn${hideDuplicates ? ' is-active' : ''}`}
-                  onClick={() => setHideDuplicates(!hideDuplicates)}
-                >
-                  <Filter size={13} />
-                  <span>{t('toolbar.hideDuplicates')}</span>
-                </button>
-                <button type="button" className="skills-main__add-btn" onClick={toggleAddForm}>
-                  <Plus size={13} />
-                  <span>{t('toolbar.addTooltip')}</span>
-                </button>
-              </div>
-
-              {installed.loading && (
-                <div className="skills-main__loading" aria-busy="true" aria-label={t('list.loading')}>
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <div
-                      key={`ins-sk-${i}`}
-                      className="skills-card-skeleton"
-                      style={{ '--card-index': i } as React.CSSProperties}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {!installed.loading && installed.error && (
-                <div className="skills-main__empty skills-main__empty--error">
-                  <Package size={28} strokeWidth={1.2} />
-                  <span>{installed.error}</span>
-                </div>
-              )}
-
-              {!installed.loading && !installed.error && installedFiltered.length === 0 && (
-                <div className="skills-main__empty">
-                  <Package size={28} strokeWidth={1.2} />
-                  <span>
-                    {installed.skills.length === 0
-                      ? t('list.empty.noSkills')
-                      : t('list.empty.noMatch')}
-                  </span>
-                </div>
-              )}
-
-              {!installed.loading && !installed.error && (
+              {installedFilter === 'suite' ? (
+                <SkillsSuiteView />
+              ) : (
                 <>
-                  <div className="skills-main__grid">
-                    {pagedInstalledSkills.map((skill, index) => (
-                      <div
-                        key={skill.key}
-                        className={[
-                          'skills-card',
-                          skill.isShadowed && 'is-shadowed',
-                        ].filter(Boolean).join(' ')}
-                        style={{ '--card-index': index } as React.CSSProperties}
-                        onClick={() => setSelectedDetail({ type: 'installed', skill })}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            setSelectedDetail({ type: 'installed', skill });
-                          }
-                        }}
-                        aria-label={skill.name}
-                      >
-                        <div className="skills-card__top">
-                          <div className="skills-card__icon">
-                            <Puzzle size={18} strokeWidth={1.6} />
-                          </div>
-                          <div className="skills-card__info">
-                            <span className="skills-card__name">{skill.name}</span>
-                            {skill.description?.trim() && (
-                              <span className="skills-card__desc">{skill.description}</span>
-                            )}
-                          </div>
-                          {skill.isBuiltin && (
-                            <Badge variant="accent">
-                              <ShieldCheck size={11} />
-                              {t('list.item.builtin')}
-                            </Badge>
-                          )}
-                        </div>
-
-                        <div className="skills-card__meta">
-                          {skill.isShadowed && (
-                            <span title={t('list.item.shadowedTooltip')}>
-                              <Badge variant="warning">
-                                <ShieldAlert size={11} />
-                                {t('list.item.shadowed')}
-                              </Badge>
-                            </span>
-                          )}
-                          <Badge
-                            variant={skill.level === 'user' ? 'info' : 'purple'}
-                          >
-                            {skill.level === 'user'
-                              ? <User size={11} />
-                              : <FolderOpen size={11} />}
-                            {skill.level === 'user' ? t('list.item.user') : t('list.item.project')}
-                          </Badge>
-                          {skill.path && (
-                            <button
-                              type="button"
-                              className="skills-card__path"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRevealSkillPath(skill.path);
-                              }}
-                              title={skill.path}
-                            >
-                              {skill.path}
-                            </button>
-                          )}
-                        </div>
-
-                        <div
-                          className="skills-card__actions"
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => e.stopPropagation()}
-                        >
-                          <Button
-                            variant="ghost"
-                            size="small"
-                            onClick={() => setSelectedDetail({ type: 'installed', skill })}
-                          >
-                            <span>{t('list.item.detail')}</span>
-                            <ArrowRight size={12} />
-                          </Button>
-                          {!skill.isBuiltin && (
-                            <button
-                              type="button"
-                              className="skills-card__delete"
-                              onClick={() => setDeleteTarget(skill)}
-                              aria-label={t('list.item.deleteTooltip')}
-                              title={t('list.item.deleteTooltip')}
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                  <div className="skills-main__toolbar">
+                    <Search
+                      className="skills-main__toolbar-search"
+                      value={installedSearch}
+                      onChange={setInstalledSearch}
+                      onClear={() => setInstalledSearch('')}
+                      placeholder={t('toolbar.searchPlaceholder')}
+                      size="small"
+                      clearable
+                    />
+                    <button
+                      type="button"
+                      className={`skills-main__chip-btn${hideDuplicates ? ' is-active' : ''}`}
+                      onClick={() => setHideDuplicates(!hideDuplicates)}
+                    >
+                      <Filter size={13} />
+                      <span>{t('toolbar.hideDuplicates')}</span>
+                    </button>
+                    <button type="button" className="skills-main__add-btn" onClick={toggleAddForm}>
+                      <Plus size={13} />
+                      <span>{t('toolbar.addTooltip')}</span>
+                    </button>
                   </div>
 
-                  {installedFiltered.length > 0 && installedTotalPages > 1 && (
-                    <div className="skills-installed__pagination">
-                      <button
-                        type="button"
-                        className="skills-installed__page-btn"
-                        onClick={() => setInstalledListPage((p) => Math.max(0, p - 1))}
-                        disabled={currentInstalledPage === 0}
-                        aria-label={t('market.pagination.prev')}
-                      >
-                        <ChevronLeft size={14} />
-                      </button>
-                      <span className="skills-installed__page-info">
-                        {t('market.pagination.info', {
-                          current: currentInstalledPage + 1,
-                          total: installedTotalPages,
-                        })}
-                      </span>
-                      <button
-                        type="button"
-                        className="skills-installed__page-btn"
-                        onClick={() => setInstalledListPage((p) => Math.min(installedTotalPages - 1, p + 1))}
-                        disabled={currentInstalledPage >= installedTotalPages - 1}
-                        aria-label={t('market.pagination.next')}
-                      >
-                        <ChevronRight size={14} />
-                      </button>
+                  {installed.loading && (
+                    <div className="skills-main__loading" aria-busy="true" aria-label={t('list.loading')}>
+                      {Array.from({ length: 8 }).map((_, i) => (
+                        <div
+                          key={`ins-sk-${i}`}
+                          className="skills-card-skeleton"
+                          style={{ '--card-index': i } as React.CSSProperties}
+                        />
+                      ))}
                     </div>
+                  )}
+
+                  {!installed.loading && installed.error && (
+                    <div className="skills-main__empty skills-main__empty--error">
+                      <Package size={28} strokeWidth={1.2} />
+                      <span>{installed.error}</span>
+                    </div>
+                  )}
+
+                  {!installed.loading && !installed.error && installedFiltered.length === 0 && (
+                    <div className="skills-main__empty">
+                      <Package size={28} strokeWidth={1.2} />
+                      <span>
+                        {installed.skills.length === 0
+                          ? t('list.empty.noSkills')
+                          : t('list.empty.noMatch')}
+                      </span>
+                    </div>
+                  )}
+
+                  {!installed.loading && !installed.error && (
+                    <>
+                      <div className="skills-main__grid">
+                        {pagedInstalledSkills.map((skill, index) => (
+                          <div
+                            key={skill.key}
+                            className={[
+                              'skills-card',
+                              skill.isShadowed && 'is-shadowed',
+                            ].filter(Boolean).join(' ')}
+                            style={{ '--card-index': index } as React.CSSProperties}
+                            onClick={() => setSelectedDetail({ type: 'installed', skill })}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setSelectedDetail({ type: 'installed', skill });
+                              }
+                            }}
+                            aria-label={skill.name}
+                          >
+                            <div className="skills-card__top">
+                              <div className="skills-card__icon">
+                                <Puzzle size={18} strokeWidth={1.6} />
+                              </div>
+                              <div className="skills-card__info">
+                                <span className="skills-card__name">{skill.name}</span>
+                                {skill.description?.trim() && (
+                                  <span className="skills-card__desc">{skill.description}</span>
+                                )}
+                              </div>
+                              {skill.isBuiltin && (
+                                <Badge variant="accent">
+                                  <ShieldCheck size={11} />
+                                  {t('list.item.builtin')}
+                                </Badge>
+                              )}
+                            </div>
+
+                            <div className="skills-card__meta">
+                              {skill.isShadowed && (
+                                <span title={t('list.item.shadowedTooltip')}>
+                                  <Badge variant="warning">
+                                    <ShieldAlert size={11} />
+                                    {t('list.item.shadowed')}
+                                  </Badge>
+                                </span>
+                              )}
+                              <Badge
+                                variant={skill.level === 'user' ? 'info' : 'purple'}
+                              >
+                                {skill.level === 'user'
+                                  ? <User size={11} />
+                                  : <FolderOpen size={11} />}
+                                {skill.level === 'user' ? t('list.item.user') : t('list.item.project')}
+                              </Badge>
+                              {skill.path && (
+                                <button
+                                  type="button"
+                                  className="skills-card__path"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRevealSkillPath(skill.path);
+                                  }}
+                                  title={skill.path}
+                                >
+                                  {skill.path}
+                                </button>
+                              )}
+                            </div>
+
+                            <div
+                              className="skills-card__actions"
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                            >
+                              <Button
+                                variant="ghost"
+                                size="small"
+                                onClick={() => setSelectedDetail({ type: 'installed', skill })}
+                              >
+                                <span>{t('list.item.detail')}</span>
+                                <ArrowRight size={12} />
+                              </Button>
+                              {!skill.isBuiltin && (
+                                <button
+                                  type="button"
+                                  className="skills-card__delete"
+                                  onClick={() => setDeleteTarget(skill)}
+                                  aria-label={t('list.item.deleteTooltip')}
+                                  title={t('list.item.deleteTooltip')}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {installedFiltered.length > 0 && installedTotalPages > 1 && (
+                        <div className="skills-installed__pagination">
+                          <button
+                            type="button"
+                            className="skills-installed__page-btn"
+                            onClick={() => setInstalledListPage((p) => Math.max(0, p - 1))}
+                            disabled={currentInstalledPage === 0}
+                            aria-label={t('market.pagination.prev')}
+                          >
+                            <ChevronLeft size={14} />
+                          </button>
+                          <span className="skills-installed__page-info">
+                            {t('market.pagination.info', {
+                              current: currentInstalledPage + 1,
+                              total: installedTotalPages,
+                            })}
+                          </span>
+                          <button
+                            type="button"
+                            className="skills-installed__page-btn"
+                            onClick={() => setInstalledListPage((p) => Math.min(installedTotalPages - 1, p + 1))}
+                            disabled={currentInstalledPage >= installedTotalPages - 1}
+                            aria-label={t('market.pagination.next')}
+                          >
+                            <ChevronRight size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </>
               )}

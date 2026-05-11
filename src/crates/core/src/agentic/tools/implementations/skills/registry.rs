@@ -599,7 +599,7 @@ impl SkillRegistry {
 
         if info.level == SkillLocation::User
             && info.is_builtin
-            && info.group_key.as_deref() == Some("team")
+            && info.group_key.as_deref() == Some("gstack")
             && !resolve_skill_default_enabled_for_mode(&info, mode_id)
         {
             return Ok(info);
