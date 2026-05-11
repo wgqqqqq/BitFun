@@ -26,7 +26,7 @@ use bitfun_core::util::errors::{BitFunError, BitFunResult};
 use enigo::{Axis, Button, Coordinate, Direction, Enigo, Key, Keyboard, Mouse, Settings};
 use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, Rgb, RgbImage};
-use log::{debug, info, warn};
+use log::{debug, warn};
 use resvg::tiny_skia::{Pixmap, Transform};
 use resvg::usvg;
 use screenshots::display_info::DisplayInfo;
@@ -3718,7 +3718,7 @@ tell application "System Events" to get unix id of first process whose frontmost
         {
             let pid = resolve_pid_macos(self, &params.app).await?;
             let self_pid = std::process::id() as i32;
-            info!(
+            log::info!(
                 target: "computer_use::app_click",
                 "app_click.enter pid={} self_pid={} same_process={} target={:?} button={} click_count={} modifier_keys={:?}",
                 pid,
@@ -3894,7 +3894,7 @@ tell application "System Events" to get unix id of first process whose frontmost
                     _ => crate::computer_use::macos_bg_input::BgMouseButton::Left,
                 };
                 let cnt = params.click_count.max(1) as u32;
-                info!(
+                log::info!(
                     target: "computer_use::app_click",
                     "app_click.bg_dispatch pid={} self_pid={} same_process={} resolved_x={:.2} resolved_y={:.2} click_count={}",
                     pid, self_pid, pid == self_pid, x, y, cnt
@@ -4020,7 +4020,7 @@ tell application "System Events" to get unix id of first process whose frontmost
                 let _ = self.app_click(click).await?;
             }
             require_macos_background_input()?;
-            info!(
+            log::info!(
                 target: "computer_use::app_type_text",
                 "app_type_text.bg_dispatch pid={} char_count={}",
                 pid,

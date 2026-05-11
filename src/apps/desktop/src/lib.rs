@@ -487,48 +487,48 @@ pub async fn run() {
         })
         .on_window_event({
             move |window, event| {
+                #[cfg(target_os = "macos")]
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     if window.label() == "main" {
-                        #[cfg(target_os = "macos")]
-                        {
-                            api.prevent_close();
-                            if !begin_main_window_close_request_on_macos() {
-                                return;
-                            }
-
-                            if let Err(error) = window.emit(MAIN_WINDOW_CLOSE_REQUESTED_EVENT, ()) {
-                                log::warn!(
-                                    "Failed to emit macOS main window close request event: {}",
-                                    error
-                                );
-                            }
-
-                            let app_handle = window.app_handle().clone();
-                            tauri::async_runtime::spawn(async move {
-                                tokio::time::sleep(std::time::Duration::from_millis(
-                                    MAIN_WINDOW_CLOSE_FALLBACK_HIDE_MS,
-                                ))
-                                .await;
-
-                                if take_main_window_close_request_on_macos() {
-                                    if let Err(error) =
-                                        hide_main_window_on_macos(&app_handle, "frontend_timeout")
-                                    {
-                                        log::warn!(
-                                            "macOS close fallback hide failed after frontend timeout: {}",
-                                            error
-                                        );
-                                    }
-                                }
-                            });
+                        api.prevent_close();
+                        if !begin_main_window_close_request_on_macos() {
+                            return;
                         }
 
-                        #[cfg(not(target_os = "macos"))]
-                        {
-                            if perform_process_exit_cleanup() {
-                                log::info!("Main window close requested, cleaning up");
-                                window.app_handle().exit(0);
+                        if let Err(error) = window.emit(MAIN_WINDOW_CLOSE_REQUESTED_EVENT, ()) {
+                            log::warn!(
+                                "Failed to emit macOS main window close request event: {}",
+                                error
+                            );
+                        }
+
+                        let app_handle = window.app_handle().clone();
+                        tauri::async_runtime::spawn(async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(
+                                MAIN_WINDOW_CLOSE_FALLBACK_HIDE_MS,
+                            ))
+                            .await;
+
+                            if take_main_window_close_request_on_macos() {
+                                if let Err(error) =
+                                    hide_main_window_on_macos(&app_handle, "frontend_timeout")
+                                {
+                                    log::warn!(
+                                        "macOS close fallback hide failed after frontend timeout: {}",
+                                        error
+                                    );
+                                }
                             }
+                        });
+                    }
+                }
+
+                #[cfg(not(target_os = "macos"))]
+                if let tauri::WindowEvent::CloseRequested { .. } = event {
+                    if window.label() == "main" {
+                        if perform_process_exit_cleanup() {
+                            log::info!("Main window close requested, cleaning up");
+                            window.app_handle().exit(0);
                         }
                     }
                 }
@@ -1002,23 +1002,28 @@ pub async fn run() {
 
     match app {
         Ok(app) => {
-            app.run(|app_handle, event| match event {
-                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
-                    perform_process_exit_cleanup();
+            app.run(|app_handle, event| {
+                #[cfg(not(target_os = "macos"))]
+                let _ = app_handle;
+
+                match event {
+                    tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+                        perform_process_exit_cleanup();
+                    }
+                    #[cfg(target_os = "macos")]
+                    tauri::RunEvent::Reopen {
+                        has_visible_windows,
+                        ..
+                    } => {
+                        let reason = if has_visible_windows {
+                            "dock_reopen_with_visible_aux_window"
+                        } else {
+                            "dock_reopen_no_visible_windows"
+                        };
+                        show_main_window_on_macos(app_handle, reason);
+                    }
+                    _ => {}
                 }
-                #[cfg(target_os = "macos")]
-                tauri::RunEvent::Reopen {
-                    has_visible_windows,
-                    ..
-                } => {
-                    let reason = if has_visible_windows {
-                        "dock_reopen_with_visible_aux_window"
-                    } else {
-                        "dock_reopen_no_visible_windows"
-                    };
-                    show_main_window_on_macos(app_handle, reason);
-                }
-                _ => {}
             });
         }
         Err(e) => {

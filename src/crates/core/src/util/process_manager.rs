@@ -4,7 +4,9 @@ use std::io;
 use std::process::Command;
 use std::sync::LazyLock;
 use tokio::process::{Child, Command as TokioCommand};
-use tokio::time::{timeout, Duration};
+use tokio::time::Duration;
+#[cfg(unix)]
+use tokio::time::timeout;
 
 #[cfg(windows)]
 use log::warn;
@@ -119,11 +121,18 @@ pub fn configure_process_group(command: &mut TokioCommand) {
     {
         command.process_group(0);
     }
+    #[cfg(not(unix))]
+    {
+        let _ = command;
+    }
 }
 
 pub async fn terminate_child_process_tree(
     child: &mut Child,
+    #[cfg(unix)]
     graceful_timeout: Duration,
+    #[cfg(not(unix))]
+    _graceful_timeout: Duration,
 ) -> io::Result<()> {
     let pid = child.id();
 
