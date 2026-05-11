@@ -15,6 +15,7 @@
 
 import React, { useEffect, useCallback, useMemo, useState, useRef, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import path from 'path-browserify';
 import {
   XCircle,
   GitBranch,
@@ -53,6 +54,22 @@ import './FileOperationToolCard.scss';
 const log = createLogger('FileOperationToolCard');
 const FILE_OPERATION_STREAMING_MAX_HEIGHT = 4 * 22; // 88px – compact while streaming
 const FILE_OPERATION_DIFF_MAX_HEIGHT = 15 * 22;     // 330px – comfortable diff reading when expanded
+
+function stringPath(value: unknown): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value : '';
+}
+
+function isWindowsAbsolutePath(filePath: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(filePath);
+}
+
+function resolveOpenFilePath(filePath: string, workspacePath?: string): string {
+  if (!filePath || hasNonFileUriScheme(filePath) || isWindowsAbsolutePath(filePath) || path.isAbsolute(filePath)) {
+    return filePath;
+  }
+
+  return workspacePath ? path.join(workspacePath, filePath) : filePath;
+}
 
 interface FileOperationToolCardProps extends ToolCardProps {
   sessionId?: string;
@@ -108,15 +125,25 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
   });
 
   const getFilePath = useCallback((): string => {
+    const result = toolResult?.result;
+    const resultPath = stringPath(result?.file_path) || stringPath(result?.filePath);
+    if (resultPath) {
+      return resultPath;
+    }
+
     const params = partialParams || toolCall?.input;
     if (!params) return '';
     
     if (Object.keys(params).length === 0) return '';
     
     return params.file_path || params.target_file || params.path || params.filename || '';
-  }, [toolCall, partialParams]);
+  }, [toolCall, partialParams, toolResult]);
 
   const currentFilePath = getFilePath();
+  const openFilePath = useMemo(
+    () => resolveOpenFilePath(currentFilePath, currentWorkspace?.rootPath),
+    [currentFilePath, currentWorkspace?.rootPath],
+  );
 
   const getOldString = useCallback((): string => {
     const params = partialParams || toolCall?.input;
@@ -388,9 +415,9 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
   const handleOpenInCodeEditor = useCallback(async () => {
     if (!currentFilePath) return;
 
-    if (!sessionId || !currentFilePath || hasNonFileUriScheme(currentFilePath)) {
+    if (!sessionId || !openFilePath || hasNonFileUriScheme(openFilePath)) {
       fileTabManager.openFile({
-        filePath: currentFilePath,
+        filePath: openFilePath,
         fileName,
         mode: 'agent',
       });
@@ -399,14 +426,14 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
 
     try {
       const { snapshotAPI } = await import('../../infrastructure/api');
-      const diffData = await snapshotAPI.getOperationDiff(sessionId, currentFilePath, toolCall?.id);
+      const diffData = await snapshotAPI.getOperationDiff(sessionId, openFilePath, toolCall?.id);
       const jumpToLine = diffData.anchorLine ? Number(diffData.anchorLine) : undefined;
 
       if (toolItem.toolName === 'Delete') {
         window.dispatchEvent(new CustomEvent('expand-right-panel'));
         setTimeout(() => {
           createDiffEditorTab(
-            currentFilePath,
+            openFilePath,
             fileName,
             diffData.originalContent || '',
             diffData.modifiedContent || '',
@@ -420,18 +447,18 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
       }
 
       fileTabManager.openFile({
-        filePath: currentFilePath,
+        filePath: openFilePath,
         fileName,
         jumpToLine,
         mode: 'agent',
       });
     } catch (error) {
-      log.error('Failed to open in CodeEditor', { sessionId, filePath: currentFilePath, error });
+      log.error('Failed to open in CodeEditor', { sessionId, filePath: openFilePath, error });
       if (toolItem.toolName === 'Delete') {
         window.dispatchEvent(new CustomEvent('expand-right-panel'));
         setTimeout(() => {
           createDiffEditorTab(
-            currentFilePath,
+            openFilePath,
             fileName,
             '',
             '',
@@ -443,12 +470,12 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
       }
 
       fileTabManager.openFile({
-        filePath: currentFilePath,
+        filePath: openFilePath,
         fileName,
         mode: 'agent',
       });
     }
-  }, [sessionId, currentFilePath, toolCall?.id, fileName, toolItem.toolName]);
+  }, [sessionId, currentFilePath, openFilePath, toolCall?.id, fileName, toolItem.toolName]);
 
   const canOpenFullCode =
     !isFailed &&

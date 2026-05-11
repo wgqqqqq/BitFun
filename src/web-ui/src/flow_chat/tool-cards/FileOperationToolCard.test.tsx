@@ -8,6 +8,16 @@ import type { FlowToolItem, ToolCardConfig } from '../types/flow-chat';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const mocks = vi.hoisted(() => ({
+  currentWorkspace: undefined as undefined | { rootPath: string },
+  openFile: vi.fn(),
+  getOperationDiff: vi.fn(async () => ({
+    originalContent: '',
+    modifiedContent: '',
+    anchorLine: undefined,
+  })),
+}));
+
 vi.mock('react-i18next', () => ({
   initReactI18next: {
     type: '3rdParty',
@@ -59,8 +69,20 @@ vi.mock('../../shared/utils/tabUtils', () => ({
 
 vi.mock('../../shared/services/FileTabManager', () => ({
   fileTabManager: {
-    openFile: vi.fn(),
+    openFile: mocks.openFile,
   },
+}));
+
+vi.mock('../../infrastructure/api', () => ({
+  snapshotAPI: {
+    getOperationDiff: mocks.getOperationDiff,
+  },
+}));
+
+vi.mock('../../infrastructure/contexts/WorkspaceContext', () => ({
+  useOptionalCurrentWorkspace: () => ({
+    workspace: mocks.currentWorkspace,
+  }),
 }));
 
 vi.mock('@/shared/notification-system', () => ({
@@ -91,6 +113,15 @@ describe('FileOperationToolCard', () => {
 
     container = dom.window.document.getElementById('root') as HTMLDivElement;
     root = createRoot(container);
+
+    mocks.currentWorkspace = undefined;
+    mocks.openFile.mockReset();
+    mocks.getOperationDiff.mockReset();
+    mocks.getOperationDiff.mockResolvedValue({
+      originalContent: '',
+      modifiedContent: '',
+      anchorLine: undefined,
+    });
   });
 
   afterEach(() => {
@@ -144,5 +175,70 @@ describe('FileOperationToolCard', () => {
 
     expect(container.textContent).toContain('toolCards.file.write');
     expect(container.textContent).toContain('toolCards.file.failedArguments are invalid JSON.');
+  });
+
+  it('opens completed write cards with the resolved result path', async () => {
+    mocks.currentWorkspace = { rootPath: 'D:/workspace/project' };
+
+    const toolItem: FlowToolItem = {
+      id: 'tool-1',
+      type: 'tool',
+      toolName: 'Write',
+      status: 'completed',
+      toolCall: {
+        id: 'call-1',
+        name: 'Write',
+        input: {
+          file_path: 'newFile.ts',
+          content: 'export const value = 1;',
+        },
+      },
+      toolResult: {
+        success: true,
+        result: {
+          file_path: 'D:/workspace/project/src/newFile.ts',
+          bytes_written: 23,
+          success: true,
+        },
+      },
+    } as FlowToolItem;
+
+    const config: ToolCardConfig = {
+      toolName: 'Write',
+      displayName: 'Write',
+      icon: 'WRITE',
+      requiresConfirmation: false,
+      resultDisplayType: 'detailed',
+      description: 'Write a file',
+      displayMode: 'standard',
+    };
+
+    await act(async () => {
+      root.render(
+        <FileOperationToolCard
+          toolItem={toolItem}
+          config={config}
+          sessionId="session-1"
+        />
+      );
+    });
+
+    const openButton = container.querySelector('.file-op-open-full-button') as HTMLButtonElement | null;
+    expect(openButton).not.toBeNull();
+
+    await act(async () => {
+      openButton?.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(mocks.getOperationDiff).toHaveBeenCalledWith(
+      'session-1',
+      'D:/workspace/project/src/newFile.ts',
+      'call-1',
+    );
+    expect(mocks.openFile).toHaveBeenCalledWith(expect.objectContaining({
+      filePath: 'D:/workspace/project/src/newFile.ts',
+      fileName: 'newFile.ts',
+      mode: 'agent',
+    }));
   });
 });
