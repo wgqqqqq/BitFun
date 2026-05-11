@@ -106,8 +106,10 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
   const canShowSearchIndex =
     isActive
     && workspaceSearchEnabled
-    && workspace.workspaceKind === WorkspaceKind.Normal
-    && !isRemoteWorkspace(workspace);
+    && (
+      workspace.workspaceKind === WorkspaceKind.Normal
+      || workspace.workspaceKind === WorkspaceKind.Remote
+    );
   const workspaceSearchIndex = useWorkspaceSearchIndex({
     workspacePath: canShowSearchIndex ? workspace.rootPath : undefined,
     enabled: canShowSearchIndex,

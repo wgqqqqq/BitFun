@@ -243,9 +243,10 @@ pub(crate) enum CorpusModeConfig {
 pub(crate) enum SearchModeConfig {
     CountOnly,
     CountMatches,
-    FirstHitOnly,
     #[default]
     MaterializeMatches,
+    FilesWithMatches,
+    LineMatches,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
@@ -482,10 +483,18 @@ pub(crate) enum SearchBackend {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SearchResults {
     pub candidate_docs: usize,
+    #[serde(default)]
+    pub searches_with_match: usize,
+    #[serde(default)]
+    pub bytes_searched: u64,
     pub matched_lines: usize,
     pub matched_occurrences: usize,
     #[serde(default)]
+    pub matched_paths: Vec<String>,
+    #[serde(default)]
     pub file_counts: Vec<FileCount>,
+    #[serde(default)]
+    pub file_match_counts: Vec<FileMatchCount>,
     #[serde(default)]
     pub hits: Vec<SearchHit>,
 }
@@ -494,6 +503,12 @@ pub(crate) struct SearchResults {
 pub(crate) struct FileCount {
     pub path: String,
     pub matched_lines: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct FileMatchCount {
+    pub path: String,
+    pub matched_occurrences: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -23,7 +23,7 @@ impl ContentSearchOutputMode {
         match self {
             Self::Content => SearchModeConfig::MaterializeMatches,
             Self::Count => SearchModeConfig::CountOnly,
-            Self::FilesWithMatches => SearchModeConfig::FirstHitOnly,
+            Self::FilesWithMatches => SearchModeConfig::FilesWithMatches,
         }
     }
 }

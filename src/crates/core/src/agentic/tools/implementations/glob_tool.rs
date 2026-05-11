@@ -1,6 +1,7 @@
 use crate::agentic::tools::framework::{Tool, ToolResult, ToolUseContext};
 use crate::service::search::{
-    get_global_workspace_search_service, workspace_search_runtime_available, GlobSearchRequest,
+    get_global_workspace_search_service, remote_workspace_search_service_for_path,
+    workspace_search_feature_enabled, workspace_search_runtime_available, GlobSearchRequest,
 };
 use crate::util::errors::{BitFunError, BitFunResult};
 use crate::util::process_manager;
@@ -501,8 +502,75 @@ impl Tool for GlobTool {
             .map(|v| v as usize)
             .unwrap_or(100);
 
-        // Remote workspace: prefer `rg --files --glob`, but fall back to `find`
         if resolved.uses_remote_workspace_backend() {
+            if workspace_search_feature_enabled().await {
+                let remote_workspace_glob_result = async {
+                    let workspace_root = context
+                        .workspace
+                        .as_ref()
+                        .map(|workspace| PathBuf::from(workspace.root_path_string()))
+                        .ok_or_else(|| {
+                            BitFunError::tool(
+                                "workspace_path is required when Glob path is omitted".to_string(),
+                            )
+                        })?;
+                    let resolved_path = PathBuf::from(&resolved.resolved_path);
+                    let repo_root = workspace_root.to_string_lossy().to_string();
+                    let preferred_connection_id = context
+                        .workspace
+                        .as_ref()
+                        .and_then(|workspace| workspace.connection_id())
+                        .map(str::to_string);
+                    let search_service = remote_workspace_search_service_for_path(
+                        &repo_root,
+                        preferred_connection_id,
+                    )
+                    .await
+                    .map_err(BitFunError::tool)?;
+                    let glob_result = search_service
+                        .glob(GlobSearchRequest {
+                            repo_root: workspace_root.clone(),
+                            search_path: (resolved_path != workspace_root).then_some(resolved_path),
+                            pattern: pattern.to_string(),
+                            limit,
+                        })
+                        .await
+                        .map_err(BitFunError::tool)?;
+
+                    let match_count = glob_result.paths.len();
+                    let result_text = if glob_result.paths.is_empty() {
+                        format!("No files found matching pattern '{}'", pattern)
+                    } else {
+                        glob_result.paths.join("\n")
+                    };
+
+                    Ok::<Vec<ToolResult>, BitFunError>(vec![ToolResult::Result {
+                        data: json!({
+                            "pattern": pattern,
+                            "path": resolved.logical_path,
+                            "matches": glob_result.paths,
+                            "match_count": match_count,
+                            "repo_phase": glob_result.repo_status.phase,
+                            "rebuild_recommended": glob_result.repo_status.rebuild_recommended
+                        }),
+                        result_for_assistant: Some(result_text),
+                        image_attachments: None,
+                    }])
+                }
+                .await;
+
+                match remote_workspace_glob_result {
+                    Ok(results) => return Ok(results),
+                    Err(error) => {
+                        warn!(
+                            "Glob tool remote workspace-search failed; falling back to shell glob: {}",
+                            error
+                        );
+                    }
+                }
+            }
+
+            // Remote workspace fallback: prefer `rg --files --glob`, but fall back to `find`.
             let ws_shell = context
                 .ws_shell()
                 .ok_or_else(|| BitFunError::tool("Workspace shell not available".to_string()))?;
