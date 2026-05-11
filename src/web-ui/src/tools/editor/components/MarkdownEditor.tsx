@@ -14,6 +14,7 @@ import { createLogger } from '@/shared/utils/logger';
 import { sendDebugProbe } from '@/shared/utils/debugProbe';
 import { elapsedMs, nowMs } from '@/shared/utils/timing';
 import { globalEventBus } from '@/infrastructure/event-bus';
+import { isSamePath } from '@/shared/utils/pathUtils';
 import { CubeLoading, Button } from '@/component-library';
 import { useI18n } from '@/infrastructure/i18n';
 import { useTheme } from '@/infrastructure/theme/hooks/useTheme';
@@ -275,11 +276,16 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     }
   }, [filePath, initialContent, loadFileContent]);
 
-  const checkMarkdownDisk = useCallback(async () => {
-    if (!filePath || !isActiveTab || isUnmountedRef.current || isCheckingDiskRef.current) {
+  const syncMarkdownFromDisk = useCallback(async (source: 'poll' | 'event') => {
+    if (!filePath || isUnmountedRef.current || isCheckingDiskRef.current) {
       return;
     }
-    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+
+    if (
+      source === 'poll' &&
+      (!isActiveTab ||
+        (typeof document !== 'undefined' && document.visibilityState !== 'visible'))
+    ) {
       return;
     }
 
@@ -378,6 +384,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           'Markdown editor disk sync completed',
           {
             filePath,
+            source,
             outcome,
             durationMs,
             error: probeError,
@@ -387,6 +394,10 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       isCheckingDiskRef.current = false;
     }
   }, [fetchFileMetadata, filePath, isActiveTab, reportFileMissingFromDisk, t, toNormalizedMarkdown]);
+
+  const checkMarkdownDisk = useCallback(async () => {
+    await syncMarkdownFromDisk('poll');
+  }, [syncMarkdownFromDisk]);
 
   const isUnsafeSplitUi =
     !!filePath &&
@@ -415,6 +426,19 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
       }
     };
   }, [checkMarkdownDisk, filePath, isActiveTab, pollMarkdownDisk]);
+
+  useEffect(() => {
+    if (!filePath || !pollMarkdownDisk) {
+      return;
+    }
+
+    return globalEventBus.on('editor:file-changed', (data: { filePath?: string }) => {
+      if (!isSamePath(data.filePath || '', filePath)) {
+        return;
+      }
+      void syncMarkdownFromDisk('event');
+    });
+  }, [filePath, pollMarkdownDisk, syncMarkdownFromDisk]);
 
   const saveFileContent = useCallback(async () => {
     if (!hasChanges || isUnmountedRef.current) return;
