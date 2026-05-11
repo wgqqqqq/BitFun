@@ -7,7 +7,7 @@ This directory owns Flow Chat integration for Deep Review. Keep the historical i
 | Area | Owns | Should not own |
 |---|---|---|
 | `launch/` | Slash command parsing, review target resolution, launch prompt formatting, launch error shaping, child-session launch orchestration. | Review Team manifest policy internals, direct Tauri calls, action-bar state. |
-| `action-bar/` | Shared review action bar rendering, Deep Review queue notice, recovery/remediation UI, compact status/header formatting. | Launch target parsing, report markdown semantics, backend queue classification. |
+| `action-bar/` | Shared review action bar rendering, Deep Review queue notice, partial-results panel, recovery-plan preview, remediation selection, action controls, diagnostics text building, compact status/header formatting. | Launch target parsing, report markdown semantics, backend queue classification. |
 | `report/` | Code review report types, retryable slice extraction, reliability notices, run-manifest markdown sections, report section normalization, markdown export. | UI rendering, session launch, raw source/diff/model output storage. |
 
 ## Guardrails
@@ -21,7 +21,7 @@ This directory owns Flow Chat integration for Deep Review. Keep the historical i
 ## Focused Verification
 
 ```powershell
-pnpm --dir src/web-ui exec vitest run src/flow_chat/services/DeepReviewService.test.ts src/flow_chat/components/btw/DeepReviewActionBar.test.tsx src/flow_chat/utils/codeReviewReport.test.ts
+pnpm --dir src/web-ui exec vitest run src/flow_chat/services/DeepReviewService.test.ts src/flow_chat/deep-review/action-bar/PartialResultsPanel.test.tsx src/flow_chat/deep-review/action-bar/RecoveryPlanPreview.test.tsx src/flow_chat/deep-review/action-bar/RemediationSelectionPanel.test.tsx src/flow_chat/deep-review/action-bar/ReviewActionControls.test.tsx src/flow_chat/deep-review/action-bar/interruptionDiagnostics.test.ts src/flow_chat/components/btw/DeepReviewActionBar.test.tsx src/flow_chat/utils/codeReviewReport.test.ts
 pnpm run type-check:web
 pnpm run lint:web
 ```

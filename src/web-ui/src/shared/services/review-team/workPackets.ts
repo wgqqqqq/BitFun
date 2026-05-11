@@ -265,22 +265,38 @@ export function buildWorkPackets(params: {
   const reviewerSeeds = params.reviewerMembers.flatMap((member) =>
     reviewerScopes.map((scope) => ({ member, scope })),
   );
-  const orderedReviewerSeeds = params.concurrencyPolicy.batchExtrasSeparately
-    ? [
-      ...reviewerSeeds.filter((seed) => seed.member.source === 'core'),
-      ...reviewerSeeds.filter((seed) => seed.member.source === 'extra'),
-    ]
-    : reviewerSeeds;
-  const reviewerPackets = orderedReviewerSeeds.map((seed, index) =>
+  const buildReviewerPacketsForSeeds = (
+    seeds: typeof reviewerSeeds,
+    firstLaunchBatch: number,
+  ): ReviewTeamWorkPacket[] => seeds.map((seed, index) =>
     buildWorkPacket({
       member: seed.member,
       phase: 'reviewer',
       launchBatch:
-        Math.floor(index / params.concurrencyPolicy.maxParallelInstances) + 1,
+        firstLaunchBatch +
+        Math.floor(index / params.concurrencyPolicy.maxParallelInstances),
       scope: seed.scope,
       timeoutSeconds: params.executionPolicy.reviewerTimeoutSeconds,
     }),
   );
+  const reviewerPackets = params.concurrencyPolicy.batchExtrasSeparately
+    ? (() => {
+      const coreReviewerPackets = buildReviewerPacketsForSeeds(
+        reviewerSeeds.filter((seed) => seed.member.source === 'core'),
+        1,
+      );
+      const extraFirstLaunchBatch = coreReviewerPackets.length > 0
+        ? Math.max(...coreReviewerPackets.map((packet) => packet.launchBatch)) + 1
+        : 1;
+      return [
+        ...coreReviewerPackets,
+        ...buildReviewerPacketsForSeeds(
+          reviewerSeeds.filter((seed) => seed.member.source === 'extra'),
+          extraFirstLaunchBatch,
+        ),
+      ];
+    })()
+    : buildReviewerPacketsForSeeds(reviewerSeeds, 1);
   const finalReviewerBatch = reviewerPackets.reduce(
     (maxBatch, packet) => Math.max(maxBatch, packet.launchBatch),
     0,

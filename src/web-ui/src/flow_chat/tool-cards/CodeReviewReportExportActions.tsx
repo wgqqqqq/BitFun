@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Check, ClipboardCopy, FileDown, FilePenLine, Loader2 } from 'lucide-react';
+import { Check, Copy, FileDown, FilePenLine, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from '@/component-library';
 import { notificationService } from '@/shared/notification-system';
@@ -221,7 +221,7 @@ export const CodeReviewReportExportActions: React.FC<CodeReviewReportExportActio
           onClick={handleCopy}
           aria-label={t('toolCards.codeReview.export.copyMarkdown', { defaultValue: 'Copy Markdown' })}
         >
-          {copied ? <Check size={13} /> : <ClipboardCopy size={13} />}
+          {copied ? <Check size={14} /> : <Copy size={14} />}
         </button>
       </Tooltip>
       <Tooltip content={t('toolCards.codeReview.export.openMarkdown', { defaultValue: 'Open as Markdown' })} placement="top">
@@ -231,7 +231,7 @@ export const CodeReviewReportExportActions: React.FC<CodeReviewReportExportActio
           onClick={handleOpenInEditor}
           aria-label={t('toolCards.codeReview.export.openMarkdown', { defaultValue: 'Open as Markdown' })}
         >
-          <FilePenLine size={13} />
+          <FilePenLine size={14} />
         </button>
       </Tooltip>
       <Tooltip content={t('toolCards.codeReview.export.saveMarkdown', { defaultValue: 'Save Markdown' })} placement="top">
@@ -242,7 +242,7 @@ export const CodeReviewReportExportActions: React.FC<CodeReviewReportExportActio
           disabled={saving}
           aria-label={t('toolCards.codeReview.export.saveMarkdown', { defaultValue: 'Save Markdown' })}
         >
-          {saving ? <Loader2 className="animate-spin" size={13} /> : <FileDown size={13} />}
+          {saving ? <Loader2 className="animate-spin" size={14} /> : <FileDown size={14} />}
         </button>
       </Tooltip>
     </div>

@@ -1275,6 +1275,41 @@ describe('reviewTeamService', () => {
     expect(promptBlock).toContain('"launch_batch": 2');
   });
 
+  it('keeps extra reviewers in a separate launch batch when requested', () => {
+    const team = resolveDefaultReviewTeam(
+      [
+        ...coreSubagents(),
+        subagent('ReviewProductExtra'),
+      ],
+      storedConfigWithExtra(['ReviewProductExtra'], {
+        max_parallel_reviewers: 6,
+      }),
+    );
+    const target = classifyReviewTargetFromFiles([
+      'src/web-ui/src/components/ReviewPanel.tsx',
+      'src/web-ui/src/components/ReviewPanel.css',
+    ], 'session_files');
+
+    const manifest = buildEffectiveReviewTeamManifest(team, { target });
+    const reviewerPackets = manifest.workPackets?.filter(
+      (packet) => packet.phase === 'reviewer',
+    ) ?? [];
+    const corePackets = reviewerPackets.filter(
+      (packet) => packet.subagentId !== 'ReviewProductExtra',
+    );
+    const extraPackets = reviewerPackets.filter(
+      (packet) => packet.subagentId === 'ReviewProductExtra',
+    );
+
+    expect(corePackets).toHaveLength(5);
+    expect(extraPackets).toHaveLength(1);
+    expect(corePackets.map((packet) => packet.launchBatch)).toEqual([1, 1, 1, 1, 1]);
+    expect(extraPackets.map((packet) => packet.launchBatch)).toEqual([2]);
+    expect(manifest.qualityGateReviewer && manifest.workPackets?.find(
+      (packet) => packet.subagentId === manifest.qualityGateReviewer?.subagentId,
+    )?.launchBatch).toBe(3);
+  });
+
   it('reduces reviewer concurrency when rate limit remaining is tight', () => {
     const team = resolveDefaultReviewTeam(
       coreSubagents(),

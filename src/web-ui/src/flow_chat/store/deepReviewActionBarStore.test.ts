@@ -119,9 +119,10 @@ describe('deepReviewActionBarStore', () => {
       });
 
       bar().setSelectedRemediationIds(new Set(['remediation-0']));
-      bar().setActiveAction('fix');
+      bar().setActiveAction('fix', { baselineTurnId: 'review-turn-1' });
 
       expect(bar().fixingRemediationIds.has('remediation-0')).toBe(true);
+      expect(bar().fixingBaselineTurnId).toBe('review-turn-1');
     });
 
     it('moves fixing IDs to completed when fix completes', () => {
@@ -142,6 +143,7 @@ describe('deepReviewActionBarStore', () => {
       const s = bar();
       expect(s.completedRemediationIds.has('remediation-0')).toBe(true);
       expect(s.fixingRemediationIds.size).toBe(0);
+      expect(s.fixingBaselineTurnId).toBeNull();
       expect(s.phase).toBe('fix_completed');
     });
 
@@ -162,6 +164,7 @@ describe('deepReviewActionBarStore', () => {
 
       const s = bar();
       expect(s.completedRemediationIds.has('remediation-0')).toBe(false);
+      expect(s.fixingBaselineTurnId).toBeNull();
       expect(s.phase).toBe('fix_failed');
       expect(s.errorMessage).toBe('Something went wrong');
     });
@@ -277,6 +280,73 @@ describe('deepReviewActionBarStore', () => {
       expect(state.queuedReviewerCount).toBe(1);
       expect(state.optionalReviewerCount).toBe(0);
     });
+
+    it('merges reviewer queue events and closes the queue when the last reviewer leaves', () => {
+      bar().showCapacityQueueBar({
+        childSessionId: 'child-1',
+        parentSessionId: 'parent-1',
+        capacityQueueState: {
+          toolId: 'task-security',
+          subagentType: 'ReviewSecurity',
+          status: 'queued_for_capacity',
+          reason: 'local_concurrency_cap',
+          queuedReviewerCount: 1,
+          waitingReviewers: [{
+            toolId: 'task-security',
+            subagentType: 'ReviewSecurity',
+            displayName: 'Security reviewer',
+            status: 'queued_for_capacity',
+            reason: 'local_concurrency_cap',
+          }],
+        },
+      });
+
+      bar().applyCapacityQueueState({
+        toolId: 'task-frontend',
+        subagentType: 'ReviewFrontend',
+        status: 'queued_for_capacity',
+        reason: 'launch_batch_blocked',
+        queuedReviewerCount: 1,
+        waitingReviewers: [{
+          toolId: 'task-frontend',
+          subagentType: 'ReviewFrontend',
+          displayName: 'Frontend reviewer',
+          status: 'queued_for_capacity',
+          reason: 'launch_batch_blocked',
+        }],
+      });
+
+      expect(bar().capacityQueueState?.queuedReviewerCount).toBe(2);
+      expect(bar().capacityQueueState?.waitingReviewers?.map((reviewer) => reviewer.displayName)).toEqual([
+        'Security reviewer',
+        'Frontend reviewer',
+      ]);
+
+      bar().applyCapacityQueueState({
+        toolId: 'task-security',
+        subagentType: 'ReviewSecurity',
+        status: 'running',
+        queuedReviewerCount: 0,
+        waitingReviewers: [],
+      });
+
+      expect(bar().capacityQueueState?.queuedReviewerCount).toBe(1);
+      expect(bar().capacityQueueState?.waitingReviewers?.map((reviewer) => reviewer.displayName)).toEqual([
+        'Frontend reviewer',
+      ]);
+      expect(bar().phase).toBe('review_waiting_capacity');
+
+      bar().applyCapacityQueueState({
+        toolId: 'task-frontend',
+        subagentType: 'ReviewFrontend',
+        status: 'capacity_skipped',
+        queuedReviewerCount: 0,
+        waitingReviewers: [],
+      });
+
+      expect(bar().capacityQueueState).toBeNull();
+      expect(bar().phase).toBe('idle');
+    });
   });
 
   describe('toggleRemediation with completed items', () => {
@@ -298,6 +368,53 @@ describe('deepReviewActionBarStore', () => {
       bar().setSelectedRemediationIds(new Set());
       bar().toggleRemediation('remediation-1');
       expect(bar().selectedRemediationIds.has('remediation-1')).toBe(true);
+
+      bar().toggleRemediation('remediation-0');
+      expect(bar().selectedRemediationIds.has('remediation-0')).toBe(false);
+    });
+
+    it('does not select completed items through select-all', () => {
+      bar().showActionBar({
+        childSessionId: 'child-1',
+        parentSessionId: 'parent-1',
+        reviewData: {
+          summary: { recommended_action: 'request_changes' },
+          remediation_plan: ['Fix issue 1', 'Fix issue 2'],
+        },
+        completedRemediationIds: new Set(['remediation-0']),
+      });
+
+      bar().setSelectedRemediationIds(new Set());
+      bar().toggleAllRemediation();
+
+      expect([...bar().selectedRemediationIds].sort()).toEqual(['remediation-1']);
+    });
+
+    it('does not select completed items through a remediation group root toggle', () => {
+      bar().showActionBar({
+        childSessionId: 'child-1',
+        parentSessionId: 'parent-1',
+        reviewData: {
+          review_mode: 'deep',
+          report_sections: {
+            remediation_groups: {
+              should_improve: [
+                'Improve error copy',
+                'Improve retry state',
+              ],
+            },
+          },
+        },
+        completedRemediationIds: new Set(['remediation-should_improve-0']),
+      });
+
+      bar().setSelectedRemediationIds(new Set());
+      bar().toggleGroupRemediation('should_improve');
+
+      expect([...bar().selectedRemediationIds].sort()).toEqual(['remediation-should_improve-1']);
+
+      bar().toggleGroupRemediation('should_improve');
+      expect(bar().selectedRemediationIds.size).toBe(0);
     });
   });
 

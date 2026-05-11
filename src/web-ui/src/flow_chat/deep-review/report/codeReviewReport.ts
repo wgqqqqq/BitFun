@@ -214,6 +214,7 @@ const RETRYABLE_CAPACITY_REASONS = new Set([
   'provider_rate_limit',
   'provider_concurrency_limit',
   'retry_after',
+  'launch_batch_blocked',
   'temporary_overload',
 ]);
 

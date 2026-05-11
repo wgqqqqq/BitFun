@@ -230,20 +230,16 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
       return;
     }
 
-    if (isFailed) {
-      return;
-    }
-
     // Pause auto-scroll while the user toggles the card.
     updateCardExpandedState(!isExpanded);
-  }, [isFailed, isExpanded, updateCardExpandedState]);
+  }, [isExpanded, updateCardExpandedState]);
 
   const showHeaderExpandHint =
-    !isFailed &&
-    (hasInterruptionNote ||
-      hasRealPrompt ||
-      needsConfirmation ||
-      Boolean(taskInput?.reviewerContext));
+    isFailed ||
+    hasInterruptionNote ||
+    hasRealPrompt ||
+    needsConfirmation ||
+    Boolean(taskInput?.reviewerContext);
 
   const taskHeaderLine = useMemo(() => {
     const desc =

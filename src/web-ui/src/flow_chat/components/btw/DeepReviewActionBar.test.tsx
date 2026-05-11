@@ -46,12 +46,32 @@ vi.mock('@/component-library', () => ({
   ),
   Checkbox: ({
     checked,
+    disabled,
+    indeterminate,
+    label,
     onChange,
   }: {
     checked?: boolean;
+    disabled?: boolean;
+    indeterminate?: boolean;
+    label?: React.ReactNode;
     onChange?: () => void;
   }) => (
-    <input type="checkbox" checked={checked} readOnly onClick={onChange} />
+    <label>
+      <input
+        type="checkbox"
+        aria-checked={indeterminate ? 'mixed' : checked ? 'true' : 'false'}
+        checked={checked}
+        disabled={disabled}
+        readOnly
+        onClick={() => {
+          if (!disabled) {
+            onChange?.();
+          }
+        }}
+      />
+      {label}
+    </label>
   ),
   Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -198,6 +218,18 @@ describeWithJsdom('DeepReviewActionBar', () => {
   it('keeps remediation in progress after submitting a fix turn', async () => {
     const { DeepReviewActionBar } = await import('./DeepReviewActionBar');
 
+    flowChatSessionsMock.set('child-session', {
+      sessionId: 'child-session',
+      sessionKind: 'review',
+      dialogTurns: [
+        {
+          id: 'review-turn-1',
+          status: 'completed',
+          modelRounds: [],
+        },
+      ],
+    });
+
     useReviewActionBarStore.getState().showActionBar({
       childSessionId: 'child-session',
       parentSessionId: 'parent-session',
@@ -231,7 +263,15 @@ describeWithJsdom('DeepReviewActionBar', () => {
     });
 
     expect(sendMessageMock).toHaveBeenCalledTimes(1);
-    expect(useReviewActionBarStore.getState().phase).toBe('fix_running');
+    const state = useReviewActionBarStore.getState();
+    expect(state.phase).toBe('fix_running');
+    expect(state.fixingBaselineTurnId).toBe('review-turn-1');
+    expect(container.textContent).toContain('Fix the incorrect branch.');
+    expect(container.textContent).toContain('Fixing');
+    const itemCheckbox = container.querySelector<HTMLInputElement>(
+      '.deep-review-action-bar__remediation-item input[type="checkbox"]',
+    );
+    expect(itemCheckbox?.disabled).toBe(true);
   });
 
   it('uses standard review mode when starting Code Review remediation', async () => {
@@ -492,9 +532,72 @@ describeWithJsdom('DeepReviewActionBar', () => {
         subagentType: 'ReviewSecurity',
         dialogTurnId: 'turn-queue-1',
         status: 'queued_for_capacity',
-        queuedReviewerCount: 1,
+        queuedReviewerCount: 2,
         activeReviewerCount: 1,
         optionalReviewerCount: 1,
+        controlMode: 'backend',
+        waitingReviewers: [
+          {
+            toolId: 'task-queue-1',
+            subagentType: 'ReviewSecurity',
+            displayName: 'Security reviewer',
+            status: 'queued_for_capacity',
+          },
+          {
+            toolId: 'task-queue-2',
+            subagentType: 'ReviewFrontend',
+            displayName: 'Frontend reviewer',
+            status: 'queued_for_capacity',
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      root.render(<DeepReviewActionBar />);
+    });
+
+    const pauseButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Pause queue'));
+    expect(pauseButton).toBeTruthy();
+
+    await act(async () => {
+      pauseButton!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(controlDeepReviewQueueMock).toHaveBeenCalledTimes(2);
+    expect(controlDeepReviewQueueMock).toHaveBeenCalledWith({
+      sessionId: 'child-session',
+      dialogTurnId: 'turn-queue-1',
+      toolId: 'task-queue-1',
+      action: 'pause',
+    });
+    expect(controlDeepReviewQueueMock).toHaveBeenCalledWith({
+      sessionId: 'child-session',
+      dialogTurnId: 'turn-queue-1',
+      toolId: 'task-queue-2',
+      action: 'pause',
+    });
+    expect((useReviewActionBarStore.getState() as unknown as {
+      capacityQueueState: { status: string };
+    }).capacityQueueState.status).toBe('paused_by_user');
+  });
+
+  it('shows the backend reason when queue control fails', async () => {
+    const { DeepReviewActionBar } = await import('./DeepReviewActionBar');
+    const { notificationService } = await import('@/shared/notification-system');
+    controlDeepReviewQueueMock.mockRejectedValueOnce(new Error('backend queue already closed'));
+
+    useReviewActionBarStore.getState().showCapacityQueueBar({
+      childSessionId: 'child-session',
+      parentSessionId: 'parent-session',
+      capacityQueueState: {
+        toolId: 'task-queue-1',
+        subagentType: 'ReviewSecurity',
+        dialogTurnId: 'turn-queue-1',
+        status: 'queued_for_capacity',
+        queuedReviewerCount: 1,
         controlMode: 'backend',
       },
     });
@@ -512,15 +615,109 @@ describeWithJsdom('DeepReviewActionBar', () => {
       await Promise.resolve();
     });
 
-    expect(controlDeepReviewQueueMock).toHaveBeenCalledWith({
-      sessionId: 'child-session',
-      dialogTurnId: 'turn-queue-1',
-      toolId: 'task-queue-1',
-      action: 'pause',
+    expect(notificationService.error).toHaveBeenCalledWith(
+      expect.stringContaining('backend queue already closed'),
+    );
+    expect(notificationService.error).toHaveBeenCalledWith(
+      expect.stringContaining('use Stop to interrupt the review'),
+    );
+  });
+
+  it('reports partial backend queue control failures without claiming full success', async () => {
+    const { DeepReviewActionBar } = await import('./DeepReviewActionBar');
+    const { notificationService } = await import('@/shared/notification-system');
+    controlDeepReviewQueueMock
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('tool already running'));
+
+    useReviewActionBarStore.getState().showCapacityQueueBar({
+      childSessionId: 'child-session',
+      parentSessionId: 'parent-session',
+      capacityQueueState: {
+        toolId: 'task-queue-1',
+        subagentType: 'ReviewSecurity',
+        dialogTurnId: 'turn-queue-1',
+        status: 'queued_for_capacity',
+        queuedReviewerCount: 2,
+        controlMode: 'backend',
+        waitingReviewers: [
+          {
+            toolId: 'task-queue-1',
+            subagentType: 'ReviewSecurity',
+            displayName: 'Security reviewer',
+            status: 'queued_for_capacity',
+          },
+          {
+            toolId: 'task-queue-2',
+            subagentType: 'ReviewFrontend',
+            displayName: 'Frontend reviewer',
+            status: 'queued_for_capacity',
+          },
+        ],
+      },
     });
+
+    await act(async () => {
+      root.render(<DeepReviewActionBar />);
+    });
+
+    const pauseButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Pause queue'));
+    expect(pauseButton).toBeTruthy();
+
+    await act(async () => {
+      pauseButton!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(controlDeepReviewQueueMock).toHaveBeenCalledTimes(2);
+    expect(notificationService.error).toHaveBeenCalledWith(
+      expect.stringContaining('1 of 2 reviewers failed'),
+    );
+    expect(notificationService.error).toHaveBeenCalledWith(
+      expect.stringContaining('tool already running'),
+    );
     expect((useReviewActionBarStore.getState() as unknown as {
       capacityQueueState: { status: string };
-    }).capacityQueueState.status).toBe('paused_by_user');
+    }).capacityQueueState.status).toBe('queued_for_capacity');
+  });
+
+  it('shows the settings update reason when run-slower fails', async () => {
+    const { DeepReviewActionBar } = await import('./DeepReviewActionBar');
+    const { notificationService } = await import('@/shared/notification-system');
+    lowerDefaultReviewTeamMaxParallelReviewersMock.mockRejectedValueOnce(
+      new Error('config store unavailable'),
+    );
+
+    useReviewActionBarStore.getState().showCapacityQueueBar({
+      childSessionId: 'child-session',
+      parentSessionId: 'parent-session',
+      capacityQueueState: {
+        status: 'queued_for_capacity',
+        reason: 'local_concurrency_cap',
+        queuedReviewerCount: 1,
+      },
+    });
+
+    await act(async () => {
+      root.render(<DeepReviewActionBar />);
+    });
+
+    const runSlowerButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Run slower next time'));
+    expect(runSlowerButton).toBeTruthy();
+
+    await act(async () => {
+      runSlowerButton!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(notificationService.error).toHaveBeenCalledWith(
+      expect.stringContaining('config store unavailable'),
+    );
+    expect(notificationService.error).toHaveBeenCalledWith(
+      expect.stringContaining('Open Review settings'),
+    );
   });
 
   it('starts a structured retry turn for explicit incomplete Deep Review slices', async () => {
@@ -633,6 +830,78 @@ describeWithJsdom('DeepReviewActionBar', () => {
     });
 
     expect(container.textContent).toContain('Fixing and preparing re-review...');
+  });
+
+  it('requires explicit decision confirmation before executing selected decision remediation', async () => {
+    const { DeepReviewActionBar } = await import('./DeepReviewActionBar');
+
+    useReviewActionBarStore.getState().showActionBar({
+      childSessionId: 'child-session',
+      parentSessionId: 'parent-session',
+      reviewData: {
+        review_mode: 'deep',
+        summary: { recommended_action: 'request_changes' },
+        report_sections: {
+          remediation_groups: {
+            needs_decision: [{
+              question: 'Which migration strategy should we use?',
+              plan: 'Choose a migration strategy before editing.',
+              options: ['Fast path', 'Staged path'],
+              tradeoffs: 'Fast path is risky; staged path is safer.',
+              recommendation: 1,
+            }],
+          },
+        },
+      },
+      phase: 'review_completed',
+    });
+    useReviewActionBarStore.getState().setSelectedRemediationIds(new Set(['remediation-needs_decision-0']));
+
+    await act(async () => {
+      root.render(<DeepReviewActionBar />);
+    });
+
+    const startFixButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Start fixing'));
+    expect(startFixButton).toBeTruthy();
+
+    await act(async () => {
+      startFixButton!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(sendMessageMock).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Confirm decision items before fixing');
+    expect(container.textContent).toContain('Which migration strategy should we use?');
+    expect(container.textContent).toContain('Fast path is risky; staged path is safer.');
+
+    const confirmBeforeSelection = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Confirm and start')) as HTMLButtonElement | undefined;
+    expect(confirmBeforeSelection?.disabled).toBe(true);
+
+    const stagedPathButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Staged path'));
+    expect(stagedPathButton).toBeTruthy();
+
+    await act(async () => {
+      stagedPathButton!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const confirmButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Confirm and start')) as HTMLButtonElement | undefined;
+    expect(confirmButton).toBeTruthy();
+    expect(confirmButton?.disabled).toBe(false);
+
+    await act(async () => {
+      confirmButton!.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(sendMessageMock).toHaveBeenCalledTimes(1);
+    const [prompt] = sendMessageMock.mock.calls[0];
+    expect(prompt).toContain('User chose option 2: Staged path');
+    expect(prompt).not.toContain('Recommended option 2: Staged path');
   });
 
   it('marks completed remediation items when fix completes', async () => {

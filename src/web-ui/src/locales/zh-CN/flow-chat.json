@@ -644,6 +644,21 @@
     "showCustomInput": "补充说明",
     "hideCustomInput": "收起说明",
     "customInstructionsPlaceholder": "描述修复的额外要求或上下文信息...",
+    "remediationStatus": {
+      "fixing": "修复中",
+      "fixed": "已修复"
+    },
+    "decisionGate": {
+      "title": "修复前确认待决策项",
+      "description": "请先选择每个待决策项的处理方案，BitFun 会按你的选择开始修改。",
+      "supplementLabel": "补充要求",
+      "supplementPlaceholder": "可选：补充约束、范围边界或实现偏好。",
+      "missingSelection": "开始前需要先为每个待决策项选择一个方案。",
+      "noOptionsHint": "该项没有结构化选项。只有在确认按当前计划执行时再继续。",
+      "confirmFix": "确认并开始",
+      "confirmFixAndReview": "确认并重审",
+      "cancel": "返回选择"
+    },
     "fillBackInput": "填入输入框",
     "fillBackInputHint": "将选中的修复计划填入输入框，供手动编辑",
     "retryIncompleteSlices": "重试未完成切片（{{count}}）",
@@ -701,10 +716,23 @@
         "providerConcurrencyLimit": "模型服务并发限制",
         "retryAfter": "模型服务要求稍后重试",
         "localConcurrencyCap": "本地审核员容量",
+        "launchBatchBlocked": "前一启动批次仍在运行",
         "temporaryOverload": "模型服务临时过载"
+      },
+      "reasonDetails": {
+        "providerRateLimit": "模型服务正在限速。BitFun 会短暂等待；如果反复出现，可以降低 Review Team 并行审核员数量。",
+        "providerConcurrencyLimit": "模型服务拒绝了新的并发审核员。BitFun 会在容量恢复后重试；如果持续发生，建议降低审核员并行数。",
+        "retryAfter": "模型服务要求稍后重试。这里的等待不会消耗审核员运行时间。",
+        "localConcurrencyCap": "当前 Review Team 审核员并行上限已满。已有审核员完成后，该审核员会继续启动。",
+        "launchBatchBlocked": "前一启动批次仍在运行。等待可以保持计划中的审核顺序，避免后续批次提前执行。",
+        "temporaryOverload": "模型服务报告临时过载。BitFun 会短暂等待，然后继续或将该审核员标记为容量跳过。"
       },
       "sessionBusy": "当前会话较忙，可暂停 Deep Review 或稍后继续。",
       "stopHint": "可使用停止按钮中断当前审核队列。",
+      "waitingReviewersTitle": "等待中的审核员",
+      "reviewerStatusQueued": "等待中",
+      "reviewerStatusPaused": "已暂停",
+      "optionalReviewer": "可选",
       "pauseQueue": "暂停队列",
       "continueQueue": "继续队列",
       "cancelQueued": "取消排队审核员",
@@ -713,7 +741,10 @@
       "openReviewSettings": "打开审核设置",
       "runSlowerSaved": "下次 Deep Review 最多会使用 {{count}} 个并行审核员。",
       "runSlowerFailed": "更新审核设置失败。",
-      "controlFailed": "\u961f\u5217\u63a7\u5236\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5\u6216\u505c\u6b62\u5ba1\u6838\u3002"
+      "runSlowerFailedWithReason": "更新审核设置失败：{{reason}}。可以打开审核设置并手动降低 Review Team 最大并行审核员数量。",
+      "controlFailed": "队列控制不可用，因为该审核员缺少会话、轮次或工具标识。可使用停止按钮中断审核，或等待队列状态刷新后再试。",
+      "controlFailedWithReason": "队列控制失败：{{reason}}。请重试；如果队列卡住，可以使用停止来中断审核。",
+      "controlPartiallyFailedWithReason": "队列控制已部分生效；{{total}} 位审核员中有 {{failed}} 位失败：{{reason}}。请等待队列状态刷新后重试；如果队列卡住，可以使用停止来中断审核。"
     },
     "degradation": {
       "reduceReviewers": "仅运行核心 reviewer",
@@ -1218,8 +1249,8 @@
       "restoreShort": "恢复（剩余 {{seconds}} 秒）",
       "durationTooltip": "耗时 {{duration}}",
       "completedDurationTooltip": "已完成，耗时 {{duration}}",
-      "failedDurationTooltip": "失败于 {{duration}} 后",
-      "failedDurationTooltipWithReason": "失败于 {{duration}} 后：{{reason}}",
+      "failedDurationTooltip": "执行失败，耗时 {{duration}}",
+      "failedDurationTooltipWithReason": "执行失败，耗时 {{duration}}：{{reason}}",
       "cancelledDurationTooltip": "已取消，耗时 {{duration}}"
     },
     "template": {
@@ -1655,7 +1686,7 @@
         "noSelectionHint": "至少选择一项修复计划后才能开始修复。",
         "ungrouped": "其他",
         "startFix": "开始修复",
-        "fixAndReview": "修复\\u0026重审",
+        "fixAndReview": "修复&重审",
         "cancel": "取消",
         "fixUnavailable": "无法开始修复：审核会话不可用。",
         "fixRequestDisplay": "开始修复深度审核问题",

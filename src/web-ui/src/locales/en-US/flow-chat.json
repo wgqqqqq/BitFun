@@ -644,6 +644,21 @@
     "showCustomInput": "Add instructions",
     "hideCustomInput": "Hide instructions",
     "customInstructionsPlaceholder": "Describe additional requirements or context for the fix...",
+    "remediationStatus": {
+      "fixing": "Fixing",
+      "fixed": "Fixed"
+    },
+    "decisionGate": {
+      "title": "Confirm decision items before fixing",
+      "description": "Choose how each selected decision should be handled before BitFun starts editing.",
+      "supplementLabel": "Additional requirements",
+      "supplementPlaceholder": "Optional: add constraints, scope limits, or implementation preferences before starting.",
+      "missingSelection": "Choose an option for each selected decision item before starting.",
+      "noOptionsHint": "This item has no structured options. Confirm only if you want the selected plan to be executed as written.",
+      "confirmFix": "Confirm and start",
+      "confirmFixAndReview": "Confirm and re-review",
+      "cancel": "Back to selection"
+    },
     "fillBackInput": "Fill to input",
     "fillBackInputHint": "Copy selected fix plan to the input box for manual editing",
     "retryIncompleteSlices": "Retry incomplete slices ({{count}})",
@@ -701,10 +716,23 @@
         "providerConcurrencyLimit": "provider concurrency limit",
         "retryAfter": "provider retry-after",
         "localConcurrencyCap": "local reviewer capacity",
+        "launchBatchBlocked": "previous launch batch still running",
         "temporaryOverload": "temporary provider overload"
+      },
+      "reasonDetails": {
+        "providerRateLimit": "The model provider is rate-limiting requests. BitFun will wait briefly; reducing Review Team parallel reviewers can help if this repeats.",
+        "providerConcurrencyLimit": "The model provider rejected another concurrent reviewer. BitFun will retry after capacity opens; lower reviewer parallelism if it keeps happening.",
+        "retryAfter": "The model provider asked BitFun to retry later. Waiting here avoids spending reviewer runtime while the provider cools down.",
+        "localConcurrencyCap": "The configured Review Team reviewer limit is full. This reviewer will start after an active reviewer finishes.",
+        "launchBatchBlocked": "An earlier launch batch is still running. Waiting preserves the planned review order and prevents a later batch from overtaking it.",
+        "temporaryOverload": "The model provider reported temporary overload. BitFun will wait briefly and then continue or mark the reviewer as capacity skipped."
       },
       "sessionBusy": "Your active session is busy. Pause Deep Review or continue later.",
       "stopHint": "Use Stop to interrupt this review queue.",
+      "waitingReviewersTitle": "Waiting reviewers",
+      "reviewerStatusQueued": "Waiting",
+      "reviewerStatusPaused": "Paused",
+      "optionalReviewer": "Optional",
       "pauseQueue": "Pause queue",
       "continueQueue": "Continue queue",
       "cancelQueued": "Cancel queued reviewers",
@@ -713,7 +741,10 @@
       "openReviewSettings": "Open Review settings",
       "runSlowerSaved": "Next Deep Review will use up to {{count}} parallel reviewers.",
       "runSlowerFailed": "Failed to update Review settings.",
-      "controlFailed": "Queue control failed. Please try again or stop the review."
+      "runSlowerFailedWithReason": "Failed to update Review settings: {{reason}}. Open Review settings and lower Review Team max parallel reviewers manually.",
+      "controlFailed": "Queue control is unavailable because this reviewer is missing session, turn, or tool identifiers. Use Stop to interrupt the review, or wait for the queue state to refresh.",
+      "controlFailedWithReason": "Queue control failed: {{reason}}. Try again, or use Stop to interrupt the review if the queue is stuck.",
+      "controlPartiallyFailedWithReason": "Queue control partly applied; {{failed}} of {{total}} reviewers failed: {{reason}}. Wait for the queue state to refresh, then retry or use Stop if it is stuck."
     },
     "degradation": {
       "reduceReviewers": "Run with core reviewers only",
@@ -1655,7 +1686,7 @@
         "noSelectionHint": "Select at least one remediation item to start fixing.",
         "ungrouped": "Other",
         "startFix": "Start fixing",
-        "fixAndReview": "Fix \\u0026 re-review",
+        "fixAndReview": "Fix & re-review",
         "cancel": "Cancel",
         "fixUnavailable": "Unable to start remediation because the review session is unavailable.",
         "fixRequestDisplay": "Start fixing Deep Review findings",

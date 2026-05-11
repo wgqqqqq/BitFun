@@ -133,8 +133,13 @@ function handleDeepReviewQueueStateChanged(event: DeepReviewQueueStateChangedEve
 
   const actionBar = useReviewActionBarStore.getState();
   if (actionBar.childSessionId === event.sessionId) {
-    actionBar.setCapacityQueueState(queueState);
-    if (actionBar.phase === 'idle') {
+    actionBar.applyCapacityQueueState(queueState);
+    const nextActionBar = useReviewActionBarStore.getState();
+    if (
+      queueState.status !== 'running' &&
+      queueState.status !== 'capacity_skipped' &&
+      nextActionBar.phase === 'idle'
+    ) {
       actionBar.updatePhase('review_waiting_capacity');
     }
     return;
