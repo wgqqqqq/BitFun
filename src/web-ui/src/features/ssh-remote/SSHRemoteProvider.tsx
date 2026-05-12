@@ -8,6 +8,7 @@ import { WorkspaceKind } from '@/shared/types/global-state';
 import type { SSHConnectionConfig, RemoteWorkspace } from './types';
 import { sshApi } from './sshApi';
 import { flowChatStore } from '@/flow_chat/store/FlowChatStore';
+import { ACPClientAPI } from '@/infrastructure/api/service-api/ACPClientAPI';
 import { normalizeRemoteWorkspacePath } from '@/shared/utils/pathUtils';
 import {
   SSHContext,
@@ -16,6 +17,53 @@ import {
 } from './SSHRemoteContext';
 
 const log = createLogger('SSHRemoteProvider');
+const pendingAcpCapabilityRefreshes = new Set<string>();
+
+function refreshRemoteAcpCapabilities(connectionId: string): void {
+  const normalized = connectionId.trim();
+  if (!normalized || pendingAcpCapabilityRefreshes.has(normalized)) {
+    return;
+  }
+
+  pendingAcpCapabilityRefreshes.add(normalized);
+  void ACPClientAPI.probeClientRequirements({
+    force: true,
+    remoteConnectionId: normalized,
+  })
+    .catch(error => {
+      log.warn('Failed to refresh remote ACP capabilities', { connectionId: normalized, error });
+    })
+    .finally(() => {
+      pendingAcpCapabilityRefreshes.delete(normalized);
+    });
+}
+
+function getActiveRemoteWorkspaceForConnection(connectionId: string): RemoteWorkspace | null {
+  const normalizedConnectionId = connectionId.trim();
+  if (!normalizedConnectionId) {
+    return null;
+  }
+
+  const state = workspaceManager.getState();
+  const activeWorkspace = state.activeWorkspaceId
+    ? state.openedWorkspaces.get(state.activeWorkspaceId)
+    : null;
+
+  if (
+    !activeWorkspace ||
+    activeWorkspace.workspaceKind !== WorkspaceKind.Remote ||
+    (activeWorkspace.connectionId ?? '').trim() !== normalizedConnectionId
+  ) {
+    return null;
+  }
+
+  return {
+    connectionId: normalizedConnectionId,
+    connectionName: activeWorkspace.connectionName?.trim() || 'Remote',
+    remotePath: normalizeRemoteWorkspacePath(activeWorkspace.rootPath),
+    sshHost: activeWorkspace.sshHost?.trim() || undefined,
+  };
+}
 
 /** Match opened `WorkspaceInfo` so list_sessions maps to ~/.bitfun/remote_ssh/... */
 function sshHostForRemoteWorkspace(connectionId: string, remotePath: string): string | undefined {
@@ -340,6 +388,7 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
             log.info('Remote workspace already connected', { connectionId: workspace.connectionId });
             await sshApi.openWorkspace(workspace.connectionId, workspace.remotePath).catch(() => {});
             setWorkspaceStatus(workspace.connectionId, 'connected');
+            refreshRemoteAcpCapabilities(workspace.connectionId);
 
             if (!isAlreadyOpened) {
               await workspaceManager.openRemoteWorkspace(workspace).catch(() => {});
@@ -382,6 +431,7 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
           if (result !== false) {
             log.info('Reconnection successful', { newConnectionId: result.connectionId });
             setWorkspaceStatus(result.workspace.connectionId, 'connected');
+            refreshRemoteAcpCapabilities(result.connectionId);
 
             if (!isAlreadyOpened) {
               await workspaceManager.openRemoteWorkspace(result.workspace).catch(() => {});
@@ -462,6 +512,7 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
 
       if (result.success && result.connectionId) {
         log.info('SSH connection successful', { connectionId: result.connectionId });
+        refreshRemoteAcpCapabilities(result.connectionId);
         let home = result.serverInfo?.homeDir?.trim();
         if (!home && result.connectionId) {
           try {
@@ -471,15 +522,37 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
             /* non-desktop or probe skipped */
           }
         }
-        setRemoteFileBrowserInitialPath(
-          home && home.length > 0 ? normalizeRemoteWorkspacePath(home) : '/tmp'
-        );
+        const activeRemoteWorkspace = getActiveRemoteWorkspaceForConnection(result.connectionId);
+        const homePath =
+          home && home.length > 0 ? normalizeRemoteWorkspacePath(home) : '/tmp';
+
+        if (activeRemoteWorkspace) {
+          try {
+            await sshApi.openWorkspace(result.connectionId, activeRemoteWorkspace.remotePath);
+            setRemoteWorkspace(activeRemoteWorkspace);
+            setRemoteFileBrowserInitialPath(activeRemoteWorkspace.remotePath);
+            setWorkspaceStatus(result.connectionId, 'connected');
+            setShowFileBrowser(false);
+          } catch (error) {
+            log.warn('Failed to reactivate active remote workspace after connect', {
+              connectionId: result.connectionId,
+              remotePath: activeRemoteWorkspace.remotePath,
+              error,
+            });
+            setRemoteWorkspace(null);
+            setRemoteFileBrowserInitialPath(homePath);
+            setShowFileBrowser(true);
+          }
+        } else {
+          setRemoteWorkspace(null);
+          setRemoteFileBrowserInitialPath(homePath);
+          setShowFileBrowser(true);
+        }
         setStatus('connected');
         setIsConnected(true);
         setConnectionId(result.connectionId);
         setConnectionConfig(config);
         setShowConnectionDialog(false);
-        setShowFileBrowser(true);
         startHeartbeat(result.connectionId);
       } else {
         log.warn('SSH connection failed', { error: result.error });

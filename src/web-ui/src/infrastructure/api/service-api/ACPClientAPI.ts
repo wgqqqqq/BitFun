@@ -126,13 +126,14 @@ export interface AcpPermissionRequestEvent {
   options?: AcpPermissionOption[];
 }
 
-let requirementProbeCache: AcpClientRequirementProbe[] | null = null;
-let requirementProbeInFlight: Promise<AcpClientRequirementProbe[]> | null = null;
+const LOCAL_REQUIREMENT_CACHE_KEY = '__local__';
+const requirementProbeCache = new Map<string, AcpClientRequirementProbe[]>();
+const requirementProbeInFlight = new Map<string, Promise<AcpClientRequirementProbe[]>>();
 
 export class ACPClientAPI {
   private static invalidateRequirementProbeCache(): void {
-    requirementProbeCache = null;
-    requirementProbeInFlight = null;
+    requirementProbeCache.clear();
+    requirementProbeInFlight.clear();
   }
 
   static async initializeClients(): Promise<void> {
@@ -146,26 +147,32 @@ export class ACPClientAPI {
   }
 
   static async probeClientRequirements(
-    options: { force?: boolean } = {}
+    options: { force?: boolean; remoteConnectionId?: string } = {}
   ): Promise<AcpClientRequirementProbe[]> {
-    if (!options.force && requirementProbeCache) {
-      return requirementProbeCache;
+    const cacheKey = options.remoteConnectionId || LOCAL_REQUIREMENT_CACHE_KEY;
+    if (!options.force && requirementProbeCache.has(cacheKey)) {
+      return requirementProbeCache.get(cacheKey) ?? [];
     }
-    if (!options.force && requirementProbeInFlight) {
-      return requirementProbeInFlight;
+    if (!options.force && requirementProbeInFlight.has(cacheKey)) {
+      return requirementProbeInFlight.get(cacheKey)!;
     }
 
-    requirementProbeInFlight = api.invoke<AcpClientRequirementProbe[]>('probe_acp_client_requirements')
+    const request = options.remoteConnectionId
+      ? { remoteConnectionId: options.remoteConnectionId, forceRefresh: options.force === true }
+      : {};
+
+    const inFlight = api.invoke<AcpClientRequirementProbe[]>('probe_acp_client_requirements', { request })
       .then((probes) => {
-        requirementProbeCache = probes;
+        requirementProbeCache.set(cacheKey, probes);
         window.dispatchEvent(new Event('bitfun:acp-requirements-changed'));
         return probes;
       })
       .finally(() => {
-        requirementProbeInFlight = null;
+        requirementProbeInFlight.delete(cacheKey);
       });
 
-    return requirementProbeInFlight;
+    requirementProbeInFlight.set(cacheKey, inFlight);
+    return inFlight;
   }
 
   static async predownloadClientAdapter(request: AcpClientIdRequest): Promise<void> {

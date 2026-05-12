@@ -158,6 +158,9 @@ impl Tool for AcpAgentTool {
         input: &Value,
         context: &ToolUseContext,
     ) -> BitFunResult<Vec<ToolResult>> {
+        let bitfun_session_id = context.session_id.clone().ok_or_else(|| {
+            BitFunError::tool("ACP tool requires an active BitFun session".to_string())
+        })?;
         let prompt = input
             .get("prompt")
             .and_then(|value| value.as_str())
@@ -184,7 +187,8 @@ impl Tool for AcpAgentTool {
                 &self.client_id,
                 prompt,
                 workspace_path,
-                context.session_id.clone(),
+                None,
+                bitfun_session_id,
                 None,
                 timeout_seconds,
             )

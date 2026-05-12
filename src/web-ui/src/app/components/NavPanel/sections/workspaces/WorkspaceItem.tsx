@@ -312,10 +312,14 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
 
   useEffect(() => {
     let cancelled = false;
+    const remoteWorkspace = isRemoteWorkspace(workspace);
 
     const loadAcpClients = async () => {
       try {
-        const clients = await loadWorkspaceAcpMenuClients();
+        const clients = await loadWorkspaceAcpMenuClients({
+          remoteWorkspace,
+          remoteConnectionId: remoteWorkspace ? workspace.connectionId : undefined,
+        });
         if (!cancelled) {
           setAcpClients(clients);
         }
@@ -332,7 +336,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
       window.removeEventListener('bitfun:acp-clients-changed', loadAcpClients);
       window.removeEventListener('bitfun:acp-requirements-changed', loadAcpClients);
     };
-  }, []);
+  }, [workspace]);
 
   const handleActivate = useCallback(async () => {
     if (!isActive) {
