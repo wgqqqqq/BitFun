@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::Stdio;
@@ -55,6 +56,7 @@ use super::stream::{acp_dispatch_to_stream_events, AcpClientStreamEvent, AcpStre
 use super::tool::AcpAgentTool;
 
 const CONFIG_PATH: &str = "acp_clients";
+const CLIENT_STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
 const PERMISSION_TIMEOUT: Duration = Duration::from_secs(600);
 const SESSION_CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
 const LOAD_REPLAY_DRAIN_QUIET_WINDOW: Duration = Duration::from_millis(250);
@@ -522,7 +524,7 @@ impl AcpClientService {
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         *connection.shutdown_tx.lock().await = Some(shutdown_tx);
 
-        tokio::spawn(async move {
+        let connect_task = tokio::spawn(async move {
             let result = Client
                 .builder()
                 .name("bitfun-acp-client")
@@ -569,12 +571,29 @@ impl AcpClientService {
             connection_for_task.sessions.clear();
         });
 
-        let (cx, agent_capabilities) = cx_rx.await.map_err(|_| {
-            BitFunError::service(format!(
-                "ACP client '{}' exited before initialization completed",
-                client_id
-            ))
-        })?;
+        let (cx, agent_capabilities) =
+            match tokio::time::timeout(CLIENT_STARTUP_TIMEOUT, cx_rx).await {
+                Ok(Ok(result)) => result,
+                Ok(Err(_)) => {
+                    connect_task.abort();
+                    self.cleanup_failed_startup(connection_id).await;
+                    return Err(BitFunError::service(format!(
+                        "ACP client '{}' exited before initialization completed",
+                        client_id
+                    )));
+                }
+                Err(_) => {
+                    warn!(
+                        "ACP client startup timed out during initialize: id={} connection_id={} timeout_secs={}",
+                        client_id,
+                        connection_id,
+                        CLIENT_STARTUP_TIMEOUT.as_secs()
+                    );
+                    connect_task.abort();
+                    self.cleanup_failed_startup(connection_id).await;
+                    return Err(startup_timeout_error(client_id, "initialize"));
+                }
+            };
         *connection.connection.write().await = Some(cx);
         *connection.agent_capabilities.write().await = Some(agent_capabilities);
         *connection.status.write().await = AcpClientStatus::Running;
@@ -584,6 +603,15 @@ impl AcpClientService {
             remote_connection_id.as_deref().unwrap_or("")
         );
         Ok(())
+    }
+
+    async fn cleanup_failed_startup(self: &Arc<Self>, connection_id: &str) {
+        if let Err(error) = self.stop_connection(connection_id).await {
+            warn!(
+                "Failed to clean up ACP client after startup failure: connection_id={} error={}",
+                connection_id, error
+            );
+        }
     }
 
     pub async fn stop_client(self: &Arc<Self>, client_id: &str) -> BitFunResult<()> {
@@ -1143,7 +1171,7 @@ impl AcpClientService {
     }
 
     async fn ensure_remote_session(
-        &self,
+        self: &Arc<Self>,
         client: &Arc<AcpClientConnection>,
         session_key: &str,
         cwd: &Path,
@@ -1175,14 +1203,24 @@ impl AcpClientService {
                     let Some(remote_session_id) = persisted_remote_session_id.as_deref() else {
                         continue;
                     };
-                    match cx
-                        .send_request(LoadSessionRequest::new(remote_session_id.to_string(), cwd))
-                        .block_task()
+                    match self
+                        .run_startup_step(
+                            client,
+                            strategy.startup_phase_name(),
+                            cx.send_request(LoadSessionRequest::new(
+                                remote_session_id.to_string(),
+                                cwd,
+                            ))
+                            .block_task(),
+                        )
                         .await
                         .map_err(protocol_error)
                     {
                         Ok(response) => new_session_response_from_load(remote_session_id, response),
                         Err(error) => {
+                            if is_startup_timeout_error(&error) {
+                                return Err(error);
+                            }
                             warn!(
                                 "Failed to load ACP remote session, falling back: client_id={}, remote_session_id={}, error={}",
                                 client.id, remote_session_id, error
@@ -1196,12 +1234,16 @@ impl AcpClientService {
                     let Some(remote_session_id) = persisted_remote_session_id.as_deref() else {
                         continue;
                     };
-                    match cx
-                        .send_request(ResumeSessionRequest::new(
-                            remote_session_id.to_string(),
-                            cwd,
-                        ))
-                        .block_task()
+                    match self
+                        .run_startup_step(
+                            client,
+                            strategy.startup_phase_name(),
+                            cx.send_request(ResumeSessionRequest::new(
+                                remote_session_id.to_string(),
+                                cwd,
+                            ))
+                            .block_task(),
+                        )
                         .await
                         .map_err(protocol_error)
                     {
@@ -1209,6 +1251,9 @@ impl AcpClientService {
                             new_session_response_from_resume(remote_session_id, response)
                         }
                         Err(error) => {
+                            if is_startup_timeout_error(&error) {
+                                return Err(error);
+                            }
                             warn!(
                                 "Failed to resume ACP remote session, falling back: client_id={}, remote_session_id={}, error={}",
                                 client.id, remote_session_id, error
@@ -1218,9 +1263,12 @@ impl AcpClientService {
                         }
                     }
                 }
-                AcpRemoteSessionStrategy::New => cx
-                    .send_request(NewSessionRequest::new(cwd))
-                    .block_task()
+                AcpRemoteSessionStrategy::New => self
+                    .run_startup_step(
+                        client,
+                        strategy.startup_phase_name(),
+                        cx.send_request(NewSessionRequest::new(cwd)).block_task(),
+                    )
                     .await
                     .map_err(protocol_error)?,
             };
@@ -1242,6 +1290,33 @@ impl AcpClientService {
         Err(BitFunError::service(
             "Failed to initialize ACP remote session".to_string(),
         ))
+    }
+
+    async fn run_startup_step<T, F>(
+        self: &Arc<Self>,
+        client: &Arc<AcpClientConnection>,
+        phase: &'static str,
+        future: F,
+    ) -> Result<T, Error>
+    where
+        F: Future<Output = Result<T, Error>>,
+    {
+        match tokio::time::timeout(CLIENT_STARTUP_TIMEOUT, future).await {
+            Ok(result) => result,
+            Err(_) => {
+                warn!(
+                    "ACP client startup timed out: id={} connection_id={} phase={} timeout_secs={}",
+                    client.client_id,
+                    client.id,
+                    phase,
+                    CLIENT_STARTUP_TIMEOUT.as_secs()
+                );
+                self.cleanup_failed_startup(&client.id).await;
+                Err(agent_client_protocol::util::internal_error(
+                    startup_timeout_error_message(&client.client_id, phase),
+                ))
+            }
+        }
     }
 
     async fn attach_remote_session(
@@ -1886,6 +1961,28 @@ fn protocol_error(error: impl std::fmt::Display) -> BitFunError {
     BitFunError::service(format!("ACP protocol error: {}", error))
 }
 
+const STARTUP_TIMEOUT_ERROR_PREFIX: &str = "ACP startup timed out:";
+
+fn startup_timeout_error(client_id: &str, phase: &str) -> BitFunError {
+    BitFunError::service(startup_timeout_error_message(client_id, phase))
+}
+
+fn startup_timeout_error_message(client_id: &str, phase: &str) -> String {
+    format!(
+        "{} client '{}' exceeded {}s during {} and was terminated. Please try again after the client is ready.",
+        STARTUP_TIMEOUT_ERROR_PREFIX,
+        client_id,
+        CLIENT_STARTUP_TIMEOUT.as_secs(),
+        phase
+    )
+}
+
+fn is_startup_timeout_error(error: &BitFunError) -> bool {
+    error
+        .to_string()
+        .contains(STARTUP_TIMEOUT_ERROR_PREFIX)
+}
+
 fn select_permission_by_kind(
     request: &RequestPermissionRequest,
     preferred: PermissionOptionKind,
@@ -1962,5 +2059,13 @@ mod tests {
         ];
 
         assert_eq!(select_permission_option_id(&options, false), "no-once");
+    }
+
+    #[test]
+    fn formats_startup_timeout_error_message() {
+        assert_eq!(
+            startup_timeout_error_message("codex", "initialize"),
+            "ACP startup timed out: client 'codex' exceeded 20s during initialize and was terminated. Please try again after the client is ready."
+        );
     }
 }
