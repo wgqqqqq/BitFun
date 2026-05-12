@@ -575,7 +575,7 @@ export const SSHRemoteProvider: React.FC<SSHRemoteProviderProps> = ({ children }
     } finally {
       setIsConnecting(false);
     }
-  }, [startHeartbeat]);
+  }, [setWorkspaceStatus, startHeartbeat]);
 
   const disconnect = useCallback(async () => {
     const currentRemoteWorkspace = remoteWorkspace;
