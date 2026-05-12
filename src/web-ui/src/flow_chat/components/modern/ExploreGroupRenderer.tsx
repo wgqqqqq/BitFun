@@ -9,6 +9,9 @@ import { ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { FlowItem, FlowToolItem, FlowTextItem, FlowThinkingItem } from '../../types/flow-chat';
 import type { ExploreGroupData } from '../../store/modernFlowChatStore';
+import { createLogger } from '@/shared/utils/logger';
+
+const log = createLogger('ExploreGroupRenderer');
 import { FlowTextBlock } from '../FlowTextBlock';
 import { FlowToolCard } from '../FlowToolCard';
 import { ModelThinkingDisplay } from '../../tool-cards/ModelThinkingDisplay';
@@ -33,7 +36,6 @@ export const ExploreGroupRenderer: React.FC<ExploreGroupRendererProps> = React.m
   const { 
     exploreGroupStates, 
     onExploreGroupToggle, 
-    onExpandGroup,
     onCollapseGroup 
   } = useFlowChatContext();
   
@@ -42,9 +44,10 @@ export const ExploreGroupRenderer: React.FC<ExploreGroupRendererProps> = React.m
     allItems, 
     stats, 
     isGroupStreaming,
-    isLastGroupInTurn
+    isLastGroupInTurn,
+    wasCutByCritical,
   } = data;
-  const wasStreamingRef = useRef(isGroupStreaming);
+  const prevWasCutRef = useRef(wasCutByCritical);
   const {
     cardRootRef,
     applyExpandedState,
@@ -60,9 +63,12 @@ export const ExploreGroupRenderer: React.FC<ExploreGroupRendererProps> = React.m
   
   const hasExplicitState = exploreGroupStates?.has(groupId) ?? false;
   const explicitExpanded = exploreGroupStates?.get(groupId) ?? false;
-  const isExpanded = hasExplicitState ? explicitExpanded : isGroupStreaming;
+  // Default: expanded while the group is still the tail; collapsed once cut.
+  const defaultExpanded = !wasCutByCritical;
+  const isExpanded = hasExplicitState ? explicitExpanded : defaultExpanded;
   const isCollapsed = !isExpanded;
-  const allowManualToggle = !isGroupStreaming;
+  // Header is always interactive so the user can collapse/expand at any time.
+  const allowManualToggle = true;
 
   const checkScrollState = useCallback(() => {
     const el = containerRef.current;
@@ -77,39 +83,49 @@ export const ExploreGroupRenderer: React.FC<ExploreGroupRendererProps> = React.m
     });
   }, []);
 
+  // One-shot auto-collapse: fires exactly once when the group transitions from
+  // tail (wasCutByCritical=false) to cut (wasCutByCritical=true).
+  //
+  // IMPORTANT: do NOT use `isExpanded` to guard this effect. When wasCutByCritical
+  // flips to true, the same render also recomputes isExpanded = false (because
+  // defaultExpanded = !wasCutByCritical). So `justGotCut && isExpanded` would
+  // always be false and the collapse-intent would never fire.
+  //
+  // Instead, reason about the state *before* the cut:
+  //   - No explicit state → group was expanded by default (it was tail).
+  //   - Explicit state = true → user had it open.
+  // Both cases mean the group WAS visually expanded before this render; we need
+  // to dispatch the height-contract event so Virtuoso can anchor-lock.
   useEffect(() => {
-    if (isGroupStreaming && !hasExplicitState) {
-      applyExpandedState(false, true, () => {
-        onExpandGroup?.(groupId);
-      });
-      wasStreamingRef.current = true;
-      return;
-    }
+    const justGotCut = wasCutByCritical && !prevWasCutRef.current;
+    prevWasCutRef.current = wasCutByCritical;
 
-    if (wasStreamingRef.current && !isGroupStreaming && isExpanded) {
+    if (!justGotCut) return;
+
+    const wasExpanded = !hasExplicitState || explicitExpanded;
+    log.debug('explore group cut by critical', { groupId, wasExpanded, hasExplicitState });
+
+    if (wasExpanded) {
       applyExpandedState(true, false, () => {
         onCollapseGroup?.(groupId);
       }, {
         reason: 'auto',
       });
     }
-
-    wasStreamingRef.current = isGroupStreaming;
   }, [
     applyExpandedState,
+    explicitExpanded,
     groupId,
     hasExplicitState,
-    isExpanded,
-    isGroupStreaming,
+    wasCutByCritical,
     onCollapseGroup,
-    onExpandGroup,
   ]);
   
-  // Auto-scroll to bottom during streaming.
+  // Auto-scroll to bottom while the group is still the tail and new items arrive.
   // Use double requestAnimationFrame to ensure the browser has completed
   // layout of newly added content before we measure scrollHeight.
   useEffect(() => {
-    if (!isCollapsed && isGroupStreaming && containerRef.current) {
+    if (!isCollapsed && isLastGroupInTurn && !wasCutByCritical && containerRef.current) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           if (containerRef.current) {
@@ -119,7 +135,7 @@ export const ExploreGroupRenderer: React.FC<ExploreGroupRendererProps> = React.m
         });
       });
     }
-  }, [allItems, checkScrollState, isCollapsed, isGroupStreaming]);
+  }, [allItems, checkScrollState, isCollapsed, isLastGroupInTurn, wasCutByCritical]);
 
   useEffect(() => {
     if (!isExpanded) {
@@ -187,9 +203,12 @@ export const ExploreGroupRenderer: React.FC<ExploreGroupRendererProps> = React.m
   // Build class list.
   const className = [
     'explore-region',
-    allowManualToggle ? 'explore-region--collapsible' : null,
+    'explore-region--collapsible',
     isCollapsed ? 'explore-region--collapsed' : 'explore-region--expanded',
     isGroupStreaming ? 'explore-region--streaming' : null,
+    // --bounded: group is still growing (tail, not yet cut). Controls fixed
+    // max-height and gradient masks regardless of streaming state.
+    !wasCutByCritical ? 'explore-region--bounded' : null,
     scrollState.hasScroll ? 'explore-region--has-scroll' : null,
     scrollState.atTop ? 'explore-region--at-top' : null,
     scrollState.atBottom ? 'explore-region--at-bottom' : null,

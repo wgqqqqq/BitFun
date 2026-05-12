@@ -79,6 +79,17 @@ impl DeepReviewScopeProfile {
         })
     }
 
+    pub(crate) fn coverage_expectation(&self) -> Option<&str> {
+        self.coverage_expectation.as_deref()
+    }
+
+    pub(crate) fn is_reduced_depth(&self) -> bool {
+        self.review_depth != "full_depth"
+    }
+}
+
+#[cfg(test)]
+impl DeepReviewScopeProfile {
     pub(crate) fn review_depth(&self) -> &str {
         &self.review_depth
     }
@@ -97,14 +108,6 @@ impl DeepReviewScopeProfile {
 
     pub(crate) fn allow_broad_tool_exploration(&self) -> bool {
         self.allow_broad_tool_exploration
-    }
-
-    pub(crate) fn coverage_expectation(&self) -> Option<&str> {
-        self.coverage_expectation.as_deref()
-    }
-
-    pub(crate) fn is_reduced_depth(&self) -> bool {
-        self.review_depth != "full_depth"
     }
 }
 
@@ -306,7 +309,10 @@ impl DeepReviewEvidencePack {
             content_boundary,
         }))
     }
+}
 
+#[cfg(test)]
+impl DeepReviewEvidencePack {
     pub(crate) fn version(&self) -> u64 {
         self.version
     }

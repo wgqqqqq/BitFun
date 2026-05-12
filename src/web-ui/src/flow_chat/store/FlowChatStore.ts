@@ -9,6 +9,7 @@ import {
   DialogTurn,
   ModelRound,
   FlowItem,
+  FlowToolItem,
   FlowImageAnalysisItem,
   ImageAnalysisResult,
   AnyFlowItem,
@@ -1213,14 +1214,20 @@ export class FlowChatStore {
         if (updated) return modelRound;
         
         const updatedItems = modelRound.items.map((item: any) => {
-          if (item.id === itemId) {
+          const toolCallId =
+            item.type === 'tool' ? ((item as FlowToolItem).toolCall?.id as string | undefined) : undefined;
+          const idMatches = item.id === itemId || (toolCallId !== undefined && toolCallId === itemId);
+          if (idMatches) {
             const updatedItem = { ...item, ...updates };
             return updatedItem;
           }
           return item;
         });
         
-        if (updatedItems.some((item: any) => item.id === itemId)) {
+        if (updatedItems.some((item: any) => {
+          const tc = item.type === 'tool' ? (item as FlowToolItem).toolCall?.id : undefined;
+          return item.id === itemId || tc === itemId;
+        })) {
           updated = true;
           return { ...modelRound, items: updatedItems };
         }
@@ -1265,7 +1272,14 @@ export class FlowChatStore {
     if (!dialogTurn) return null;
 
     for (const modelRound of dialogTurn.modelRounds) {
-      const item = modelRound.items.find((item: any) => item.id === toolUseId);
+      const item = modelRound.items.find((item: any) => {
+        if (item.id === toolUseId) return true;
+        if (item.type === 'tool') {
+          const ti = item as FlowToolItem;
+          return ti.toolCall?.id === toolUseId;
+        }
+        return false;
+      });
       if (item) {
         return item;
       }
@@ -1960,6 +1974,8 @@ export class FlowChatStore {
               isSubagentItem: tool.isSubagentItem,
               parentTaskToolId: tool.parentTaskToolId,
               subagentSessionId: tool.subagentSessionId,
+              subagentModelId: tool.subagentModelId,
+              subagentModelAlias: tool.subagentModelAlias,
             })),
             ...(round.thinkingItems || []).map((thinking: any) => ({
               id: thinking.id,

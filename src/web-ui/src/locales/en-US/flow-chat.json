@@ -1209,6 +1209,9 @@
     },
     "taskTool": {
       "headerLine": "{{agentType}} agent: {{description}}",
+      "headerLineWithModel": "{{agentType}} agent ({{modelName}}): {{description}}",
+      "headerLinePrefix": "{{agentType}} agent",
+      "headerLineSuffix": ": {{description}}",
       "defaultAgentKind": "Sub-agent",
       "waitingConfirm": "Waiting for confirmation",
       "executing": "Executing...",
