@@ -2,39 +2,17 @@
 //!
 //! Handles starting, stopping, monitoring, and restarting MCP server processes.
 
-use super::connection::MCPConnection;
 use super::MCPServerConfig;
+use super::connection::MCPConnection;
 use crate::service::mcp::protocol::{InitializeResult, MCPMessage, MCPServerInfo, MCPTransport};
 use crate::service::mcp::server::MCPServerTransport;
 use crate::util::errors::{BitFunError, BitFunResult};
+use bitfun_services_integrations::mcp::server::{MCPServerStatus, MCPServerType};
 use log::{debug, error, info, warn};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::process::Child;
-use tokio::sync::{mpsc, RwLock};
-
-/// MCP server type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum MCPServerType {
-    Local,  // Command-driven stdio server, including docker/podman wrappers
-    Remote, // Remote HTTP/WebSocket server
-}
-
-/// MCP server status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum MCPServerStatus {
-    Uninitialized, // Not initialized
-    Starting,      // Starting
-    Connected,     // Connected
-    Healthy,       // Healthy (heartbeat OK)
-    NeedsAuth,     // Authentication required / token expired
-    Reconnecting,  // Reconnecting
-    Failed,        // Failed
-    Stopping,      // Stopping
-    Stopped,       // Stopped
-}
+use tokio::sync::{RwLock, mpsc};
 
 /// MCP server process.
 pub struct MCPServerProcess {

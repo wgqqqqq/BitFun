@@ -15,9 +15,21 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
 bitfun-events = { path = "../events" }
+bitfun-services-core = { path = "../services-core", optional = true }
+chrono = { workspace = true, optional = true }
+git2 = { workspace = true, optional = true }
 notify = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true }
+
+[target.'cfg(not(windows))'.dependencies]
+git2 = { workspace = true, features = ["vendored-openssl"], optional = true }
 
 [features]
 default = []
+announcement = []
+git = ["bitfun-services-core", "chrono", "git2", "thiserror"]
 file-watch = ["notify"]
-product-full = ["file-watch"]
+mcp = []
+remote-ssh = ["tokio-util"]
+product-full = ["announcement", "file-watch", "git", "mcp", "remote-ssh"]
