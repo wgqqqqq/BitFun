@@ -29,7 +29,6 @@ use crate::ui::model_selector::ModelItem;
 use crate::ui::permission::PermissionAction;
 use crate::ui::provider_selector::ProviderSelection;
 use crate::ui::question::QuestionAction;
-use crate::ui::rename_dialog::RenameAction;
 use crate::ui::session_selector::{SessionAction, SessionItem};
 use crate::ui::skill_selector::SkillItem;
 use crate::ui::subagent_selector::SubagentItem;
@@ -38,7 +37,6 @@ use crate::ui::theme::{
     Appearance, EffectiveColorScheme, Theme,
 };
 use crate::ui::theme_selector::ThemeItem;
-use crate::ui::workspace_dialog::WorkspaceAction;
 use crate::ui::{init_terminal, restore_terminal};
 use bitfun_core::agentic::agents::{get_agent_registry, AgentInfo};
 use bitfun_core::agentic::tools::implementations::skills::registry::SkillRegistry;
@@ -187,18 +185,6 @@ pub struct ChatMode {
     pending_mcp_tasks: Vec<PendingMcpTask>,
 }
 
-fn normalize_workspace_path(path: &str) -> String {
-    let buf = PathBuf::from(path);
-    if buf.exists() {
-        dunce::canonicalize(&buf)
-            .unwrap_or(buf)
-            .to_string_lossy()
-            .to_string()
-    } else {
-        path.to_string()
-    }
-}
-
 /// Map agent_type to a display name for status messages
 fn agent_display_name(agent_type: &str) -> &'static str {
     match agent_type {
@@ -254,8 +240,6 @@ impl ChatMode {
             || chat_view.subagent_selector_visible()
             || chat_view.mcp_selector_visible()
             || chat_view.mcp_add_dialog_visible()
-            || chat_view.rename_dialog_visible()
-            || chat_view.workspace_dialog_visible()
             || chat_view.provider_selector_visible()
             || chat_view.model_config_form_visible()
             || chat_view.theme_selector_visible()
@@ -276,8 +260,6 @@ impl ChatMode {
         chat_view.hide_subagent_selector();
         chat_view.hide_mcp_selector();
         chat_view.hide_mcp_add_dialog();
-        chat_view.hide_rename_dialog();
-        chat_view.hide_workspace_dialog();
         chat_view.hide_provider_selector();
         chat_view.hide_model_config_form();
         chat_view.hide_theme_selector();
@@ -299,8 +281,6 @@ impl ChatMode {
                 crate::ui::chat::PopupType::SubagentSelector => chat_view.hide_subagent_selector(),
                 crate::ui::chat::PopupType::McpSelector => chat_view.hide_mcp_selector(),
                 crate::ui::chat::PopupType::McpAddDialog => chat_view.hide_mcp_add_dialog(),
-                crate::ui::chat::PopupType::RenameDialog => chat_view.hide_rename_dialog(),
-                crate::ui::chat::PopupType::WorkspaceDialog => chat_view.hide_workspace_dialog(),
                 crate::ui::chat::PopupType::ProviderSelector => chat_view.hide_provider_selector(),
                 crate::ui::chat::PopupType::ModelConfigForm => chat_view.hide_model_config_form(),
                 crate::ui::chat::PopupType::ThemeSelector => {
@@ -327,10 +307,6 @@ impl ChatMode {
                     }
                     crate::ui::chat::PopupType::McpSelector => chat_view.reshow_mcp_selector(),
                     crate::ui::chat::PopupType::McpAddDialog => chat_view.reshow_mcp_add_dialog(),
-                    crate::ui::chat::PopupType::RenameDialog => chat_view.reshow_rename_dialog(),
-                    crate::ui::chat::PopupType::WorkspaceDialog => {
-                        chat_view.reshow_workspace_dialog()
-                    }
                     crate::ui::chat::PopupType::ProviderSelector => {
                         chat_view.reshow_provider_selector()
                     }
@@ -641,37 +617,6 @@ impl ChatMode {
                                 turn_id
                             );
                             continue;
-                        }
-                        // Detect workspace change from Bash tool completion
-                        if let bitfun_events::ToolEventData::Completed {
-                            tool_name, result, ..
-                        } = tool_event
-                        {
-                            if tool_name == "Bash" {
-                                if let Some(new_cwd) =
-                                    result.get("working_directory").and_then(|v| v.as_str())
-                                {
-                                    let current_ws = chat_state.workspace.as_deref().unwrap_or("");
-                                    if !new_cwd.is_empty() && new_cwd != current_ws {
-                                        tracing::info!(
-                                            "Workspace changed: {} -> {}",
-                                            current_ws,
-                                            new_cwd
-                                        );
-                                        chat_state.update_workspace(new_cwd.to_string());
-
-                                        // Current core binds sessions to the workspace at creation time.
-                                        // Keep the CLI state in sync; new sessions will use this workspace.
-                                        let agent = self.agent.clone();
-                                        let ws = PathBuf::from(new_cwd);
-                                        let _ = tokio::task::block_in_place(|| {
-                                            rt_handle.block_on(async move {
-                                                agent.set_workspace_path(Some(ws)).await;
-                                            })
-                                        });
-                                    }
-                                }
-                            }
                         }
                         chat_state.handle_tool_event(tool_event);
                         chat_view.invalidate_lines_cache();
@@ -1114,18 +1059,6 @@ impl ChatMode {
                 SessionAction::Delete(item) => {
                     self.handle_session_delete(&item, chat_view, chat_state, rt_handle);
                 }
-                SessionAction::Rename {
-                    session_id,
-                    new_name,
-                } => {
-                    self.handle_session_rename(
-                        &session_id,
-                        &new_name,
-                        chat_view,
-                        chat_state,
-                        rt_handle,
-                    );
-                }
                 SessionAction::Close | SessionAction::None => {}
             }
             return Ok(None);
@@ -1216,20 +1149,6 @@ impl ChatMode {
             return Ok(None);
         }
 
-        if chat_view.rename_dialog_visible() {
-            let action = chat_view.rename_dialog_handle_key(key);
-            match action {
-                RenameAction::Confirm(new_name) => {
-                    self.do_rename_session(&new_name, chat_view, chat_state, rt_handle);
-                }
-                RenameAction::Cancel => {
-                    chat_view.set_status(Some("Rename cancelled".to_string()));
-                }
-                RenameAction::None => {}
-            }
-            return Ok(None);
-        }
-
         if chat_view.provider_selector_visible() {
             if let Some(selection) = chat_view.provider_selector_handle_key(key) {
                 self.handle_provider_selection(selection, chat_view);
@@ -1251,24 +1170,6 @@ impl ChatMode {
                     chat_view.set_status(Some("Model form cancelled".to_string()));
                 }
                 ModelFormAction::None => {}
-            }
-            return Ok(None);
-        }
-
-        if chat_view.workspace_dialog_visible() {
-            let action = chat_view.workspace_dialog_handle_key(key);
-            match action {
-                WorkspaceAction::Confirm(new_path) => {
-                    if let Some(reason) =
-                        self.apply_workspace_switch(&new_path, chat_view, chat_state, rt_handle)?
-                    {
-                        return Ok(Some(reason));
-                    }
-                }
-                WorkspaceAction::Cancel => {
-                    chat_view.set_status(Some("Workspace switch cancelled".to_string()));
-                }
-                WorkspaceAction::None => {}
             }
             return Ok(None);
         }
@@ -1698,9 +1599,6 @@ impl ChatMode {
                 }
                 return Ok(Some(ChatExitReason::NewSession));
             }
-            "rename_session" => {
-                chat_view.show_rename_dialog(&chat_state.session_name);
-            }
             "sessions" => {
                 if chat_state.is_processing {
                     chat_view.set_status(Some(
@@ -1808,9 +1706,6 @@ impl ChatMode {
             "/connect" => {
                 chat_view.show_provider_selector();
             }
-            "/rename" => {
-                chat_view.show_rename_dialog(&chat_state.session_name);
-            }
             "/new" => {
                 if chat_state.is_processing {
                     chat_view.set_status(Some(
@@ -1830,21 +1725,6 @@ impl ChatMode {
                     return Ok(None);
                 }
                 self.show_session_selector(chat_view, chat_state, rt_handle);
-            }
-            "/workspace" => {
-                if chat_state.is_processing {
-                    chat_view.set_status(Some(
-                        "Cannot switch workspace while processing. Press Ctrl+C to cancel first."
-                            .to_string(),
-                    ));
-                    return Ok(None);
-                }
-                let current = chat_state
-                    .workspace
-                    .as_deref()
-                    .or(self.workspace.as_deref())
-                    .unwrap_or("");
-                chat_view.show_workspace_dialog(current);
             }
             "/mcps" => {
                 self.show_mcp_selector(chat_view, chat_state, rt_handle);
@@ -1909,14 +1789,7 @@ impl ChatMode {
 
     fn list_available_themes(&self) -> Vec<ThemeItem> {
         let mut themes = Vec::new();
-        themes.push(ThemeItem {
-            id: "bitfun".to_string(),
-        });
-
         for id in builtin_theme_ids() {
-            if id == "bitfun" {
-                continue;
-            }
             themes.push(ThemeItem { id });
         }
 
@@ -1945,7 +1818,7 @@ impl ChatMode {
             return Theme::monochrome();
         }
 
-        if id.is_empty() || id.eq_ignore_ascii_case("bitfun") {
+        if id.is_empty() {
             return base;
         }
 
@@ -2887,95 +2760,6 @@ impl ChatMode {
         Ok(())
     }
 
-    /// Execute the rename: call core coordinator and update state
-    fn do_rename_session(
-        &self,
-        new_name: &str,
-        chat_view: &mut ChatView,
-        chat_state: &mut ChatState,
-        rt_handle: &tokio::runtime::Handle,
-    ) {
-        let sid = chat_state.core_session_id.clone();
-        let _ = (new_name, chat_state, rt_handle);
-        chat_view.set_status(Some(
-            "Session rename is not available in this core version".to_string(),
-        ));
-        tracing::info!("Session rename skipped by CLI adapter: {}", sid);
-    }
-
-    /// Switch workspace and switch to an appropriate session.
-    ///
-    /// Behavior:
-    /// - If there is an existing session for the new workspace, restore the most recent one.
-    /// - Otherwise, create a new session for the new workspace.
-    fn apply_workspace_switch(
-        &mut self,
-        new_path: &str,
-        chat_view: &mut ChatView,
-        chat_state: &mut ChatState,
-        rt_handle: &tokio::runtime::Handle,
-    ) -> Result<Option<ChatExitReason>> {
-        let target = normalize_workspace_path(new_path);
-        let current = chat_state
-            .workspace
-            .as_deref()
-            .map(normalize_workspace_path)
-            .unwrap_or_default();
-
-        if !current.is_empty() && current == target {
-            chat_view.set_status(Some("Workspace unchanged".to_string()));
-            return Ok(None);
-        }
-
-        let agent = self.agent.clone();
-        let workspace_path = Some(PathBuf::from(new_path));
-        tokio::task::block_in_place(|| {
-            rt_handle.block_on(async {
-                agent.set_workspace_path(workspace_path).await;
-            })
-        });
-
-        // Update local state (used by create_new_session and as fallback)
-        self.workspace = Some(new_path.to_string());
-        chat_state.workspace = Some(new_path.to_string());
-
-        // Find the most recent session that belongs to this workspace
-        let agent = self.agent.clone();
-        let maybe_session_id = tokio::task::block_in_place(|| {
-            rt_handle.block_on(async {
-                let workspace_path = agent.workspace_path_buf();
-                let sessions = agent.coordinator().list_sessions(&workspace_path).await.ok()?;
-                sessions.first().map(|s| s.session_id.clone())
-            })
-        });
-
-        if let Some(session_id) = maybe_session_id {
-            if session_id == chat_state.core_session_id {
-                chat_view.set_status(Some(format!("Workspace switched to: {}", new_path)));
-                tracing::info!("Workspace switched to: {}", new_path);
-                return Ok(None);
-            }
-
-            chat_view.set_status(Some(format!(
-                "Workspace switched to: {} (restoring session)",
-                new_path
-            )));
-            tracing::info!(
-                "Workspace switched to: {} (restoring session {})",
-                new_path,
-                session_id
-            );
-            return Ok(Some(ChatExitReason::SwitchSession(session_id)));
-        }
-
-        chat_view.set_status(Some(format!(
-            "Workspace switched to: {} (creating new session)",
-            new_path
-        )));
-        tracing::info!("Workspace switched to: {} (new session)", new_path);
-        Ok(Some(ChatExitReason::NewSession))
-    }
-
     /// Show skill selector popup with all available skills
     fn show_skill_selector(
         &self,
@@ -3192,22 +2976,6 @@ impl ChatMode {
                 tracing::error!("Failed to delete session: {}", e);
             }
         }
-    }
-
-    /// Handle session rename from the session selector
-    fn handle_session_rename(
-        &self,
-        session_id: &str,
-        new_name: &str,
-        chat_view: &mut ChatView,
-        chat_state: &mut ChatState,
-        rt_handle: &tokio::runtime::Handle,
-    ) {
-        let _ = (new_name, chat_state, rt_handle);
-        chat_view.set_status(Some(
-            "Session rename is not available in this core version".to_string(),
-        ));
-        tracing::info!("Session selector rename skipped by CLI adapter: {}", session_id);
     }
 
     /// Handle provider selection result (step 1 → step 2)

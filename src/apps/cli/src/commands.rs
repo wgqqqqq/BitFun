@@ -33,10 +33,6 @@ pub const COMMAND_SPECS: &[CommandSpec] = &[
         description: "Add a new AI model configuration",
     },
     CommandSpec {
-        name: "/rename",
-        description: "Rename session",
-    },
-    CommandSpec {
         name: "/new",
         description: "New session",
     },
@@ -51,10 +47,6 @@ pub const COMMAND_SPECS: &[CommandSpec] = &[
     CommandSpec {
         name: "/subagents",
         description: "Browse and launch subagents",
-    },
-    CommandSpec {
-        name: "/workspace",
-        description: "Switch workspace directory",
     },
     CommandSpec {
         name: "/mcps",
@@ -103,10 +95,6 @@ pub const STARTUP_COMMAND_SPECS: &[CommandSpec] = &[
     CommandSpec {
         name: "/subagents",
         description: "Browse and launch subagents",
-    },
-    CommandSpec {
-        name: "/workspace",
-        description: "Switch workspace directory",
     },
     CommandSpec {
         name: "/mcps",

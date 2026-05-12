@@ -679,57 +679,10 @@ static BUILTIN_OPENCODE_THEMES: Lazy<HashMap<&'static str, OpencodeThemeJson>> =
 
     HashMap::from([
         parse(
-            "aura",
-            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/themes/presets/aura.json")),
-        ),
-        parse(
-            "ayu",
-            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/themes/presets/ayu.json")),
-        ),
-        parse(
-            "carbonfox",
-            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/themes/presets/carbonfox.json")),
-        ),
-        parse(
-            "catppuccin-frappe",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/catppuccin-frappe.json"
-            )),
-        ),
-        parse(
-            "catppuccin-macchiato",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/catppuccin-macchiato.json"
-            )),
-        ),
-        parse(
-            "catppuccin",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/catppuccin.json"
-            )),
-        ),
-        parse(
-            "cobalt2",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/cobalt2.json"
-            )),
-        ),
-        parse(
             "cursor",
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/themes/presets/cursor.json"
-            )),
-        ),
-        parse(
-            "dracula",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/dracula.json"
             )),
         ),
         parse(
@@ -740,80 +693,10 @@ static BUILTIN_OPENCODE_THEMES: Lazy<HashMap<&'static str, OpencodeThemeJson>> =
             )),
         ),
         parse(
-            "flexoki",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/flexoki.json"
-            )),
-        ),
-        parse(
             "github",
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/themes/presets/github.json"
-            )),
-        ),
-        parse(
-            "gruvbox",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/gruvbox.json"
-            )),
-        ),
-        parse(
-            "kanagawa",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/kanagawa.json"
-            )),
-        ),
-        parse(
-            "lucent-orng",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/lucent-orng.json"
-            )),
-        ),
-        parse(
-            "material",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/material.json"
-            )),
-        ),
-        parse(
-            "matrix",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/matrix.json"
-            )),
-        ),
-        parse(
-            "mercury",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/mercury.json"
-            )),
-        ),
-        parse(
-            "monokai",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/monokai.json"
-            )),
-        ),
-        parse(
-            "nightowl",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/nightowl.json"
-            )),
-        ),
-        parse(
-            "nord",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/nord.json"
             )),
         ),
         parse(
@@ -831,73 +714,10 @@ static BUILTIN_OPENCODE_THEMES: Lazy<HashMap<&'static str, OpencodeThemeJson>> =
             )),
         ),
         parse(
-            "orng",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/orng.json"
-            )),
-        ),
-        parse(
-            "osaka-jade",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/osaka-jade.json"
-            )),
-        ),
-        parse(
-            "palenight",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/palenight.json"
-            )),
-        ),
-        parse(
-            "rosepine",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/rosepine.json"
-            )),
-        ),
-        parse(
-            "solarized",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/solarized.json"
-            )),
-        ),
-        parse(
-            "synthwave84",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/synthwave84.json"
-            )),
-        ),
-        parse(
             "tokyonight",
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/themes/presets/tokyonight.json"
-            )),
-        ),
-        parse(
-            "vercel",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/vercel.json"
-            )),
-        ),
-        parse(
-            "vesper",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/vesper.json"
-            )),
-        ),
-        parse(
-            "zenburn",
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/themes/presets/zenburn.json"
             )),
         ),
     ])

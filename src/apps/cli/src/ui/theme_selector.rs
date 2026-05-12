@@ -4,10 +4,10 @@
 
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{
-    layout::{Alignment, Rect},
+    layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState},
     Frame,
 };
 
@@ -167,21 +167,6 @@ impl ThemeSelectorState {
 
         frame.render_widget(Clear, popup_area);
         frame.render_stateful_widget(list, popup_area, &mut self.list_state);
-
-        let hint_area = Rect {
-            x: popup_area.x,
-            y: popup_area.y + popup_area.height,
-            width: popup_area.width,
-            height: 1.min(area.y + area.height - popup_area.y - popup_area.height),
-        };
-        if hint_area.height > 0 {
-            let hint = Paragraph::new(Line::from(vec![Span::styled(
-                " Built-in themes (opencode-compatible) ",
-                theme.style(StyleKind::Info),
-            )]))
-            .alignment(Alignment::Center);
-            frame.render_widget(hint, hint_area);
-        }
     }
 
     pub fn captures_mouse(&self, mouse: &MouseEvent) -> bool {

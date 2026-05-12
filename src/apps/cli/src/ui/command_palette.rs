@@ -49,12 +49,6 @@ pub fn default_palette_items() -> Vec<PaletteItem> {
             group: "Session".into(),
         },
         PaletteItem {
-            id: "rename_session".into(),
-            label: "Rename session".into(),
-            description: "Rename the current session".into(),
-            group: "Session".into(),
-        },
-        PaletteItem {
             id: "sessions".into(),
             label: "Sessions".into(),
             description: "Browse and switch sessions".into(),
@@ -92,6 +86,13 @@ pub fn default_palette_items() -> Vec<PaletteItem> {
             label: "Switch agent".into(),
             description: "Switch agent mode".into(),
             group: "Agent".into(),
+        },
+        // MCP group
+        PaletteItem {
+            id: "mcp_servers".into(),
+            label: "MCP servers".into(),
+            description: "Manage MCP servers".into(),
+            group: "MCP".into(),
         },
         // System group
         PaletteItem {

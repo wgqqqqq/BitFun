@@ -2,7 +2,7 @@
 ///
 /// Overlay popup that displays all available sessions
 /// and allows the user to select one to switch to.
-/// Supports inline rename (Ctrl+R) and delete (Ctrl+D).
+/// Supports switching and deleting current-project sessions.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{
@@ -33,8 +33,6 @@ pub enum SessionAction {
     Switch(SessionItem),
     /// User wants to delete the selected session
     Delete(SessionItem),
-    /// User finished renaming a session
-    Rename { session_id: String, new_name: String },
     /// User cancelled / closed the popup
     Close,
 }
@@ -116,13 +114,6 @@ impl SessionSelectorState {
         self.list_state.select(Some(clamped));
     }
 
-    /// Update item name after rename
-    pub fn update_item_name(&mut self, session_id: &str, new_name: &str) {
-        if let Some(item) = self.items.iter_mut().find(|s| s.session_id == session_id) {
-            item.session_name = new_name.to_string();
-        }
-    }
-
     fn selected_item(&self) -> Option<&SessionItem> {
         let idx = self.list_state.selected()?;
         self.items.get(idx)
@@ -170,35 +161,16 @@ impl SessionSelectorState {
                     SessionAction::None
                 }
             }
-            // Ctrl+R: start inline rename
-            (KeyCode::Char('r'), KeyModifiers::CONTROL) => {
-                if let Some(item) = self.selected_item() {
-                    self.rename_buffer = item.session_name.clone();
-                    self.rename_cursor = self.rename_buffer.chars().count();
-                    self.rename_editing = true;
-                }
-                SessionAction::None
-            }
             _ => SessionAction::None,
         }
     }
 
-    /// Handle keys while in rename editing mode
+    /// Handle keys while in rename editing mode.
+    /// This path is unreachable while rename is disabled, but keeps stale state harmless.
     fn handle_rename_key(&mut self, key: KeyEvent) -> SessionAction {
         match key.code {
             KeyCode::Enter => {
-                let new_name = self.rename_buffer.trim().to_string();
                 self.rename_editing = false;
-                if new_name.is_empty() {
-                    return SessionAction::None;
-                }
-                if let Some(item) = self.selected_item() {
-                    let sid = item.session_id.clone();
-                    return SessionAction::Rename {
-                        session_id: sid,
-                        new_name,
-                    };
-                }
                 SessionAction::None
             }
             KeyCode::Esc => {
@@ -373,7 +345,7 @@ impl SessionSelectorState {
             let hint_text = if self.rename_editing {
                 " Enter: Save  Esc: Cancel "
             } else {
-                " ↑↓: Navigate  Enter: Switch  Ctrl+R: Rename  Ctrl+D: Delete  Esc: Close "
+                " Up/Down: Navigate  Enter: Switch  Ctrl+D: Delete  Esc: Close "
             };
             let hint = Paragraph::new(Line::from(Span::styled(
                 hint_text,

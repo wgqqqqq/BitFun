@@ -168,58 +168,6 @@ impl ChatView {
         self.agent_selector.confirm_selection()
     }
 
-    // ============ Rename dialog methods ============
-
-    pub fn show_rename_dialog(&mut self, current_name: &str) {
-        self.rename_dialog.show(current_name);
-        self.popup_stack.push(PopupType::RenameDialog);
-    }
-
-    pub fn rename_dialog_visible(&self) -> bool {
-        self.rename_dialog.is_visible()
-    }
-
-    pub fn hide_rename_dialog(&mut self) {
-        self.rename_dialog.hide();
-    }
-
-    pub fn reshow_rename_dialog(&mut self) {
-        self.rename_dialog.reshow();
-    }
-
-    pub fn rename_dialog_handle_key(
-        &mut self,
-        key: crossterm::event::KeyEvent,
-    ) -> RenameAction {
-        self.rename_dialog.handle_key_event(key)
-    }
-
-    // ============ Workspace dialog methods ============
-
-    pub fn show_workspace_dialog(&mut self, current_workspace: &str) {
-        self.workspace_dialog.show(current_workspace);
-        self.popup_stack.push(PopupType::WorkspaceDialog);
-    }
-
-    pub fn workspace_dialog_visible(&self) -> bool {
-        self.workspace_dialog.is_visible()
-    }
-
-    pub fn hide_workspace_dialog(&mut self) {
-        self.workspace_dialog.hide();
-    }
-
-    pub fn reshow_workspace_dialog(&mut self) {
-        self.workspace_dialog.reshow();
-    }
-
-    pub fn workspace_dialog_handle_key(
-        &mut self,
-        key: crossterm::event::KeyEvent,
-    ) -> WorkspaceAction {
-        self.workspace_dialog.handle_key_event(key)
-    }
-
     // ============ Skill selector methods ============
 
     pub fn show_skill_selector(&mut self, skills: Vec<SkillItem>) {
@@ -400,10 +348,6 @@ impl ChatView {
 
     pub fn session_selector_remove_item(&mut self, session_id: &str) {
         self.session_selector.remove_item(session_id);
-    }
-
-    pub fn session_selector_update_name(&mut self, session_id: &str, new_name: &str) {
-        self.session_selector.update_item_name(session_id, new_name);
     }
 
     // ============ Provider selector methods (add model step 1) ============

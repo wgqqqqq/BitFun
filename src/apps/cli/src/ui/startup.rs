@@ -28,7 +28,6 @@ use super::agent_selector::{AgentItem, AgentSelectorState};
 use super::session_selector::{SessionAction, SessionItem, SessionSelectorState};
 use super::skill_selector::{SkillItem, SkillSelectorState};
 use super::subagent_selector::{SubagentItem, SubagentSelectorState};
-use super::workspace_dialog::{WorkspaceAction, WorkspaceDialogState};
 use super::theme::{
     builtin_theme_json, resolve_appearance, resolve_effective_color_scheme, EffectiveColorScheme,
     Theme,
@@ -50,7 +49,6 @@ pub enum PopupType {
     SessionSelector,
     SkillSelector,
     SubagentSelector,
-    WorkspaceDialog,
     ProviderSelector,
     ModelConfigForm,
 }
@@ -129,7 +127,6 @@ const TIPS: &[&str] = &[
     "Use /skills to browse and execute available skills",
     "Press Up/Down to cycle through input history",
     "Use /new to start a fresh conversation session",
-    "Use /rename to rename the current session",
 ];
 
 /// Startup page
@@ -153,7 +150,6 @@ pub struct StartupPage {
     session_selector: SessionSelectorState,
     skill_selector: SkillSelectorState,
     subagent_selector: SubagentSelectorState,
-    workspace_dialog: WorkspaceDialogState,
     provider_selector: ProviderSelectorState,
     model_config_form: ModelConfigFormState,
 
@@ -197,7 +193,7 @@ impl StartupPage {
             Theme::monochrome()
         } else {
             let id = config.ui.theme_id.trim();
-            if id.is_empty() || id.eq_ignore_ascii_case("bitfun") {
+            if id.is_empty() {
                 base
             } else if let Some(json) = builtin_theme_json(id) {
                 base.apply_opencode_theme_json(json, appearance)
@@ -225,7 +221,6 @@ impl StartupPage {
             session_selector: SessionSelectorState::new(),
             skill_selector: SkillSelectorState::new(),
             subagent_selector: SubagentSelectorState::new(),
-            workspace_dialog: WorkspaceDialogState::new(),
             provider_selector: ProviderSelectorState::new(),
             model_config_form: ModelConfigFormState::new(),
             coordinator,
@@ -253,7 +248,7 @@ impl StartupPage {
         &self.agent_type
     }
 
-    /// Get the current workspace path (may have been changed via /workspace)
+    /// Get the current workspace path for this CLI process.
     pub fn workspace(&self) -> Option<String> {
         if self.workspace_display.is_empty() {
             None
@@ -277,7 +272,6 @@ impl StartupPage {
             || self.session_selector.is_visible()
             || self.skill_selector.is_visible()
             || self.subagent_selector.is_visible()
-            || self.workspace_dialog.is_visible()
             || self.provider_selector.is_visible()
             || self.model_config_form.is_visible()
     }
@@ -423,7 +417,6 @@ impl StartupPage {
         self.session_selector.render(frame, size, &self.theme);
         self.skill_selector.render(frame, size, &self.theme);
         self.subagent_selector.render(frame, size, &self.theme);
-        self.workspace_dialog.render(frame, size, &self.theme);
         self.provider_selector.render(frame, size, &self.theme);
         self.model_config_form.render_mut(frame, size, &self.theme);
 
@@ -770,9 +763,6 @@ impl StartupPage {
                 SessionAction::Delete(item) => {
                     self.handle_session_delete(&item);
                 }
-                SessionAction::Rename { session_id, new_name } => {
-                    self.handle_session_rename(&session_id, &new_name);
-                }
                 SessionAction::Close => {
                     self.navigate_back();
                 }
@@ -835,21 +825,6 @@ impl StartupPage {
                     self.status = Some("Model form cancelled".to_string());
                 }
                 ModelFormAction::None => {}
-            }
-            return None;
-        }
-
-        if self.workspace_dialog.is_visible() {
-            let action = self.workspace_dialog.handle_key_event(key);
-            match action {
-                WorkspaceAction::Confirm(new_path) => {
-                    self.do_switch_workspace(&new_path);
-                }
-                WorkspaceAction::Cancel => {
-                    self.navigate_back();
-                    self.status = Some("Workspace switch cancelled".to_string());
-                }
-                WorkspaceAction::None => {}
             }
             return None;
         }
@@ -1002,9 +977,6 @@ impl StartupPage {
             "new_session" => {
                 return Some(StartupResult::NewSession { prompt: None });
             }
-            "rename_session" => {
-                self.status = Some("No active session to rename on startup page".to_string());
-            }
             "sessions" => {
                 self.show_session_selector();
             }
@@ -1026,6 +998,12 @@ impl StartupPage {
             // Agent group
             "switch_agent" => {
                 self.show_agent_selector();
+            }
+            // MCP group
+            "mcp_servers" => {
+                return Some(StartupResult::NewSession {
+                    prompt: Some("/mcps".to_string()),
+                });
             }
             // System group
             "help" => {
@@ -1075,10 +1053,6 @@ impl StartupPage {
             "/subagents" => {
                 self.show_subagent_selector();
             }
-            "/workspace" => {
-                self.push_current_popup_to_stack();
-                self.workspace_dialog.show(&self.workspace_display);
-            }
             "/mcps" => {
                 // Enter chat mode and auto-trigger /mcps command
                 return Some(StartupResult::NewSession {
@@ -1127,9 +1101,6 @@ impl StartupPage {
         } else if self.subagent_selector.is_visible() {
             self.popup_stack.push(PopupType::SubagentSelector);
             self.subagent_selector.hide();
-        } else if self.workspace_dialog.is_visible() {
-            self.popup_stack.push(PopupType::WorkspaceDialog);
-            self.workspace_dialog.hide();
         } else if self.provider_selector.is_visible() {
             self.popup_stack.push(PopupType::ProviderSelector);
             self.provider_selector.hide();
@@ -1204,14 +1175,6 @@ impl StartupPage {
                 self.status = Some(format!("Failed to delete session: {}", e));
             }
         }
-    }
-
-    fn handle_session_rename(&mut self, session_id: &str, new_name: &str) {
-        let _ = new_name;
-        self.status = Some(
-            "Session rename is not available in this core version".to_string(),
-        );
-        tracing::info!("Startup session rename skipped by CLI adapter: {}", session_id);
     }
 
     fn show_model_selector(&mut self) {
@@ -1654,8 +1617,6 @@ impl StartupPage {
             self.skill_selector.hide();
         } else if self.subagent_selector.is_visible() {
             self.subagent_selector.hide();
-        } else if self.workspace_dialog.is_visible() {
-            self.workspace_dialog.hide();
         } else if self.provider_selector.is_visible() {
             self.provider_selector.hide();
         } else if self.model_config_form.is_visible() {
@@ -1671,7 +1632,6 @@ impl StartupPage {
                 PopupType::SessionSelector => self.session_selector.reshow(),
                 PopupType::SkillSelector => self.skill_selector.reshow(),
                 PopupType::SubagentSelector => self.subagent_selector.reshow(),
-                PopupType::WorkspaceDialog => self.workspace_dialog.reshow(),
                 PopupType::ProviderSelector => self.provider_selector.reshow(),
                 PopupType::ModelConfigForm => self.model_config_form.reshow(),
             }
@@ -1686,7 +1646,6 @@ impl StartupPage {
         self.session_selector.hide();
         self.skill_selector.hide();
         self.subagent_selector.hide();
-        self.workspace_dialog.hide();
         self.provider_selector.hide();
         self.model_config_form.hide();
         self.popup_stack.clear();
@@ -1698,19 +1657,6 @@ impl StartupPage {
             tokio::runtime::Handle::current().block_on(registry.get_modes_info())
         });
         modes.into_iter().filter(|mode| mode.enabled).collect()
-    }
-
-    /// Switch workspace: update global path and display
-    fn do_switch_workspace(&mut self, new_path: &str) {
-        use std::path::PathBuf;
-
-        let _path_buf = PathBuf::from(new_path);
-
-        // Update display
-        self.workspace_display = new_path.to_string();
-
-        self.status = Some(format!("Workspace switched to: {}", new_path));
-        tracing::info!("Workspace switched to: {}", new_path);
     }
 
     fn cycle_agent(&mut self, offset: isize) {

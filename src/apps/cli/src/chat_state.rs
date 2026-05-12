@@ -829,11 +829,6 @@ impl ChatState {
         self.metadata.total_tokens = total_tokens;
     }
 
-    /// Update workspace path (e.g. after cd command changes working directory)
-    pub fn update_workspace(&mut self, new_workspace: String) {
-        self.workspace = Some(new_workspace);
-    }
-
     /// Add a system message (for commands like /help, /clear, etc.)
     pub fn add_system_message(&mut self, content: String) {
         self.messages.push(ChatMessage {
