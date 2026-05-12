@@ -425,65 +425,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ className = '' }) => {
     return () => window.removeEventListener('toolbar-send-message', handleToolbarSendMessage);
   }, []);
 
-  // Listen for tray "open session" events (fired when user clicks a recent session in the
-  // tray context menu).  Switch workspace if needed, then navigate to the session.
-  const pendingTraySessionRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!canUseNativeWindowControls) return;
-    let unlisten: (() => void) | null = null;
-
-    void (async () => {
-      try {
-        const { listen } = await import('@tauri-apps/api/event');
-        unlisten = await listen<{ sessionId: string; workspacePath: string }>(
-          'tray://open-session',
-          async event => {
-            const { sessionId, workspacePath } = event.payload;
-            log.info('Tray open-session received', { sessionId, workspacePath });
-
-            const normalize = (p: string) => p.replace(/\\/g, '/').toLowerCase();
-            const isSameWorkspace =
-              !!currentWorkspace?.rootPath &&
-              normalize(currentWorkspace.rootPath) === normalize(workspacePath);
-
-            if (!isSameWorkspace) {
-              // Switch workspace first; once loaded the second useEffect will
-              // fire openMainSession for the pending session.
-              pendingTraySessionRef.current = sessionId;
-              try {
-                await openWorkspace(workspacePath);
-              } catch (error) {
-                log.error('Tray: failed to open workspace', { workspacePath, error });
-                pendingTraySessionRef.current = null;
-              }
-            } else {
-              const { openMainSession } = await import('@/flow_chat/services/openBtwSession');
-              await openMainSession(sessionId);
-            }
-          }
-        );
-      } catch (error) {
-        log.error('Failed to setup tray open-session listener', error);
-      }
-    })();
-
-    return () => { if (unlisten) unlisten(); };
-  }, [canUseNativeWindowControls, currentWorkspace, openWorkspace]);
-
-  // Once a workspace switch triggered by the tray completes, navigate to the
-  // pending session.
-  useEffect(() => {
-    const pending = pendingTraySessionRef.current;
-    if (!pending || !hasWorkspace) return;
-    pendingTraySessionRef.current = null;
-    void (async () => {
-      // Small delay to let FlowChatManager finish loading sessions.
-      await new Promise(r => setTimeout(r, 800));
-      const { openMainSession } = await import('@/flow_chat/services/openBtwSession');
-      await openMainSession(pending);
-    })();
-  }, [hasWorkspace, currentWorkspace]);
-
   // Toggle left panel: mod+B (VS Code convention)
   useShortcut(
     'panel.toggleLeft',

@@ -280,25 +280,6 @@ impl TaskTool {
         .await;
     }
 
-    async fn wait_for_deep_review_reviewer_capacity(
-        session_id: &str,
-        dialog_turn_id: &str,
-        tool_id: &str,
-        subagent_type: &str,
-        conc_policy: &DeepReviewConcurrencyPolicy,
-        is_optional_reviewer: bool,
-    ) -> BitFunResult<DeepReviewQueueWaitOutcome> {
-        deep_review_task_adapter::wait_for_reviewer_capacity(
-            session_id,
-            dialog_turn_id,
-            tool_id,
-            subagent_type,
-            conc_policy,
-            is_optional_reviewer,
-        )
-        .await
-    }
-
     fn try_begin_deep_review_reviewer_admission(
         dialog_turn_id: &str,
         effective_parallel_instances: usize,
@@ -1424,6 +1405,7 @@ impl Tool for TaskTool {
 #[cfg(test)]
 mod tests {
     use super::TaskTool;
+    use crate::agentic::deep_review::task_adapter as deep_review_task_adapter;
     use crate::agentic::deep_review_policy::{
         DeepReviewBudgetTracker, DeepReviewExecutionPolicy, DeepReviewSubagentRole,
     };
@@ -1635,13 +1617,14 @@ mod tests {
         let tool_id_owned = tool_id.to_string();
 
         let handle = tokio::spawn(async move {
-            TaskTool::wait_for_deep_review_reviewer_capacity(
+            deep_review_task_adapter::wait_for_reviewer_admission(
                 "session-queue-active-wait",
                 &turn_id_owned,
                 &tool_id_owned,
                 "ReviewSecurity",
                 &policy,
                 false,
+                None,
             )
             .await
         });
@@ -1759,13 +1742,14 @@ mod tests {
             auto_retry_elapsed_guard_seconds: 180,
         };
 
-        let outcome = TaskTool::wait_for_deep_review_reviewer_capacity(
+        let outcome = deep_review_task_adapter::wait_for_reviewer_admission(
             "session-queue-cancel",
             turn_id,
             tool_id,
             "ReviewSecurity",
             &policy,
             false,
+            None,
         )
         .await
         .expect("queue wait should resolve");
@@ -1806,13 +1790,14 @@ mod tests {
         let tool_id_owned = tool_id.to_string();
 
         let handle = tokio::spawn(async move {
-            TaskTool::wait_for_deep_review_reviewer_capacity(
+            deep_review_task_adapter::wait_for_reviewer_admission(
                 "session-queue-ready-diagnostics",
                 &turn_id_owned,
                 &tool_id_owned,
                 "ReviewSecurity",
                 &policy,
                 false,
+                None,
             )
             .await
         });
@@ -1865,13 +1850,14 @@ mod tests {
         let tool_id_owned = tool_id.to_string();
 
         let handle = tokio::spawn(async move {
-            TaskTool::wait_for_deep_review_reviewer_capacity(
+            deep_review_task_adapter::wait_for_reviewer_admission(
                 "session-queue-pause",
                 &turn_id_owned,
                 &tool_id_owned,
                 "ReviewSecurity",
                 &policy,
                 false,
+                None,
             )
             .await
         });
@@ -1928,13 +1914,14 @@ mod tests {
             auto_retry_elapsed_guard_seconds: 180,
         };
 
-        let outcome = TaskTool::wait_for_deep_review_reviewer_capacity(
+        let outcome = deep_review_task_adapter::wait_for_reviewer_admission(
             "session-queue-skip-optional",
             turn_id,
             tool_id,
             "ReviewCustom",
             &policy,
             true,
+            None,
         )
         .await
         .expect("queue wait should resolve");

@@ -195,6 +195,7 @@
     min-height: 20px;
   }
 
+
   .task-action {
     font-size: 12px;
     font-weight: 500;
@@ -204,12 +205,20 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+
+    &__model-tag {
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--color-text-secondary);
+      vertical-align: baseline;
+    }
   }
 
   .task-header-main--failed {
     .task-action {
       color: var(--color-text-muted, #6b7280);
     }
+
     
     .agent-type-badge {
       opacity: 0.6;

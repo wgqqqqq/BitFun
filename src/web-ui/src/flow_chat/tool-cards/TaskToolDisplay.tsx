@@ -219,6 +219,20 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
         ? 'success'
         : undefined;
 
+  const isTaskTool = toolItem.toolName?.toLowerCase() === 'task';
+  const resolvedSubagentModel = (
+    toolItem.subagentModelAlias?.trim()
+    || toolItem.subagentModelId?.trim()
+    || ''
+  );
+  const showSubagentExecModel =
+    isTaskTool &&
+    (
+      Boolean(toolItem.subagentSessionId)
+      || Boolean(resolvedSubagentModel)
+      || isRunning
+    );
+
   const handleCardClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (
@@ -241,7 +255,7 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
     needsConfirmation ||
     Boolean(taskInput?.reviewerContext);
 
-  const taskHeaderLine = useMemo(() => {
+  const { taskHeaderLine, taskAgentTypeLabel, taskDesc } = useMemo(() => {
     const desc =
       (taskInput?.description || '').trim() || t('toolCards.taskDetailPanel.untitled');
     const raw = taskInput?.agentType;
@@ -256,10 +270,14 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
     } else {
       agentTypeLabel = t('toolCards.taskTool.defaultAgentKind');
     }
-    return t('toolCards.taskTool.headerLine', {
-      agentType: agentTypeLabel,
-      description: desc,
-    });
+    return {
+      taskHeaderLine: t('toolCards.taskTool.headerLine', {
+        agentType: agentTypeLabel,
+        description: desc,
+      }),
+      taskAgentTypeLabel: agentTypeLabel,
+      taskDesc: desc,
+    };
   }, [taskInput, t, tAgents]);
 
   const openTaskDetailPanel = useCallback(
@@ -300,7 +318,15 @@ export const TaskToolDisplay: React.FC<ToolCardProps> = ({
         <div className="task-body-columns">
           <div className="task-body-main">
             <div className={`task-header-main ${isFailed ? 'task-header-main--failed' : ''}`}>
-              <span className="task-action">{taskHeaderLine}</span>
+              <span className="task-action">
+                {showSubagentExecModel && resolvedSubagentModel ? (
+                  <>
+                    {t('toolCards.taskTool.headerLinePrefix', { agentType: taskAgentTypeLabel })}
+                    <span className="task-action__model-tag">（{resolvedSubagentModel}）</span>
+                    {t('toolCards.taskTool.headerLineSuffix', { description: taskDesc })}
+                  </>
+                ) : taskHeaderLine}
+              </span>
               <div className="task-header-meta">
                 <ToolTimeoutIndicator
                   startTime={toolItem.startTime}

@@ -1861,6 +1861,8 @@ mod tests {
             is_subagent_item: None,
             parent_task_tool_id: None,
             subagent_session_id: None,
+            subagent_model_id: None,
+            subagent_model_alias: None,
             status: Some(
                 match success {
                     Some(true) => "completed",

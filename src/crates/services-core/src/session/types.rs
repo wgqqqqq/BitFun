@@ -488,6 +488,12 @@ pub struct ToolItemData {
     #[serde(skip_serializing_if = "Option::is_none", alias = "subagent_session_id")]
     pub subagent_session_id: Option<String>,
 
+    #[serde(skip_serializing_if = "Option::is_none", alias = "subagent_model_id")]
+    pub subagent_model_id: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", alias = "subagent_model_alias")]
+    pub subagent_model_alias: Option<String>,
+
     /// Status field
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,

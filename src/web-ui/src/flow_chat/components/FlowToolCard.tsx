@@ -101,6 +101,9 @@ export const FlowToolCard: React.FC<FlowToolCardProps> = React.memo(({
     prevProps.toolItem.userConfirmed === nextProps.toolItem.userConfirmed &&
     prevProps.toolItem.acpPermission === nextProps.toolItem.acpPermission &&
     prevProps.toolItem.isParamsStreaming === nextProps.toolItem.isParamsStreaming &&
+    prevProps.toolItem.subagentSessionId === nextProps.toolItem.subagentSessionId &&
+    prevProps.toolItem.subagentModelId === nextProps.toolItem.subagentModelId &&
+    prevProps.toolItem.subagentModelAlias === nextProps.toolItem.subagentModelAlias &&
     prevProgress === nextProgress &&
     prevProps.toolItem.partialParams === nextProps.toolItem.partialParams &&
     prevProps.toolItem.toolResult === nextProps.toolItem.toolResult

@@ -829,26 +829,6 @@ pub(crate) fn record_provider_capacity_retry_success(
     record_deep_review_runtime_provider_capacity_retry_success(dialog_turn_id, reason);
 }
 
-pub(crate) async fn wait_for_reviewer_capacity(
-    session_id: &str,
-    dialog_turn_id: &str,
-    tool_id: &str,
-    subagent_type: &str,
-    conc_policy: &DeepReviewConcurrencyPolicy,
-    is_optional_reviewer: bool,
-) -> BitFunResult<DeepReviewQueueWaitOutcome> {
-    wait_for_reviewer_admission(
-        session_id,
-        dialog_turn_id,
-        tool_id,
-        subagent_type,
-        conc_policy,
-        is_optional_reviewer,
-        None,
-    )
-    .await
-}
-
 pub(crate) fn try_begin_reviewer_admission(
     dialog_turn_id: &str,
     effective_parallel_instances: usize,

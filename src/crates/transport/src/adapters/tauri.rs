@@ -123,6 +123,7 @@ impl TransportAdapter for TauriTransportAdapter {
                 round_id,
                 round_index,
                 subagent_parent_info,
+                model_id,
             } => {
                 self.app_handle.emit(
                     "agentic://model-round-started",
@@ -132,6 +133,7 @@ impl TransportAdapter for TauriTransportAdapter {
                         "roundId": round_id,
                         "roundIndex": round_index,
                         "subagentParentInfo": subagent_parent_info,
+                        "modelId": model_id,
                     }),
                 )?;
             }

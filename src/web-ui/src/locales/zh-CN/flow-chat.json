@@ -1214,6 +1214,9 @@
     },
     "taskTool": {
       "headerLine": "{{agentType}} 智能体：{{description}}",
+      "headerLineWithModel": "{{agentType}} 智能体（{{modelName}}）：{{description}}",
+      "headerLinePrefix": "{{agentType}} 智能体",
+      "headerLineSuffix": "：{{description}}",
       "defaultAgentKind": "子代理",
       "waitingConfirm": "等待确认",
       "executing": "执行中...",

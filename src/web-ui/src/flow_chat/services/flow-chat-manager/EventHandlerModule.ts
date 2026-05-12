@@ -1544,6 +1544,18 @@ function handleModelRoundStart(context: FlowChatContext, event: any): void {
       subagentParentInfo.toolCallId,
       { sessionId, turnId, roundId },
     );
+
+    const modelIdRaw = event.modelId ?? (event as any).model_id;
+    const modelId = typeof modelIdRaw === 'string' ? modelIdRaw.trim() : '';
+    if (modelId) {
+      const store = FlowChatStore.getInstance();
+      store.updateModelRoundItem(
+        subagentParentInfo.sessionId,
+        subagentParentInfo.dialogTurnId,
+        subagentParentInfo.toolCallId,
+        { subagentModelId: modelId, subagentModelAlias: modelId } as Partial<FlowToolItem>,
+      );
+    }
     return;
   }
   
@@ -1617,6 +1629,8 @@ function handleModelRoundComplete(context: FlowChatContext, event: ModelRoundCom
 
   if (subagentParentInfo) {
     attachSubagentSessionToParentTool(subagentParentInfo, sessionId);
+    immediateSaveDialogTurn(context, subagentParentInfo.sessionId, subagentParentInfo.dialogTurnId);
+    return;
   }
 
   if (!sessionId || !turnId || !roundId) {

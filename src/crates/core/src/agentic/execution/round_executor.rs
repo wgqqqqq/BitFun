@@ -96,6 +96,7 @@ impl RoundExecutor {
                 round_id: round_id.clone(),
                 round_index: context.round_number,
                 subagent_parent_info: event_subagent_parent_info.clone(),
+                model_id: Some(context.model_name.clone()),
             },
             EventPriority::High,
         )

@@ -207,6 +207,8 @@ pub enum AgenticEvent {
         round_id: String,
         round_index: usize,
         subagent_parent_info: Option<SubagentParentInfo>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model_id: Option<String>,
     },
 
     ModelRoundCompleted {

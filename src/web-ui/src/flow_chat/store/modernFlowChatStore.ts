@@ -10,6 +10,9 @@ import { immer } from 'zustand/middleware/immer';
 import type { Session, DialogTurn, ModelRound, FlowItem, FlowToolItem, FlowUserSteeringItem } from '../types/flow-chat';
 import { isCollapsibleTool, READ_TOOL_NAMES, SEARCH_TOOL_NAMES, COMMAND_TOOL_NAMES } from '../tool-cards';
 import { flowChatStore } from './FlowChatStore';
+import { createLogger } from '@/shared/utils/logger';
+
+const log = createLogger('ModernFlowChatStore');
 
 /**
  * Explore group statistics (merged computed stats)
@@ -31,6 +34,13 @@ export interface ExploreGroupData {
   stats: ExploreGroupStats;
   isGroupStreaming: boolean;
   isLastGroupInTurn: boolean;
+  /**
+   * True when this group is no longer the tail of the turn — a non-explore
+   * (critical) round or turn completion has ended the group. The renderer uses
+   * this to trigger a one-shot auto-collapse instead of continuously watching
+   * isGroupStreaming.
+   */
+  wasCutByCritical: boolean;
 }
 
 /**
@@ -226,7 +236,7 @@ export function sessionToVirtualItems(session: Session | null): VirtualItem[] {
 
     const flushRoundEntries = (
       rounds: ModelRound[],
-      options: { collapseTrailingExploreGroup: boolean },
+      _options: { collapseTrailingExploreGroup: boolean },
     ) => {
       if (rounds.length === 0) return;
 
@@ -273,7 +283,10 @@ export function sessionToVirtualItems(session: Session | null): VirtualItem[] {
         }
       });
 
-      if (currentGroup && options.collapseTrailingExploreGroup) {
+      // Always flush the trailing explore group so its container is stable
+      // throughout streaming. The wasCutByCritical flag distinguishes "still
+      // growing" from "permanently closed" for the renderer.
+      if (currentGroup) {
         tempGroups.push(currentGroup);
       }
 
@@ -287,6 +300,30 @@ export function sessionToVirtualItems(session: Session | null): VirtualItem[] {
         if (group && group.startIndex === roundIndex) {
           const isLastGroup = groupIndex === tempGroups.length - 1;
           const isGroupStreaming = group.rounds.some(r => r.isStreaming);
+          // A group is "cut by critical" when it is no longer the tail of the
+          // turn. Two conditions cover all cases:
+          //   1. group.endIndex < rounds.length - 1: there are rounds after
+          //      this group's last round — they could be non-explore (critical)
+          //      rounds OR another explore group. Either way this group is no
+          //      longer the tail.
+          //      NOTE: checking !isLastGroup alone is NOT sufficient because
+          //      tempGroups only contains explore-only groups; a following
+          //      critical round (e.g. TodoWrite) is invisible to tempGroups
+          //      yet still sits after this group in the rounds array.
+          //   2. turn is complete and no round in this group is still streaming.
+          const wasCutByCritical =
+            group.endIndex < rounds.length - 1 ||
+            (isTurnComplete && !isGroupStreaming);
+
+          if (wasCutByCritical) {
+            log.debug('explore-group marked wasCutByCritical', {
+              groupId: group.rounds.map(r => r.id).join('-'),
+              endIndex: group.endIndex,
+              totalRounds: rounds.length,
+              isTurnComplete,
+              isGroupStreaming,
+            });
+          }
 
           items.push({
             type: 'explore-group',
@@ -302,6 +339,7 @@ export function sessionToVirtualItems(session: Session | null): VirtualItem[] {
               },
               isGroupStreaming,
               isLastGroupInTurn: isLastGroup,
+              wasCutByCritical,
             },
           });
 
@@ -341,7 +379,7 @@ export function sessionToVirtualItems(session: Session | null): VirtualItem[] {
       });
     });
 
-    flushRoundEntries(pendingRounds, { collapseTrailingExploreGroup: isTurnComplete });
+    flushRoundEntries(pendingRounds, { collapseTrailingExploreGroup: true });
 
   });
 

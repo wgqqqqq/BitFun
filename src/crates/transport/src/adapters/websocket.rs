@@ -101,6 +101,7 @@ impl TransportAdapter for WebSocketTransportAdapter {
                 round_id,
                 round_index,
                 subagent_parent_info,
+                model_id,
             } => {
                 json!({
                     "type": "model-round-started",
@@ -109,6 +110,7 @@ impl TransportAdapter for WebSocketTransportAdapter {
                     "roundId": round_id,
                     "roundIndex": round_index,
                     "subagentParentInfo": subagent_parent_info,
+                    "modelId": model_id,
                 })
             }
             AgenticEvent::TextChunk {

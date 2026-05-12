@@ -435,6 +435,8 @@ export function convertDialogTurnToBackendFormat(dialogTurn: DialogTurn, turnInd
               isSubagentItem: toolItem.isSubagentItem,
               parentTaskToolId: toolItem.parentTaskToolId,
               subagentSessionId: toolItem.subagentSessionId,
+              subagentModelId: toolItem.subagentModelId,
+              subagentModelAlias: toolItem.subagentModelAlias,
             };
           }),
         thinkingItems: round.items
