@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use bitfun_core::agentic::core::message::{
     Message as CoreMessage, MessageContent, MessageRole as CoreMessageRole,
 };
+use bitfun_core::agentic::core::strip_prompt_markup;
 use bitfun_events::ToolEventData;
 
 use crate::ui::permission::PermissionPrompt;
@@ -71,6 +72,14 @@ impl From<&CoreMessageRole> for MessageRole {
             CoreMessageRole::System => MessageRole::System,
             CoreMessageRole::Tool => MessageRole::Tool,
         }
+    }
+}
+
+fn display_text_for_role(role: &MessageRole, text: &str) -> String {
+    if *role == MessageRole::User {
+        strip_prompt_markup(text)
+    } else {
+        text.to_string()
     }
 }
 
@@ -144,7 +153,7 @@ impl ChatMessage {
             MessageContent::Text(text) => {
                 if !text.is_empty() {
                     flow_items.push(FlowItem::Text {
-                        content: text.clone(),
+                        content: display_text_for_role(&role, text),
                         is_streaming: false,
                     });
                 }
@@ -166,7 +175,7 @@ impl ChatMessage {
                 // Add text block if present
                 if !text.is_empty() {
                     flow_items.push(FlowItem::Text {
-                        content: text.clone(),
+                        content: display_text_for_role(&role, text),
                         is_streaming: false,
                     });
                 }
@@ -191,7 +200,7 @@ impl ChatMessage {
             MessageContent::Multimodal { text, .. } => {
                 if !text.is_empty() {
                     flow_items.push(FlowItem::Text {
-                        content: text.clone(),
+                        content: display_text_for_role(&role, text),
                         is_streaming: false,
                     });
                 }
@@ -392,6 +401,7 @@ impl ChatState {
         self.current_flow_items.clear();
         self.tool_index.clear();
         self.is_processing = true;
+        let user_display_input = strip_prompt_markup(user_input);
 
         // Add user message
         self.messages.push(ChatMessage {
@@ -399,7 +409,7 @@ impl ChatState {
             role: MessageRole::User,
             timestamp: SystemTime::now(),
             flow_items: vec![FlowItem::Text {
-                content: user_input.to_string(),
+                content: user_display_input,
                 is_streaming: false,
             }],
             is_streaming: false,

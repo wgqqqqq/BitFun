@@ -48,22 +48,6 @@ impl ChatView {
         self.refresh_command_menu();
     }
 
-    pub fn move_cursor_up(&mut self) -> bool {
-        let moved = self.text_input.move_cursor_up();
-        if moved {
-            self.refresh_command_menu();
-        }
-        moved
-    }
-
-    pub fn move_cursor_down(&mut self) -> bool {
-        let moved = self.text_input.move_cursor_down();
-        if moved {
-            self.refresh_command_menu();
-        }
-        moved
-    }
-
     pub fn set_cursor_home(&mut self) {
         self.text_input.set_cursor_home();
         self.refresh_command_menu();

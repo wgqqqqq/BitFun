@@ -1223,7 +1223,7 @@ impl StartupPage {
 
     fn apply_model_selection(&mut self, selected: &ModelItem) {
         let selected_id = selected.id.clone();
-        let selected_name = selected.name.clone();
+        let selected_display_name = format!("{} / {}", selected.model_name, selected.name);
         let modes = self.get_enabled_mode_agents();
 
         let success = tokio::task::block_in_place(|| {
@@ -1253,8 +1253,8 @@ impl StartupPage {
         });
 
         if success {
-            self.model_display_name = selected_name.clone();
-            self.status = Some(format!("Model switched to: {}", selected_name));
+            self.model_display_name = selected_display_name.clone();
+            self.status = Some(format!("Model switched to: {}", selected_display_name));
         } else {
             self.status = Some("Failed to switch model".to_string());
         }
@@ -1324,6 +1324,8 @@ impl StartupPage {
         };
 
         let result_name = result.name.clone();
+        let result_model_display =
+            format!("{} / {}", result.model_name, result.name);
 
         let success = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
@@ -1374,7 +1376,7 @@ impl StartupPage {
         });
 
         if success {
-            self.model_display_name = result_name.clone();
+            self.model_display_name = result_model_display;
             self.status = Some(format!("Model added: {}", result_name));
             tracing::info!("Added new AI model: {}", model_id);
             // Reload model name display
@@ -1467,6 +1469,8 @@ impl StartupPage {
         };
 
         let result_name = result.name.clone();
+        let result_model_display =
+            format!("{} / {}", result.model_name, result.name);
 
         let success = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
@@ -1488,7 +1492,7 @@ impl StartupPage {
         });
 
         if success {
-            self.model_display_name = result_name.clone();
+            self.model_display_name = result_model_display;
             self.status = Some(format!("Model updated: {}", result_name));
             tracing::info!("Updated AI model: {}", model_id);
             self.load_current_model_name();
@@ -1696,11 +1700,45 @@ impl StartupPage {
                     .or_else(|| global_config.ai.default_models.primary.clone())
                     .unwrap_or_else(|| "primary".to_string());
 
+                fn provider_display_name(
+                    model: &bitfun_core::service::config::AIModelConfig,
+                ) -> String {
+                    let raw_name = model.name.trim();
+                    let model_name = model.model_name.trim();
+                    if !raw_name.is_empty() && !model_name.is_empty() {
+                        let dashed_suffix = format!(" - {}", model_name);
+                        let slash_suffix = format!("/{}", model_name);
+                        if let Some(provider) = raw_name.strip_suffix(&dashed_suffix) {
+                            return provider.trim().to_string();
+                        }
+                        if let Some(provider) = raw_name.strip_suffix(&slash_suffix) {
+                            return provider.trim().to_string();
+                        }
+                    }
+                    if raw_name.is_empty() {
+                        model.provider.clone()
+                    } else {
+                        raw_name.to_string()
+                    }
+                }
+
+                fn model_display_name(
+                    model: &bitfun_core::service::config::AIModelConfig,
+                ) -> String {
+                    format!("{} / {}", model.model_name, provider_display_name(model))
+                }
+
                 if model_id == "primary" {
                     let primary_id = global_config.ai.default_models.primary.as_deref()?;
-                    models.iter().find(|m| m.id == primary_id).map(|m| m.name.clone())
+                    models
+                        .iter()
+                        .find(|m| m.id == primary_id)
+                        .map(model_display_name)
                 } else {
-                    models.iter().find(|m| m.id == model_id).map(|m| m.name.clone())
+                    models
+                        .iter()
+                        .find(|m| m.id == model_id)
+                        .map(model_display_name)
                 }
             })
         });

@@ -1297,23 +1297,18 @@ impl ChatMode {
                 chat_view.cycle_block_tool_focus_next(chat_state);
             }
 
-            // ↑↓: multiline cursor movement → input history (browse mode: scroll conversation)
+            // ↑↓: input history only. Conversation scrolling stays on PageUp/PageDown or mouse.
             (KeyCode::Up, KeyModifiers::NONE) => {
                 if chat_view.command_menu_visible() {
                     chat_view.command_menu_up();
-                } else if chat_view.browse_mode {
-                    let total = chat_view.count_message_lines(chat_state);
-                    chat_view.scroll_up(1, total);
-                } else if !chat_view.move_cursor_up() {
+                } else {
                     chat_view.history_prev();
                 }
             }
             (KeyCode::Down, KeyModifiers::NONE) => {
                 if chat_view.command_menu_visible() {
                     chat_view.command_menu_down();
-                } else if chat_view.browse_mode {
-                    chat_view.scroll_down(1);
-                } else if !chat_view.move_cursor_down() {
+                } else {
                     chat_view.history_next();
                 }
             }
@@ -1344,9 +1339,9 @@ impl ChatMode {
             (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
                 chat_view.toggle_browse_mode();
                 let status_msg = if chat_view.browse_mode {
-                    "Entered browse mode, ↑↓ scroll conversation, PageUp/PageDown fast scroll"
+                    "Entered browse mode, use PageUp/PageDown or mouse wheel to scroll conversation"
                 } else {
-                    "Exited browse mode, ↑↓ switch input history"
+                    "Exited browse mode"
                 };
                 chat_view.set_status(Some(status_msg.to_string()));
             }
@@ -1947,6 +1942,34 @@ impl ChatMode {
                     .or_else(|| global_config.ai.default_models.primary.clone())
                     .unwrap_or_else(|| "primary".to_string());
 
+                fn provider_display_name(
+                    model: &bitfun_core::service::config::AIModelConfig,
+                ) -> String {
+                    let raw_name = model.name.trim();
+                    let model_name = model.model_name.trim();
+                    if !raw_name.is_empty() && !model_name.is_empty() {
+                        let dashed_suffix = format!(" - {}", model_name);
+                        let slash_suffix = format!("/{}", model_name);
+                        if let Some(provider) = raw_name.strip_suffix(&dashed_suffix) {
+                            return provider.trim().to_string();
+                        }
+                        if let Some(provider) = raw_name.strip_suffix(&slash_suffix) {
+                            return provider.trim().to_string();
+                        }
+                    }
+                    if raw_name.is_empty() {
+                        model.provider.clone()
+                    } else {
+                        raw_name.to_string()
+                    }
+                }
+
+                fn model_display_name(
+                    model: &bitfun_core::service::config::AIModelConfig,
+                ) -> String {
+                    format!("{} / {}", model.model_name, provider_display_name(model))
+                }
+
                 // Find model name
                 let model_name = if model_id == "primary" {
                     // Resolve primary model
@@ -1954,12 +1977,12 @@ impl ChatMode {
                     models
                         .iter()
                         .find(|m| m.id == primary_id)
-                        .map(|m| m.name.clone())
+                        .map(model_display_name)
                 } else {
                     models
                         .iter()
                         .find(|m| m.id == model_id)
-                        .map(|m| m.name.clone())
+                        .map(model_display_name)
                 };
 
                 model_name
@@ -2039,7 +2062,7 @@ impl ChatMode {
         rt_handle: &tokio::runtime::Handle,
     ) {
         let selected_id = selected.id.clone();
-        let selected_name = selected.name.clone();
+        let selected_display_name = format!("{} / {}", selected.model_name, selected.name);
         let modes = self.get_enabled_mode_agents(rt_handle);
 
         let success = tokio::task::block_in_place(|| {
@@ -2074,12 +2097,16 @@ impl ChatMode {
         });
 
         if success {
-            chat_state.current_model_name = selected_name.clone();
-            tracing::info!("Model switched to: {} ({})", selected_name, selected_id);
+            chat_state.current_model_name = selected_display_name.clone();
+            tracing::info!(
+                "Model switched to: {} ({})",
+                selected_display_name,
+                selected_id
+            );
         } else {
             tracing::error!(
                 "Failed to switch model: {} ({})",
-                selected_name,
+                selected_display_name,
                 selected_id
             );
         }
@@ -3100,7 +3127,8 @@ impl ChatMode {
 
         if success {
             chat_view.set_status(Some(format!("Model added: {}", result.name)));
-            chat_state.current_model_name = result.name;
+            chat_state.current_model_name =
+                format!("{} / {}", result.model_name, result.name);
             tracing::info!("Added new AI model: {} ({})", model_id, result.model_name);
         } else {
             chat_view.set_status(Some("Failed to add model".to_string()));
@@ -3229,7 +3257,8 @@ impl ChatMode {
 
         if success {
             chat_view.set_status(Some(format!("Model updated: {}", result.name)));
-            chat_state.current_model_name = result.name;
+            chat_state.current_model_name =
+                format!("{} / {}", result.model_name, result.name);
             tracing::info!("Updated AI model: {}", model_id);
         } else {
             chat_view.set_status(Some("Failed to update model".to_string()));

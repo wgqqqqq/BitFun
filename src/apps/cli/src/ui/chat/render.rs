@@ -857,13 +857,11 @@ impl ChatView {
         };
 
         // Build left text for width calculation
-        let left_text = format!("{} | Session: {} | Model: {}", mode_text, chat_state.session_name, chat_state.current_model_name);
+        let left_text = format!("{} | Model: {}", mode_text, chat_state.current_model_name);
 
         // Build left line with proper styling
         let left_spans = vec![
             Span::styled(mode_text, self.theme.style(StyleKind::Primary)),
-            Span::styled(" | ", muted),
-            Span::styled(format!("Session: {}", chat_state.session_name), muted),
             Span::styled(" | ", muted),
             Span::styled(format!("Model: {}", chat_state.current_model_name), muted),
         ];
@@ -925,7 +923,7 @@ impl ChatView {
     /// Calculate the required height for the shortcuts area
     fn calculate_shortcuts_height(available_width: u16, chat_state: &ChatState, browse_mode: bool) -> u16 {
         let mode_text = if browse_mode { " Browse " } else { " Chat " };
-        let left_text = format!("{} | Session: {} | Model: {}", mode_text, chat_state.session_name, chat_state.current_model_name);
+        let left_text = format!("{} | Model: {}", mode_text, chat_state.current_model_name);
 
         let right_text = "[Tab]Switch Agent [Alt+\u{21b5}]Newline [Ctrl+P]Commands [\u{2191}\u{2193}]History [Ctrl+E]Browse [Esc]Interrupt [Ctrl+C]Quit";
 
