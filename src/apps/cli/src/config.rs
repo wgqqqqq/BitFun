@@ -28,7 +28,7 @@ pub struct CliConfig {
 pub struct UiConfig {
     /// Theme (dark, light, auto)
     pub theme: String,
-    /// Theme ID (built-in: "bitfun"; custom: filename in themes dir without ".json")
+    /// Theme ID (built-in preset name; custom: filename in themes dir without ".json")
     pub theme_id: String,
     /// Show tips
     pub show_tips: bool,
@@ -73,7 +73,7 @@ impl Default for UiConfig {
     fn default() -> Self {
         Self {
             theme: "dark".to_string(),
-            theme_id: "bitfun".to_string(),
+            theme_id: "cursor".to_string(),
             show_tips: true,
             animation: true,
             color_scheme: "default".to_string(),

@@ -193,7 +193,7 @@ impl StartupPage {
             Theme::monochrome()
         } else {
             let id = config.ui.theme_id.trim();
-            if id.is_empty() || id.eq_ignore_ascii_case("bitfun") {
+            if id.is_empty() {
                 base
             } else if let Some(json) = builtin_theme_json(id) {
                 base.apply_opencode_theme_json(json, appearance)

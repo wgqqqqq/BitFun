@@ -1789,14 +1789,7 @@ impl ChatMode {
 
     fn list_available_themes(&self) -> Vec<ThemeItem> {
         let mut themes = Vec::new();
-        themes.push(ThemeItem {
-            id: "bitfun".to_string(),
-        });
-
         for id in builtin_theme_ids() {
-            if id == "bitfun" {
-                continue;
-            }
             themes.push(ThemeItem { id });
         }
 
@@ -1825,7 +1818,7 @@ impl ChatMode {
             return Theme::monochrome();
         }
 
-        if id.is_empty() || id.eq_ignore_ascii_case("bitfun") {
+        if id.is_empty() {
             return base;
         }
 
