@@ -61,9 +61,6 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
     
-    /// Workspace path (project directory), defaults to current directory
-    project: Option<String>,
-    
     /// Enable verbose logging
     #[arg(short, long, global = true)]
     verbose: bool,
@@ -76,10 +73,6 @@ enum Commands {
         /// Agent type
         #[arg(short, long, default_value = "agentic")]
         agent: String,
-        
-        /// Workspace path
-        #[arg(short, long)]
-        workspace: Option<String>,
     },
     
     /// Execute single command
@@ -91,14 +84,6 @@ enum Commands {
         #[arg(short, long, default_value = "agentic")]
         agent: String,
         
-        /// Workspace path
-        #[arg(short, long)]
-        workspace: Option<String>,
-        
-        /// Output in JSON format (script-friendly)
-        #[arg(long)]
-        json: bool,
-        
         /// Output git diff patch after execution (for SWE-bench evaluation)
         /// Without path outputs to terminal, with path saves to file
         /// Example: --output-patch or --output-patch ./result.patch
@@ -108,13 +93,6 @@ enum Commands {
         /// Tool execution requires confirmation (default: no confirmation to avoid blocking non-interactive mode)
         #[arg(long)]
         confirm: bool,
-    },
-    
-    /// Execute batch tasks
-    Batch {
-        /// Task configuration file path
-        #[arg(short, long)]
-        tasks: String,
     },
     
     /// Session management
@@ -129,25 +107,11 @@ enum Commands {
         action: ConfigAction,
     },
     
-    /// Invoke tool directly
-    Tool {
-        /// Tool name
-        name: String,
-        
-        /// Tool parameters (JSON)
-        #[arg(short, long)]
-        params: Option<String>,
-    },
-    
     /// Health check
     Health,
 
     /// Start Agent Client Protocol (ACP) server over stdio
-    Acp {
-        /// Working directory for the ACP session
-        #[arg(short, long)]
-        workspace: Option<String>,
-    },
+    Acp,
 }
 
 #[derive(Subcommand)]
@@ -178,18 +142,10 @@ enum ConfigAction {
 
 // ======================== System Initialization ========================
 
-/// Set the workspace path and return the resolved absolute path
-fn setup_workspace(ws: &str) -> Option<String> {
-    use std::path::PathBuf;
-
-    let workspace_path = if ws == "." {
-        std::env::current_dir().ok()
-    } else {
-        Some(PathBuf::from(ws))
-    };
-
+/// Return the current project path. CLI session scope is intentionally cwd-only.
+fn setup_workspace() -> Option<String> {
+    let workspace_path = std::env::current_dir().ok();
     tracing::info!("Workspace path set: {:?}", workspace_path);
-
     workspace_path.map(|p| p.to_string_lossy().to_string())
 }
 
@@ -293,7 +249,7 @@ async fn shutdown_mcp_servers() {
 async fn run_interactive(
     config: CliConfig,
     default_agent: String,
-    workspace_str: String,
+    _workspace_str: String,
 ) -> Result<()> {
     use ui::startup::{StartupPage, StartupResult};
 
@@ -302,7 +258,7 @@ async fn run_interactive(
     ui::render_loading(&mut terminal, "Initializing system, please wait...")?;
 
     // 2. Set workspace path
-    let workspace = setup_workspace(&workspace_str);
+    let workspace = setup_workspace();
 
     // 3. Initialize core services
     let (agentic_system, original_skip_confirmation) =
@@ -335,7 +291,7 @@ async fn run_interactive(
     };
 
     let agent_type = startup_page.agent_type().to_string();
-    // Use workspace from startup page (may have been changed via /workspace command)
+    // Use the current project workspace selected at process start.
     let workspace = startup_page.workspace();
     let mut chat_mode = ChatMode::new(config, agent_type, workspace, &agentic_system);
     if let Some(session_id) = restore_session_id {
@@ -419,39 +375,13 @@ async fn main() -> Result<()> {
     });
     
     match cli.command {
-        Some(Commands::Chat { agent, workspace }) => {
-            if let Some(ws) = workspace {
-                // Direct chat mode: workspace provided, skip startup page
-                let workspace = setup_workspace(&ws);
-
-                let (agentic_system, original_skip_confirmation) =
-                    initialize_core_services(true).await?;
-
-                println!("System initialized, starting chat interface...\n");
-                std::thread::sleep(std::time::Duration::from_millis(500));
-
-                let mut chat_mode = ChatMode::new(config, agent, workspace, &agentic_system);
-                let _exit_reason = chat_mode.run(None)?;
-
-                shutdown_mcp_servers().await;
-                restore_tool_confirmation(original_skip_confirmation).await;
-            } else {
-                // Interactive mode with startup page
-                run_interactive(config, agent, ".".to_string()).await?;
-            }
+        Some(Commands::Chat { agent }) => {
+            // Interactive mode with startup page, scoped to the current directory.
+            run_interactive(config, agent, ".".to_string()).await?;
         }
         
-        Some(Commands::Exec { message, agent, workspace, json: _, output_patch, confirm }) => {
-            let workspace_path_resolved = if let Some(ref ws) = workspace {
-                use std::path::PathBuf;
-                if ws == "." {
-                    std::env::current_dir().ok()
-                } else {
-                    Some(PathBuf::from(ws))
-                }
-            } else {
-                std::env::current_dir().ok()
-            };
+        Some(Commands::Exec { message, agent, output_patch, confirm }) => {
+            let workspace_path_resolved = std::env::current_dir().ok();
             
             if let Some(ref ws_path) = workspace_path_resolved {
                 tracing::info!("Workspace path set: {:?}", ws_path);
@@ -477,12 +407,6 @@ async fn main() -> Result<()> {
             run_result?;
         }
         
-        Some(Commands::Batch { tasks }) => {
-            println!("Executing batch tasks...");
-            println!("Tasks file: {}", tasks);
-            println!("\nWarning: Batch execution feature coming soon");
-        }
-        
         Some(Commands::Sessions { action }) => {
             handle_session_action(action).await?;
         }
@@ -491,23 +415,14 @@ async fn main() -> Result<()> {
             handle_config_action(action, &config)?;
         }
         
-        Some(Commands::Tool { name, params }) => {
-            println!("Invoking tool: {}", name);
-            if let Some(p) = params {
-                println!("Parameters: {}", p);
-            }
-            println!("\nWarning: Tool invocation feature coming soon");
-        }
-        
         Some(Commands::Health) => {
             println!("BitFun CLI is running normally");
             println!("Version: {}", env!("CARGO_PKG_VERSION"));
             println!("Config directory: {:?}", CliConfig::config_dir()?);
         }
 
-        Some(Commands::Acp { workspace }) => {
-            let workspace_str = workspace.unwrap_or_else(|| ".".to_string());
-            setup_workspace(&workspace_str);
+        Some(Commands::Acp) => {
+            setup_workspace();
 
             bitfun_core::service::config::initialize_global_config()
                 .await
@@ -530,15 +445,7 @@ async fn main() -> Result<()> {
         
         None => {
             // Default: interactive TUI with startup page
-            let workspace_str = cli.project
-                .map(|p| {
-                    if p == "." { p } else {
-                        dunce::canonicalize(&p)
-                            .map(|abs| abs.to_string_lossy().to_string())
-                            .unwrap_or(p)
-                    }
-                })
-                .unwrap_or_else(|| ".".to_string());
+            let workspace_str = ".".to_string();
 
             let default_agent = config.behavior.default_agent.clone();
             run_interactive(config, default_agent, workspace_str).await?;

@@ -77,43 +77,6 @@ pub fn strip_ansi_codes(s: &str) -> String {
     result
 }
 
-/// Truncate a string to fit within a given display width (columns).
-/// Returns the truncated string. If truncated, appends "…".
-/// Handles CJK wide characters correctly.
-pub fn truncate_to_display_width(s: &str, max_width: usize) -> String {
-    if max_width == 0 {
-        return String::new();
-    }
-
-    let mut width = 0usize;
-    let mut result = String::new();
-    let mut truncated = false;
-
-    // Reserve 1 column for "…" if we might need to truncate
-    let effective_max = max_width;
-
-    for ch in s.chars() {
-        let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
-        if width + ch_width > effective_max {
-            truncated = true;
-            break;
-        }
-        result.push(ch);
-        width += ch_width;
-    }
-
-    if truncated {
-        // Try to fit "…" by removing last char if needed
-        if width >= max_width {
-            // Pop last char to make room for "…"
-            result.pop();
-        }
-        result.push('\u{2026}'); // …
-    }
-
-    result
-}
-
 /// Hard-wrap a single line to fit within display width (columns).
 /// Preserves all characters (no truncation), splitting long lines into multiple lines.
 pub fn wrap_to_display_width(s: &str, max_width: usize) -> Vec<String> {

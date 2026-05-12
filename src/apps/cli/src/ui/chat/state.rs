@@ -20,14 +20,12 @@ use super::model_selector::{ModelItem, ModelSelectorState};
 use super::permission::render_permission_overlay;
 use super::provider_selector::{ProviderSelection, ProviderSelectorState};
 use super::question::render_question_overlay;
-use super::rename_dialog::{RenameAction, RenameDialogState};
 use super::session_selector::{SessionAction, SessionItem, SessionSelectorState};
 use super::skill_selector::{SkillItem, SkillSelectorState};
 use super::subagent_selector::{SubagentItem, SubagentSelectorState};
 use super::theme::{Theme, StyleKind};
 use super::theme_selector::{ThemeItem, ThemeSelectorState};
 use super::widgets::Spinner;
-use super::workspace_dialog::{WorkspaceAction, WorkspaceDialogState};
 use crate::chat_state::{ChatMessage, ChatState, FlowItem, MessageRole};
 
 /// Types of popups that can be shown in the ChatView
@@ -41,8 +39,6 @@ pub enum PopupType {
     SubagentSelector,
     McpSelector,
     McpAddDialog,
-    RenameDialog,
-    WorkspaceDialog,
     ProviderSelector,
     ModelConfigForm,
     ThemeSelector,
@@ -175,10 +171,6 @@ pub struct ChatView {
     mcp_selector: McpSelectorState,
     /// MCP add dialog state
     mcp_add_dialog: McpAddDialogState,
-    /// Rename dialog state
-    rename_dialog: RenameDialogState,
-    /// Workspace dialog state
-    workspace_dialog: WorkspaceDialogState,
     /// Provider selector popup state (step 1 of add model)
     provider_selector: ProviderSelectorState,
     /// Model config form state (step 2 of add model)
@@ -283,8 +275,6 @@ impl ChatView {
             subagent_selector: SubagentSelectorState::new(),
             mcp_selector: McpSelectorState::new(),
             mcp_add_dialog: McpAddDialogState::new(),
-            rename_dialog: RenameDialogState::new(),
-            workspace_dialog: WorkspaceDialogState::new(),
             provider_selector: ProviderSelectorState::new(),
             model_config_form: ModelConfigFormState::new(),
             theme_selector: ThemeSelectorState::new(),
