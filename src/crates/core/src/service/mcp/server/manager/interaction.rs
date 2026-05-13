@@ -1,21 +1,8 @@
 use super::*;
+use bitfun_services_integrations::mcp::server::{detect_mcp_list_changed_kind, MCPListChangedKind};
+use std::collections::HashSet;
 
 impl MCPServerManager {
-    pub(super) fn detect_list_changed_kind(method: &str) -> Option<ListChangedKind> {
-        match method {
-            "notifications/tools/list_changed"
-            | "notifications/tools/listChanged"
-            | "tools/list_changed" => Some(ListChangedKind::Tools),
-            "notifications/prompts/list_changed"
-            | "notifications/prompts/listChanged"
-            | "prompts/list_changed" => Some(ListChangedKind::Prompts),
-            "notifications/resources/list_changed"
-            | "notifications/resources/listChanged"
-            | "resources/list_changed" => Some(ListChangedKind::Resources),
-            _ => None,
-        }
-    }
-
     fn path_to_file_uri(path: &Path) -> Option<String> {
         reqwest::Url::from_directory_path(path)
             .ok()
@@ -266,8 +253,8 @@ impl MCPServerManager {
             loop {
                 match rx.recv().await {
                     Ok(MCPConnectionEvent::Notification { method, .. }) => {
-                        match Self::detect_list_changed_kind(&method) {
-                            Some(ListChangedKind::Tools) => {
+                        match detect_mcp_list_changed_kind(&method) {
+                            Some(MCPListChangedKind::Tools) => {
                                 info!(
                                     "Received MCP tools list-changed notification: server_name={} server_id={}",
                                     server_name_owned, server_id_owned
@@ -286,7 +273,7 @@ impl MCPServerManager {
                                     );
                                 }
                             }
-                            Some(ListChangedKind::Prompts) => {
+                            Some(MCPListChangedKind::Prompts) => {
                                 info!(
                                     "Received MCP prompts list-changed notification: server_name={} server_id={}",
                                     server_name_owned, server_id_owned
@@ -304,7 +291,7 @@ impl MCPServerManager {
                                     );
                                 }
                             }
-                            Some(ListChangedKind::Resources) => {
+                            Some(MCPListChangedKind::Resources) => {
                                 info!(
                                     "Received MCP resources list-changed notification: server_name={} server_id={}",
                                     server_name_owned, server_id_owned

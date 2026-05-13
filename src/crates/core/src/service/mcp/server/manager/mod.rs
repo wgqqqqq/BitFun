@@ -22,9 +22,10 @@ use crate::service::mcp::protocol::{MCPError, MCPPrompt, MCPResource};
 use crate::service::runtime::{RuntimeManager, RuntimeSource};
 use crate::service::workspace::get_global_workspace_service;
 use crate::util::errors::{BitFunError, BitFunResult};
+use bitfun_services_integrations::mcp::server::MCPCatalogCache;
 use log::{debug, error, info, warn};
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -54,13 +55,6 @@ impl Default for ReconnectPolicy {
 struct ReconnectAttemptState {
     attempts: u32,
     next_retry_at: Instant,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ListChangedKind {
-    Tools,
-    Prompts,
-    Resources,
 }
 
 #[derive(Debug)]
@@ -98,8 +92,7 @@ pub struct MCPServerManager {
     reconnect_states: Arc<tokio::sync::RwLock<HashMap<String, ReconnectAttemptState>>>,
     reconnect_monitor_started: Arc<AtomicBool>,
     connection_event_tasks: Arc<tokio::sync::RwLock<HashMap<String, JoinHandle<()>>>>,
-    resource_catalog_cache: Arc<tokio::sync::RwLock<HashMap<String, Vec<MCPResource>>>>,
-    prompt_catalog_cache: Arc<tokio::sync::RwLock<HashMap<String, Vec<MCPPrompt>>>>,
+    catalog_cache: Arc<MCPCatalogCache>,
     pending_interactions: Arc<tokio::sync::RwLock<HashMap<String, PendingMCPInteraction>>>,
     oauth_sessions: Arc<tokio::sync::RwLock<HashMap<String, Arc<ActiveRemoteOAuthSession>>>>,
     ephemeral_configs: Arc<tokio::sync::RwLock<HashMap<String, MCPServerConfig>>>,
@@ -116,8 +109,7 @@ impl MCPServerManager {
             reconnect_states: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
             reconnect_monitor_started: Arc::new(AtomicBool::new(false)),
             connection_event_tasks: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
-            resource_catalog_cache: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
-            prompt_catalog_cache: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            catalog_cache: Arc::new(MCPCatalogCache::new()),
             pending_interactions: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
             oauth_sessions: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
             ephemeral_configs: Arc::new(tokio::sync::RwLock::new(HashMap::new())),

@@ -1,4 +1,5 @@
 use super::*;
+use bitfun_services_integrations::mcp::server::compute_mcp_backoff_delay;
 
 impl MCPServerManager {
     pub(super) fn start_reconnect_monitor_if_needed(&self) {
@@ -89,7 +90,7 @@ impl MCPServerManager {
             }
 
             state.attempts += 1;
-            let delay = Self::compute_backoff_delay(
+            let delay = compute_mcp_backoff_delay(
                 self.reconnect_policy.base_delay,
                 self.reconnect_policy.max_delay,
                 state.attempts,
@@ -123,15 +124,6 @@ impl MCPServerManager {
                 );
             }
         }
-    }
-
-    pub(super) fn compute_backoff_delay(base: Duration, max: Duration, attempt: u32) -> Duration {
-        let shift = attempt.saturating_sub(1).min(20);
-        let factor = 1u64 << shift;
-        let base_ms = base.as_millis() as u64;
-        let max_ms = max.as_millis() as u64;
-        let delay_ms = base_ms.saturating_mul(factor).min(max_ms);
-        Duration::from_millis(delay_ms)
     }
 
     pub(super) async fn clear_reconnect_state(&self, server_id: &str) {

@@ -281,6 +281,16 @@ const facadeOnlyFiles = [
     reason: 'core MCP config location facade must only re-export the integrations owner crate',
   },
   {
+    path: 'src/crates/core/src/service/mcp/adapter/resource.rs',
+    importPrefix: 'bitfun_services_integrations::mcp',
+    reason: 'core MCP resource adapter facade must only re-export the integrations owner crate',
+  },
+  {
+    path: 'src/crates/core/src/service/mcp/adapter/prompt.rs',
+    importPrefix: 'bitfun_services_integrations::mcp',
+    reason: 'core MCP prompt adapter facade must only re-export the integrations owner crate',
+  },
+  {
     path: 'src/crates/core/src/service/announcement/types.rs',
     importPrefix: 'bitfun_services_integrations::announcement',
     reason: 'core announcement types facade must only re-export the integrations owner crate',
@@ -310,6 +320,62 @@ const forbiddenContentRules = [
       {
         regex: /\bcontains_key\("Authorization"\)/,
         message: 'core MCP server process runtime must not inline legacy authorization header fallback; use the integrations helper',
+      },
+    ],
+  },
+  {
+    path: 'src/crates/core/src/service/mcp/server/manager/mod.rs',
+    patterns: [
+      {
+        regex: /\benum ListChangedKind\b/,
+        message: 'core MCP server manager must not own list-changed classification; use the integrations helper',
+      },
+      {
+        regex: /\bresource_catalog_cache\b/,
+        message: 'core MCP server manager must not own resource catalog cache state; use the integrations owner crate',
+      },
+      {
+        regex: /\bprompt_catalog_cache\b/,
+        message: 'core MCP server manager must not own prompt catalog cache state; use the integrations owner crate',
+      },
+    ],
+  },
+  {
+    path: 'src/crates/core/src/service/mcp/server/manager/reconnect.rs',
+    patterns: [
+      {
+        regex: /\bfn compute_backoff_delay\b/,
+        message: 'core MCP reconnect runtime must not own backoff policy math; use the integrations helper',
+      },
+    ],
+  },
+  {
+    path: 'src/crates/core/src/service/mcp/server/manager/interaction.rs',
+    patterns: [
+      {
+        regex: /\bfn detect_list_changed_kind\b/,
+        message: 'core MCP interaction runtime must not own list-changed classification; use the integrations helper',
+      },
+    ],
+  },
+  {
+    path: 'src/crates/core/src/service/mcp/adapter/tool.rs',
+    patterns: [
+      {
+        regex: /\bfn behavior_hints\b/,
+        message: 'core MCP tool adapter must not own dynamic tool behavior hint rendering; use the integrations helper',
+      },
+      {
+        regex: /\bfn truncate_for_assistant\b/,
+        message: 'core MCP tool adapter must not own result truncation rendering; use the integrations helper',
+      },
+      {
+        regex: /\bMCPToolResultContent\b/,
+        message: 'core MCP tool adapter must not own MCP result content rendering; use the integrations helper',
+      },
+      {
+        regex: /Tool '\{\}' from MCP server/,
+        message: 'core MCP tool adapter must not own dynamic descriptor text; use the integrations helper',
       },
     ],
   },
@@ -925,6 +991,77 @@ function runManifestParserSelfTest() {
   for (const helper of mcpProcessHelpers) {
     if (!mcpProcessRuleText.includes(helper)) {
       throw new Error(`MCP server process boundary rule must forbid helper: ${helper}`);
+    }
+  }
+
+  const mcpManagerRule = forbiddenContentRules.find(
+    (rule) => rule.path === 'src/crates/core/src/service/mcp/server/manager/mod.rs',
+  );
+  if (!mcpManagerRule) {
+    throw new Error('missing MCP server manager boundary rule');
+  }
+  const mcpManagerHelpers = [
+    'ListChangedKind',
+    'resource_catalog_cache',
+    'prompt_catalog_cache',
+  ];
+  const mcpManagerRuleText = mcpManagerRule.patterns
+    .map((pattern) => pattern.regex.source)
+    .join('\n');
+  for (const helper of mcpManagerHelpers) {
+    if (!mcpManagerRuleText.includes(helper)) {
+      throw new Error(`MCP server manager boundary rule must forbid helper: ${helper}`);
+    }
+  }
+
+  const mcpReconnectRule = forbiddenContentRules.find(
+    (rule) => rule.path === 'src/crates/core/src/service/mcp/server/manager/reconnect.rs',
+  );
+  if (!mcpReconnectRule) {
+    throw new Error('missing MCP reconnect boundary rule');
+  }
+  if (
+    !mcpReconnectRule.patterns
+      .map((pattern) => pattern.regex.source)
+      .join('\n')
+      .includes('compute_backoff_delay')
+  ) {
+    throw new Error('MCP reconnect boundary rule must forbid compute_backoff_delay');
+  }
+
+  const mcpInteractionRule = forbiddenContentRules.find(
+    (rule) => rule.path === 'src/crates/core/src/service/mcp/server/manager/interaction.rs',
+  );
+  if (!mcpInteractionRule) {
+    throw new Error('missing MCP interaction boundary rule');
+  }
+  if (
+    !mcpInteractionRule.patterns
+      .map((pattern) => pattern.regex.source)
+      .join('\n')
+      .includes('detect_list_changed_kind')
+  ) {
+    throw new Error('MCP interaction boundary rule must forbid detect_list_changed_kind');
+  }
+
+  const mcpToolAdapterRule = forbiddenContentRules.find(
+    (rule) => rule.path === 'src/crates/core/src/service/mcp/adapter/tool.rs',
+  );
+  if (!mcpToolAdapterRule) {
+    throw new Error('missing MCP tool adapter boundary rule');
+  }
+  const mcpToolAdapterHelpers = [
+    'behavior_hints',
+    'truncate_for_assistant',
+    'MCPToolResultContent',
+    'Tool',
+  ];
+  const mcpToolAdapterRuleText = mcpToolAdapterRule.patterns
+    .map((pattern) => pattern.regex.source)
+    .join('\n');
+  for (const helper of mcpToolAdapterHelpers) {
+    if (!mcpToolAdapterRuleText.includes(helper)) {
+      throw new Error(`MCP tool adapter boundary rule must forbid helper: ${helper}`);
     }
   }
 

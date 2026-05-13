@@ -7,9 +7,11 @@ use crate::agentic::tools::framework::{
 };
 use crate::service::mcp::protocol::{MCPTool, MCPToolResult};
 use crate::service::mcp::server::MCPConnection;
-use crate::service::mcp::{build_mcp_tool_name, McpToolInfo};
 use crate::util::errors::BitFunResult;
 use async_trait::async_trait;
+use bitfun_services_integrations::mcp::adapter::{
+    build_mcp_tool_descriptor, render_mcp_tool_result_for_assistant, McpDynamicToolDescriptor,
+};
 use log::{debug, error, info, warn};
 use serde_json::Value;
 use std::sync::Arc;
@@ -20,7 +22,7 @@ pub struct MCPToolWrapper {
     connection: Arc<MCPConnection>,
     server_id: String,
     server_name: String,
-    full_name: String,
+    descriptor: McpDynamicToolDescriptor,
 }
 
 impl MCPToolWrapper {
@@ -33,57 +35,18 @@ impl MCPToolWrapper {
         server_id: String,
         server_name: String,
     ) -> Self {
-        let full_name = build_mcp_tool_name(&server_id, &mcp_tool.name);
+        let descriptor = build_mcp_tool_descriptor(&server_id, &server_name, &mcp_tool);
         Self {
             mcp_tool,
             connection,
             server_id,
             server_name,
-            full_name,
+            descriptor,
         }
-    }
-
-    fn annotations(&self) -> crate::service::mcp::protocol::MCPToolAnnotations {
-        self.mcp_tool.annotations.clone().unwrap_or_default()
     }
 
     fn tool_title(&self) -> String {
-        self.mcp_tool
-            .annotations
-            .as_ref()
-            .and_then(|annotations| annotations.title.clone())
-            .or_else(|| self.mcp_tool.title.clone())
-            .unwrap_or_else(|| self.mcp_tool.name.clone())
-    }
-
-    fn behavior_hints(&self) -> Vec<&'static str> {
-        let annotations = self.annotations();
-        let mut hints = Vec::new();
-        if annotations.read_only_hint.unwrap_or(false) {
-            hints.push("read-only");
-        }
-        if annotations.destructive_hint.unwrap_or(false) {
-            hints.push("destructive");
-        }
-        if annotations.open_world_hint.unwrap_or(false) {
-            hints.push("open-world");
-        }
-        hints
-    }
-
-    fn truncate_for_assistant(text: String) -> String {
-        let char_count = text.chars().count();
-        if char_count <= Self::MAX_RESULT_TEXT_CHARS {
-            return text;
-        }
-
-        let truncated: String = text.chars().take(Self::MAX_RESULT_TEXT_CHARS).collect();
-        format!(
-            "{}\n[Result truncated: {} of {} characters shown]",
-            truncated,
-            Self::MAX_RESULT_TEXT_CHARS,
-            char_count
-        )
+        self.descriptor.title.clone()
     }
 
     fn is_blocked_in_context(&self, _context: Option<&ToolUseContext>) -> bool {
@@ -96,23 +59,11 @@ impl Tool for MCPToolWrapper {
     fn name(&self) -> &str {
         // Use server_id as a prefix to avoid naming conflicts.
         // Example: mcp__github__search_repos
-        &self.full_name
+        &self.descriptor.full_name
     }
 
     async fn description(&self) -> BitFunResult<String> {
-        let mut description = format!(
-            "Tool '{}' from MCP server '{}': {}",
-            self.tool_title(),
-            self.server_name,
-            self.mcp_tool.description.as_deref().unwrap_or("")
-        );
-
-        let hints = self.behavior_hints();
-        if !hints.is_empty() {
-            description.push_str(&format!(" [Hints: {}]", hints.join(", ")));
-        }
-
-        Ok(description)
+        Ok(self.descriptor.description.clone())
     }
 
     fn input_schema(&self) -> Value {
@@ -132,18 +83,14 @@ impl Tool for MCPToolWrapper {
     }
 
     fn user_facing_name(&self) -> String {
-        format!("{} ({})", self.tool_title(), self.server_name)
+        self.descriptor.user_facing_name.clone()
     }
 
     fn dynamic_tool_info(&self) -> Option<DynamicToolInfo> {
         Some(DynamicToolInfo {
-            provider_id: self.server_id.clone(),
-            provider_kind: Some("mcp".to_string()),
-            mcp: Some(McpToolInfo {
-                server_id: self.server_id.clone(),
-                server_name: self.server_name.clone(),
-                tool_name: self.mcp_tool.name.clone(),
-            }),
+            provider_id: self.descriptor.provider_id.clone(),
+            provider_kind: Some(self.descriptor.provider_kind.clone()),
+            mcp: Some(self.descriptor.tool_info.clone()),
         })
     }
 
@@ -156,7 +103,7 @@ impl Tool for MCPToolWrapper {
     }
 
     fn is_readonly(&self) -> bool {
-        self.annotations().read_only_hint.unwrap_or(false)
+        self.descriptor.read_only
     }
 
     fn is_concurrency_safe(&self, _input: Option<&Value>) -> bool {
@@ -203,47 +150,11 @@ impl Tool for MCPToolWrapper {
 
     fn render_result_for_assistant(&self, output: &Value) -> String {
         if let Ok(result) = serde_json::from_value::<MCPToolResult>(output.clone()) {
-            if result.is_error {
-                return format!("Error executing MCP tool '{}'", self.mcp_tool.name);
-            }
-
-            if let Some(contents) = result.content {
-                let rendered = contents
-                    .iter()
-                    .map(|c| match c {
-                        crate::service::mcp::protocol::MCPToolResultContent::Text { text } => {
-                            text.clone()
-                        }
-                        crate::service::mcp::protocol::MCPToolResultContent::Image {
-                            mime_type,
-                            ..
-                        } => format!("[Image: {}]", mime_type),
-                        crate::service::mcp::protocol::MCPToolResultContent::Audio {
-                            mime_type,
-                            ..
-                        } => format!("[Audio: {}]", mime_type),
-                        crate::service::mcp::protocol::MCPToolResultContent::ResourceLink {
-                            uri,
-                            name,
-                            ..
-                        } => name.as_ref().map_or_else(
-                            || uri.clone(),
-                            |n| format!("[Resource: {} ({})]", n, uri),
-                        ),
-                        crate::service::mcp::protocol::MCPToolResultContent::Resource {
-                            resource,
-                        } => {
-                            format!("[Resource: {}]", resource.uri)
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                return Self::truncate_for_assistant(rendered);
-            }
-
-            if let Some(structured_content) = result.structured_content {
-                return Self::truncate_for_assistant(structured_content.to_string());
-            }
+            return render_mcp_tool_result_for_assistant(
+                &self.mcp_tool.name,
+                &result,
+                Self::MAX_RESULT_TEXT_CHARS,
+            );
         }
 
         "MCP tool execution completed".to_string()

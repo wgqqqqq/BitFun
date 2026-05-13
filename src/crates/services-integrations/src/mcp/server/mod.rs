@@ -1,6 +1,8 @@
 //! MCP server data contracts.
 
+mod catalog_cache;
 mod runtime_helpers;
+mod runtime_policy;
 
 use crate::mcp::config::ConfigLocation;
 use serde::{Deserialize, Serialize};
@@ -8,7 +10,11 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 
+pub use catalog_cache::MCPCatalogCache;
 pub use runtime_helpers::{is_mcp_auth_error_message, merge_mcp_remote_headers};
+pub use runtime_policy::{
+    compute_mcp_backoff_delay, detect_mcp_list_changed_kind, MCPListChangedKind,
+};
 
 /// MCP server type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

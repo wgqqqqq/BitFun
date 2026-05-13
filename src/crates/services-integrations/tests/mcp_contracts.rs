@@ -11,24 +11,29 @@ use bitfun_services_integrations::mcp::config::{
     parse_cursor_format, remove_mcp_authorization_keys, validate_mcp_json_config,
 };
 use bitfun_services_integrations::mcp::protocol::{
-    MCPCapability, MCPError, MCPPromptMessageContent, MCPPromptMessageContentBlock, MCPRequest,
-    MCPToolResultContent, create_initialize_request, create_mcp_client_info, create_ping_request,
+    create_initialize_request, create_mcp_client_info, create_ping_request,
     create_tools_call_request, create_tools_list_request, default_protocol_version,
     map_rmcp_initialize_result, map_rmcp_prompt, map_rmcp_prompt_message, map_rmcp_resource,
-    map_rmcp_tool, map_rmcp_tool_result,
+    map_rmcp_tool, map_rmcp_tool_result, MCPCapability, MCPError, MCPPrompt, MCPPromptArgument,
+    MCPPromptContent, MCPPromptMessage, MCPPromptMessageContent, MCPPromptMessageContentBlock,
+    MCPRequest, MCPResource, MCPResourceContent, MCPTool, MCPToolAnnotations, MCPToolResult,
+    MCPToolResultContent,
 };
 use bitfun_services_integrations::mcp::server::{
-    MCPServerConfig, MCPServerStatus, MCPServerTransport, MCPServerType, is_mcp_auth_error_message,
-    merge_mcp_remote_headers,
+    compute_mcp_backoff_delay, detect_mcp_list_changed_kind, is_mcp_auth_error_message,
+    merge_mcp_remote_headers, MCPCatalogCache, MCPListChangedKind, MCPServerConfig,
+    MCPServerStatus, MCPServerTransport, MCPServerType,
 };
 use bitfun_services_integrations::mcp::{
-    MCP_TOOL_DELIMITER, MCP_TOOL_PREFIX, McpToolInfo, build_mcp_tool_name, normalize_name_for_mcp,
+    build_mcp_tool_descriptor, build_mcp_tool_name, normalize_name_for_mcp,
+    render_mcp_tool_result_for_assistant, McpDynamicToolDescriptor, McpToolInfo, PromptAdapter,
+    ResourceAdapter, MCP_TOOL_DELIMITER, MCP_TOOL_PREFIX,
 };
 use rmcp::model::{AnnotateAble, Annotations, Content, Icon, Meta, RawResource, ResourceContents};
 use rmcp::transport::auth::StoredCredentials;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn make_mcp_config(
     id: &str,
@@ -54,6 +59,20 @@ fn make_mcp_config(
         settings: Default::default(),
         oauth: None,
         xaa: None,
+    }
+}
+
+fn make_resource(name: &str, description: Option<&str>, uri: &str) -> MCPResource {
+    MCPResource {
+        uri: uri.to_string(),
+        name: name.to_string(),
+        title: None,
+        description: description.map(str::to_string),
+        mime_type: Some("text/plain".to_string()),
+        icons: None,
+        size: Some(12),
+        annotations: None,
+        metadata: None,
     }
 }
 
@@ -553,6 +572,243 @@ fn mcp_protocol_prompt_content_helpers_preserve_legacy_text_behavior() {
 }
 
 #[test]
+fn mcp_resource_and_prompt_adapters_preserve_context_rendering_contract() {
+    let resource = MCPResource {
+        title: Some("Design Notes".to_string()),
+        metadata: Some(HashMap::from([(
+            "source".to_string(),
+            serde_json::json!("fixture"),
+        )])),
+        ..make_resource("notes", Some("project notes"), "file:///workspace/notes.md")
+    };
+    let content = MCPResourceContent {
+        uri: resource.uri.clone(),
+        content: Some("alpha beta".to_string()),
+        blob: None,
+        mime_type: Some("text/markdown".to_string()),
+        annotations: None,
+        meta: None,
+    };
+
+    assert_eq!(
+        ResourceAdapter::to_context_block(&resource, Some(&content)),
+        serde_json::json!({
+            "type": "resource",
+            "uri": "file:///workspace/notes.md",
+            "name": "notes",
+            "title": "Design Notes",
+            "displayName": "Design Notes",
+            "description": "project notes",
+            "mimeType": "text/plain",
+            "size": 12,
+            "content": "alpha beta",
+            "metadata": {
+                "source": "fixture"
+            }
+        })
+    );
+    assert_eq!(
+        ResourceAdapter::to_text(&content),
+        "Resource: file:///workspace/notes.md\n\nalpha beta\n"
+    );
+
+    let ranked = ResourceAdapter::filter_and_rank(
+        vec![
+            make_resource("readme", Some("install guide"), "file:///README.md"),
+            make_resource("report", Some("quarterly guide"), "file:///report.md"),
+            make_resource("other", Some("misc"), "file:///other.md"),
+        ],
+        "guide",
+        0.3,
+        2,
+    );
+    assert_eq!(
+        ranked
+            .iter()
+            .map(|(resource, _)| resource.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["readme", "report"]
+    );
+
+    let prompt = MCPPrompt {
+        name: "review".to_string(),
+        title: None,
+        description: None,
+        arguments: Some(vec![MCPPromptArgument {
+            name: "target".to_string(),
+            title: None,
+            description: None,
+            required: true,
+        }]),
+        icons: None,
+    };
+    assert!(!PromptAdapter::is_applicable(&prompt, &HashMap::new()));
+    assert!(PromptAdapter::is_applicable(
+        &prompt,
+        &HashMap::from([("target".to_string(), "src/lib.rs".to_string())])
+    ));
+
+    let messages = PromptAdapter::substitute_arguments(
+        vec![MCPPromptMessage {
+            role: "user".to_string(),
+            content: MCPPromptMessageContent::Plain("Review {{target}}".to_string()),
+        }],
+        &HashMap::from([("target".to_string(), "src/lib.rs".to_string())]),
+    );
+    let prompt_text = PromptAdapter::to_system_prompt(&MCPPromptContent {
+        name: "review".to_string(),
+        messages,
+    });
+    assert_eq!(prompt_text, "User: Review src/lib.rs");
+}
+
+#[tokio::test]
+async fn mcp_catalog_cache_preserves_resource_prompt_lifecycle_contract() {
+    let cache = MCPCatalogCache::new();
+    let resource = make_resource("readme", Some("docs"), "file:///README.md");
+    let prompt = MCPPrompt {
+        name: "summarize".to_string(),
+        title: Some("Summarize".to_string()),
+        description: None,
+        arguments: None,
+        icons: None,
+    };
+
+    cache
+        .replace_resources("server-a", vec![resource.clone()])
+        .await;
+    cache
+        .replace_prompts("server-a", vec![prompt.clone()])
+        .await;
+
+    assert_eq!(cache.get_resources("server-a").await[0].name, "readme");
+    assert_eq!(cache.get_prompts("server-a").await[0].name, "summarize");
+    assert!(cache.get_resources("missing").await.is_empty());
+
+    cache.remove_server("server-a").await;
+    assert!(cache.get_resources("server-a").await.is_empty());
+    assert!(cache.get_prompts("server-a").await.is_empty());
+
+    cache.replace_resources("server-b", vec![resource]).await;
+    cache.replace_prompts("server-b", vec![prompt]).await;
+    cache.clear().await;
+    assert!(cache.get_resources("server-b").await.is_empty());
+    assert!(cache.get_prompts("server-b").await.is_empty());
+}
+
+#[test]
+fn mcp_runtime_notification_and_backoff_helpers_preserve_manager_contract() {
+    assert_eq!(
+        detect_mcp_list_changed_kind("notifications/tools/list_changed"),
+        Some(MCPListChangedKind::Tools)
+    );
+    assert_eq!(
+        detect_mcp_list_changed_kind("notifications/prompts/listChanged"),
+        Some(MCPListChangedKind::Prompts)
+    );
+    assert_eq!(
+        detect_mcp_list_changed_kind("resources/list_changed"),
+        Some(MCPListChangedKind::Resources)
+    );
+    assert_eq!(detect_mcp_list_changed_kind("notifications/other"), None);
+
+    assert_eq!(
+        compute_mcp_backoff_delay(Duration::from_secs(2), Duration::from_secs(60), 1),
+        Duration::from_secs(2)
+    );
+    assert_eq!(
+        compute_mcp_backoff_delay(Duration::from_secs(2), Duration::from_secs(60), 5),
+        Duration::from_secs(32)
+    );
+    assert_eq!(
+        compute_mcp_backoff_delay(Duration::from_secs(2), Duration::from_secs(60), 10),
+        Duration::from_secs(60)
+    );
+}
+
+#[test]
+fn mcp_dynamic_tool_descriptor_and_result_rendering_preserve_tool_contract() {
+    let tool = MCPTool {
+        name: "search".to_string(),
+        title: Some("Search".to_string()),
+        description: Some("Find docs".to_string()),
+        input_schema: serde_json::json!({ "type": "object" }),
+        output_schema: None,
+        icons: None,
+        annotations: Some(MCPToolAnnotations {
+            title: Some("Search Docs".to_string()),
+            read_only_hint: Some(true),
+            destructive_hint: Some(false),
+            idempotent_hint: Some(true),
+            open_world_hint: Some(true),
+        }),
+        meta: None,
+    };
+
+    let descriptor = build_mcp_tool_descriptor("github", "GitHub", &tool);
+    assert_eq!(
+        descriptor,
+        McpDynamicToolDescriptor {
+            full_name: "mcp__github__search".to_string(),
+            title: "Search Docs".to_string(),
+            user_facing_name: "Search Docs (GitHub)".to_string(),
+            description: "Tool 'Search Docs' from MCP server 'GitHub': Find docs [Hints: read-only, open-world]".to_string(),
+            provider_id: "github".to_string(),
+            provider_kind: "mcp".to_string(),
+            tool_info: McpToolInfo {
+                server_id: "github".to_string(),
+                server_name: "GitHub".to_string(),
+                tool_name: "search".to_string(),
+            },
+            read_only: true,
+        }
+    );
+
+    let rendered = render_mcp_tool_result_for_assistant(
+        "search",
+        &MCPToolResult {
+            content: Some(vec![
+                MCPToolResultContent::Text {
+                    text: "done".to_string(),
+                },
+                MCPToolResultContent::Image {
+                    data: "base64".to_string(),
+                    mime_type: "image/png".to_string(),
+                },
+                MCPToolResultContent::ResourceLink {
+                    uri: "file:///tmp/output.json".to_string(),
+                    name: Some("output".to_string()),
+                    description: None,
+                    mime_type: Some("application/json".to_string()),
+                },
+            ]),
+            is_error: false,
+            structured_content: Some(serde_json::json!({ "ignored": "content wins" })),
+            meta: None,
+        },
+        12_000,
+    );
+    assert_eq!(
+        rendered,
+        "done\n[Image: image/png]\n[Resource: output (file:///tmp/output.json)]"
+    );
+
+    assert_eq!(
+        render_mcp_tool_result_for_assistant(
+            "search",
+            &MCPToolResult {
+                content: None,
+                is_error: true,
+                structured_content: None,
+                meta: None,
+            },
+            12_000,
+        ),
+        "Error executing MCP tool 'search'"
+    );
+}
+
+#[test]
 fn mcp_config_location_preserves_kebab_case_wire_contract() {
     assert_eq!(
         serde_json::to_value(ConfigLocation::BuiltIn).unwrap(),
@@ -919,13 +1175,11 @@ async fn mcp_oauth_credential_vault_uses_injected_data_dir_and_roundtrips_creden
     assert!(loaded.token_response.is_none());
 
     vault.clear("server-a").await.expect("clear credentials");
-    assert!(
-        vault
-            .load("server-a")
-            .await
-            .expect("load after clear")
-            .is_none()
-    );
+    assert!(vault
+        .load("server-a")
+        .await
+        .expect("load after clear")
+        .is_none());
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
