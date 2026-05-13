@@ -1,5 +1,6 @@
 #![cfg(feature = "mcp")]
 
+use async_trait::async_trait;
 use bitfun_services_integrations::mcp::auth::{
     MCPRemoteOAuthCredentialVault, MCPRemoteOAuthSessionSnapshot, MCPRemoteOAuthStatus,
 };
@@ -8,7 +9,8 @@ use bitfun_services_integrations::mcp::config::{
     config_to_cursor_format, format_mcp_json_config_value, get_mcp_remote_authorization_source,
     get_mcp_remote_authorization_value, has_mcp_remote_authorization, has_mcp_remote_oauth,
     has_mcp_remote_xaa, merge_mcp_server_config_sources, normalize_mcp_authorization_value,
-    parse_cursor_format, remove_mcp_authorization_keys, validate_mcp_json_config,
+    parse_cursor_format, remove_mcp_authorization_keys, validate_mcp_json_config, MCPConfigService,
+    MCPConfigStore,
 };
 use bitfun_services_integrations::mcp::protocol::{
     create_initialize_request, create_mcp_client_info, create_ping_request,
@@ -21,13 +23,15 @@ use bitfun_services_integrations::mcp::protocol::{
 };
 use bitfun_services_integrations::mcp::server::{
     compute_mcp_backoff_delay, detect_mcp_list_changed_kind, is_mcp_auth_error_message,
-    merge_mcp_remote_headers, MCPCatalogCache, MCPListChangedKind, MCPServerConfig,
-    MCPServerStatus, MCPServerTransport, MCPServerType,
+    merge_mcp_remote_headers, MCPCatalogCache, MCPConnectionPool, MCPListChangedKind,
+    MCPRuntimeErrorKind, MCPRuntimeResult, MCPServerConfig, MCPServerProcess, MCPServerStatus,
+    MCPServerTransport, MCPServerType,
 };
 use bitfun_services_integrations::mcp::{
     build_mcp_tool_descriptor, build_mcp_tool_name, normalize_name_for_mcp,
-    render_mcp_tool_result_for_assistant, McpDynamicToolDescriptor, McpToolInfo, PromptAdapter,
-    ResourceAdapter, MCP_TOOL_DELIMITER, MCP_TOOL_PREFIX,
+    render_mcp_tool_result_for_assistant, MCPContextEnhancer, MCPContextEnhancerConfig,
+    MCPDynamicToolProvider, MCPToolCatalogClient, McpDynamicToolDescriptor, McpToolInfo,
+    PromptAdapter, ResourceAdapter, MCP_TOOL_DELIMITER, MCP_TOOL_PREFIX,
 };
 use rmcp::model::{AnnotateAble, Annotations, Content, Icon, Meta, RawResource, ResourceContents};
 use rmcp::transport::auth::StoredCredentials;
@@ -73,6 +77,34 @@ fn make_resource(name: &str, description: Option<&str>, uri: &str) -> MCPResourc
         size: Some(12),
         annotations: None,
         metadata: None,
+    }
+}
+
+#[derive(Default)]
+struct InMemoryMCPConfigStore {
+    values: tokio::sync::Mutex<HashMap<String, serde_json::Value>>,
+}
+
+#[async_trait]
+impl MCPConfigStore for InMemoryMCPConfigStore {
+    async fn get_config_value(&self, key: &str) -> MCPRuntimeResult<Option<serde_json::Value>> {
+        Ok(self.values.lock().await.get(key).cloned())
+    }
+
+    async fn set_config_value(&self, key: &str, value: serde_json::Value) -> MCPRuntimeResult<()> {
+        self.values.lock().await.insert(key.to_string(), value);
+        Ok(())
+    }
+}
+
+struct FakeMCPToolCatalogClient {
+    tools: Vec<MCPTool>,
+}
+
+#[async_trait]
+impl MCPToolCatalogClient for FakeMCPToolCatalogClient {
+    async fn list_mcp_tools(&self) -> MCPRuntimeResult<Vec<MCPTool>> {
+        Ok(self.tools.clone())
     }
 }
 
@@ -663,6 +695,53 @@ fn mcp_resource_and_prompt_adapters_preserve_context_rendering_contract() {
 }
 
 #[tokio::test]
+async fn mcp_context_enhancer_preserves_resource_selection_contract() {
+    let enhancer = MCPContextEnhancer::new(MCPContextEnhancerConfig {
+        min_relevance: 0.1,
+        max_resources: 1,
+        max_total_size: 1024,
+        enable_caching: true,
+    });
+
+    let context = enhancer
+        .enhance(
+            "rust mcp",
+            vec![
+                (
+                    make_resource("Rust MCP Guide", Some("runtime docs"), "file://guide.md"),
+                    MCPResourceContent {
+                        uri: "file://guide.md".to_string(),
+                        content: Some("A useful MCP runtime guide".to_string()),
+                        blob: None,
+                        mime_type: Some("text/plain".to_string()),
+                        annotations: None,
+                        meta: None,
+                    },
+                ),
+                (
+                    make_resource("Unrelated", None, "file://image.png"),
+                    MCPResourceContent {
+                        uri: "file://image.png".to_string(),
+                        content: None,
+                        blob: Some("base64".to_string()),
+                        mime_type: Some("image/png".to_string()),
+                        annotations: None,
+                        meta: None,
+                    },
+                ),
+            ],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(context["type"], "mcp_context");
+    assert_eq!(context["query"], "rust mcp");
+    assert_eq!(context["resources"].as_array().unwrap().len(), 1);
+    assert_eq!(context["resources"][0]["name"], "Rust MCP Guide");
+    assert!(context["resources"][0]["relevance_score"].as_f64().unwrap() > 0.0);
+}
+
+#[tokio::test]
 async fn mcp_catalog_cache_preserves_resource_prompt_lifecycle_contract() {
     let cache = MCPCatalogCache::new();
     let resource = make_resource("readme", Some("docs"), "file:///README.md");
@@ -806,6 +885,148 @@ fn mcp_dynamic_tool_descriptor_and_result_rendering_preserve_tool_contract() {
         ),
         "Error executing MCP tool 'search'"
     );
+}
+
+#[tokio::test]
+async fn mcp_config_service_orchestration_preserves_load_save_delete_contract() {
+    let store = Arc::new(InMemoryMCPConfigStore::default());
+    store.values.lock().await.insert(
+        "mcp_servers".to_string(),
+        serde_json::json!({
+            "mcpServers": {
+                "remote-docs": {
+                    "type": "remote",
+                    "url": "https://example.com/mcp",
+                    "headers": {
+                        "X-Existing": "kept"
+                    }
+                }
+            }
+        }),
+    );
+
+    let service = MCPConfigService::new(store.clone());
+
+    let loaded = service.load_all_configs().await.unwrap();
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded[0].id, "remote-docs");
+    assert_eq!(loaded[0].location, ConfigLocation::User);
+
+    let updated = service
+        .set_remote_authorization("remote-docs", "plain-token")
+        .await
+        .unwrap();
+    assert_eq!(
+        updated.headers.get("Authorization").map(String::as_str),
+        Some("Bearer plain-token")
+    );
+
+    let saved_value = store
+        .values
+        .lock()
+        .await
+        .get("mcp_servers")
+        .cloned()
+        .unwrap();
+    assert_eq!(
+        saved_value["mcpServers"]["remote-docs"]["headers"]["Authorization"],
+        "Bearer plain-token"
+    );
+    assert_eq!(
+        saved_value["mcpServers"]["remote-docs"]["headers"]["X-Existing"],
+        "kept"
+    );
+
+    let cleared = service
+        .clear_remote_authorization("remote-docs")
+        .await
+        .unwrap();
+    assert!(!cleared.headers.contains_key("Authorization"));
+
+    service.delete_server_config("remote-docs").await.unwrap();
+    let deleted_value = store
+        .values
+        .lock()
+        .await
+        .get("mcp_servers")
+        .cloned()
+        .unwrap();
+    assert!(deleted_value["mcpServers"]
+        .as_object()
+        .unwrap()
+        .get("remote-docs")
+        .is_none());
+}
+
+#[tokio::test]
+async fn mcp_dynamic_tool_provider_preserves_manifest_contract() {
+    let provider = MCPDynamicToolProvider::new("github", "GitHub");
+    let definitions = provider
+        .load_tool_definitions(&FakeMCPToolCatalogClient {
+            tools: vec![MCPTool {
+                name: "search".to_string(),
+                title: Some("Search".to_string()),
+                description: Some("Search repositories".to_string()),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string" }
+                    }
+                }),
+                output_schema: None,
+                icons: None,
+                annotations: Some(MCPToolAnnotations {
+                    title: Some("Search".to_string()),
+                    read_only_hint: Some(true),
+                    destructive_hint: Some(false),
+                    idempotent_hint: Some(true),
+                    open_world_hint: Some(false),
+                }),
+                meta: None,
+            }],
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(definitions.len(), 1);
+    assert_eq!(definitions[0].mcp_tool.name, "search");
+    assert_eq!(definitions[0].descriptor.full_name, "mcp__github__search");
+    assert_eq!(definitions[0].descriptor.provider_id, "github");
+    assert_eq!(definitions[0].descriptor.tool_info.server_name, "GitHub");
+    assert!(definitions[0].descriptor.read_only);
+}
+
+#[tokio::test]
+async fn mcp_server_process_owner_preserves_unsupported_remote_transport_contract() {
+    let mut config = make_mcp_config(
+        "remote-sse",
+        ConfigLocation::User,
+        MCPServerType::Remote,
+        None,
+        Some("https://example.com/mcp"),
+    );
+    config.transport = Some(MCPServerTransport::Sse);
+
+    let mut process = MCPServerProcess::new(
+        "remote-sse".to_string(),
+        "Remote SSE".to_string(),
+        MCPServerType::Remote,
+    );
+    assert_eq!(process.status().await, MCPServerStatus::Uninitialized);
+    assert_eq!(process.server_type(), MCPServerType::Remote);
+
+    let error = process
+        .start_remote(std::env::temp_dir(), &config)
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind(), MCPRuntimeErrorKind::NotImplemented);
+    assert!(error
+        .to_string()
+        .contains("Remote MCP transport 'sse' is not yet supported"));
+    assert_eq!(process.status().await, MCPServerStatus::Uninitialized);
+
+    let pool = MCPConnectionPool::new();
+    assert!(pool.get_all_server_ids().await.is_empty());
 }
 
 #[test]

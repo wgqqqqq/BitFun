@@ -221,11 +221,14 @@ const dependencyProfileRules = [
       'base64',
       'bitfun-services-core',
       'chrono',
+      'futures',
       'git2',
       'notify',
       'rand',
+      'reqwest',
       'rmcp',
       'sha2',
+      'sse-stream',
       'thiserror',
       'tokio-util',
       'tokio-tungstenite',
@@ -276,6 +279,21 @@ const facadeOnlyFiles = [
     reason: 'core MCP protocol types facade must only re-export the integrations owner crate',
   },
   {
+    path: 'src/crates/core/src/service/mcp/protocol/transport.rs',
+    importPrefix: 'bitfun_services_integrations::mcp::protocol',
+    reason: 'core MCP stdio transport facade must only re-export the integrations owner crate',
+  },
+  {
+    path: 'src/crates/core/src/service/mcp/protocol/transport_remote.rs',
+    importPrefix: 'bitfun_services_integrations::mcp::protocol',
+    reason: 'core MCP remote transport facade must only re-export the integrations owner crate',
+  },
+  {
+    path: 'src/crates/core/src/service/mcp/server/connection.rs',
+    importPrefix: 'bitfun_services_integrations::mcp::server',
+    reason: 'core MCP connection facade must only re-export the integrations owner crate',
+  },
+  {
     path: 'src/crates/core/src/service/mcp/config/location.rs',
     importPrefix: 'bitfun_services_integrations::mcp',
     reason: 'core MCP config location facade must only re-export the integrations owner crate',
@@ -320,6 +338,18 @@ const forbiddenContentRules = [
       {
         regex: /\bcontains_key\("Authorization"\)/,
         message: 'core MCP server process runtime must not inline legacy authorization header fallback; use the integrations helper',
+      },
+      {
+        regex: /\bprocess_manager::create_tokio_command\b/,
+        message: 'core MCP server process facade must not spawn MCP child processes; use the integrations owner crate',
+      },
+      {
+        regex: /\bMCPTransport::start_receive_loop\b/,
+        message: 'core MCP server process facade must not own stdio receive lifecycle; use the integrations owner crate',
+      },
+      {
+        regex: /\bMCPConnection::new_remote\b/,
+        message: 'core MCP server process facade must not own remote transport lifecycle; use the integrations owner crate',
       },
     ],
   },
@@ -376,6 +406,23 @@ const forbiddenContentRules = [
       {
         regex: /Tool '\{\}' from MCP server/,
         message: 'core MCP tool adapter must not own dynamic descriptor text; use the integrations helper',
+      },
+    ],
+  },
+  {
+    path: 'src/crates/core/src/service/mcp/adapter/context.rs',
+    patterns: [
+      {
+        regex: /\bpub struct ContextEnhancerConfig\b/,
+        message: 'core MCP context provider must not own enhancer config; use the integrations helper',
+      },
+      {
+        regex: /\bpub struct ContextEnhancer\b/,
+        message: 'core MCP context provider must not own resource selection logic; use the integrations helper',
+      },
+      {
+        regex: /\bpartial_cmp\b/,
+        message: 'core MCP context provider must not own resource ranking logic; use the integrations helper',
       },
     ],
   },
@@ -984,6 +1031,9 @@ function runManifestParserSelfTest() {
     'is_auth_error',
     'AUTHORIZATION_KEYS',
     'contains_key\\("Authorization"\\)',
+    'process_manager::create_tokio_command',
+    'MCPTransport::start_receive_loop',
+    'MCPConnection::new_remote',
   ];
   const mcpProcessRuleText = mcpProcessRule.patterns
     .map((pattern) => pattern.regex.source)
@@ -1062,6 +1112,26 @@ function runManifestParserSelfTest() {
   for (const helper of mcpToolAdapterHelpers) {
     if (!mcpToolAdapterRuleText.includes(helper)) {
       throw new Error(`MCP tool adapter boundary rule must forbid helper: ${helper}`);
+    }
+  }
+
+  const mcpContextAdapterRule = forbiddenContentRules.find(
+    (rule) => rule.path === 'src/crates/core/src/service/mcp/adapter/context.rs',
+  );
+  if (!mcpContextAdapterRule) {
+    throw new Error('missing MCP context adapter boundary rule');
+  }
+  const mcpContextAdapterHelpers = [
+    'ContextEnhancerConfig',
+    'ContextEnhancer',
+    'partial_cmp',
+  ];
+  const mcpContextAdapterRuleText = mcpContextAdapterRule.patterns
+    .map((pattern) => pattern.regex.source)
+    .join('\n');
+  for (const helper of mcpContextAdapterHelpers) {
+    if (!mcpContextAdapterRuleText.includes(helper)) {
+      throw new Error(`MCP context adapter boundary rule must forbid helper: ${helper}`);
     }
   }
 
@@ -1207,6 +1277,26 @@ function runManifestParserSelfTest() {
   for (const contract of mcpServerConfigContracts) {
     if (!mcpServerConfigRuleText.includes(contract)) {
       throw new Error(`MCP server config boundary rule must forbid contract: ${contract}`);
+    }
+  }
+
+  const servicesIntegrationsProfile = dependencyProfileRules.find(
+    (rule) => rule.crateName === 'services-integrations',
+  );
+  for (const dep of ['futures', 'reqwest', 'sse-stream']) {
+    if (!servicesIntegrationsProfile?.forbiddenNonOptionalDeps.includes(dep)) {
+      throw new Error(`services-integrations default profile must forbid non-optional ${dep}`);
+    }
+  }
+
+  const facadePaths = new Set(facadeOnlyFiles.map((facade) => facade.path));
+  for (const path of [
+    'src/crates/core/src/service/mcp/protocol/transport.rs',
+    'src/crates/core/src/service/mcp/protocol/transport_remote.rs',
+    'src/crates/core/src/service/mcp/server/connection.rs',
+  ]) {
+    if (!facadePaths.has(path)) {
+      throw new Error(`missing MCP runtime facade-only rule for ${path}`);
     }
   }
 }

@@ -1,6 +1,7 @@
 //! JSON-RPC 2.0 request helper contracts for MCP.
 
 use super::types::*;
+use crate::mcp::{MCPRuntimeError, MCPRuntimeResult};
 use log::warn;
 use serde_json::{json, Value};
 
@@ -129,4 +130,25 @@ pub fn create_ping_request(id: u64) -> MCPRequest {
         "ping".to_string(),
         Some(json!({})),
     )
+}
+
+pub fn parse_response_result<T>(response: &MCPResponse) -> MCPRuntimeResult<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    if let Some(error) = &response.error {
+        return Err(MCPRuntimeError::mcp(format!(
+            "MCP Error {}: {}",
+            error.code, error.message
+        )));
+    }
+
+    let result = response
+        .result
+        .as_ref()
+        .ok_or_else(|| MCPRuntimeError::mcp("Missing result in MCP response"))?;
+
+    serde_json::from_value(result.clone()).map_err(|e| {
+        MCPRuntimeError::deserialization(format!("Failed to parse MCP response: {}", e))
+    })
 }

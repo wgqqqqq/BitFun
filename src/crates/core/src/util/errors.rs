@@ -179,6 +179,27 @@ impl From<bitfun_agent_stream::StreamProcessorError> for BitFunError {
     }
 }
 
+impl From<bitfun_services_integrations::mcp::MCPRuntimeError> for BitFunError {
+    fn from(error: bitfun_services_integrations::mcp::MCPRuntimeError) -> Self {
+        use bitfun_services_integrations::mcp::MCPRuntimeErrorKind;
+
+        let message = error.message().to_string();
+        match error.kind() {
+            MCPRuntimeErrorKind::Configuration => Self::Configuration(message),
+            MCPRuntimeErrorKind::Validation => Self::Validation(message),
+            MCPRuntimeErrorKind::Io => Self::io(message),
+            MCPRuntimeErrorKind::Serialization => Self::serialization(message),
+            MCPRuntimeErrorKind::Deserialization => Self::Deserialization(message),
+            MCPRuntimeErrorKind::Process => Self::ProcessError(message),
+            MCPRuntimeErrorKind::MCP => Self::MCPError(message),
+            MCPRuntimeErrorKind::NotFound => Self::NotFound(message),
+            MCPRuntimeErrorKind::NotImplemented => Self::NotImplemented(message),
+            MCPRuntimeErrorKind::Timeout => Self::Timeout(message),
+            MCPRuntimeErrorKind::Other => Self::Other(anyhow::anyhow!(message)),
+        }
+    }
+}
+
 impl From<BitFunError> for String {
     fn from(err: BitFunError) -> String {
         err.to_string()

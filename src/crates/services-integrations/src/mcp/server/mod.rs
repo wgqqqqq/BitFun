@@ -1,6 +1,8 @@
 //! MCP server data contracts.
 
 mod catalog_cache;
+mod connection;
+mod process;
 mod runtime_helpers;
 mod runtime_policy;
 
@@ -10,7 +12,10 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 
+pub use crate::mcp::{MCPRuntimeError, MCPRuntimeErrorKind, MCPRuntimeResult};
 pub use catalog_cache::MCPCatalogCache;
+pub use connection::{MCPConnection, MCPConnectionEvent, MCPConnectionPool};
+pub use process::MCPServerProcess;
 pub use runtime_helpers::{is_mcp_auth_error_message, merge_mcp_remote_headers};
 pub use runtime_policy::{
     compute_mcp_backoff_delay, detect_mcp_list_changed_kind, MCPListChangedKind,

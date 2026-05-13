@@ -1,7 +1,8 @@
 //! MCP dynamic tool metadata and result rendering helpers.
 
 use crate::mcp::protocol::{MCPTool, MCPToolResult, MCPToolResultContent};
-use crate::mcp::{build_mcp_tool_name, McpToolInfo};
+use crate::mcp::{build_mcp_tool_name, MCPRuntimeResult, McpToolInfo};
+use async_trait::async_trait;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct McpDynamicToolDescriptor {
@@ -13,6 +14,51 @@ pub struct McpDynamicToolDescriptor {
     pub provider_kind: String,
     pub tool_info: McpToolInfo,
     pub read_only: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct MCPDynamicToolDefinition {
+    pub mcp_tool: MCPTool,
+    pub descriptor: McpDynamicToolDescriptor,
+}
+
+#[async_trait]
+pub trait MCPToolCatalogClient: Send + Sync {
+    async fn list_mcp_tools(&self) -> MCPRuntimeResult<Vec<MCPTool>>;
+}
+
+#[derive(Debug, Clone)]
+pub struct MCPDynamicToolProvider {
+    server_id: String,
+    server_name: String,
+}
+
+impl MCPDynamicToolProvider {
+    pub fn new(server_id: impl Into<String>, server_name: impl Into<String>) -> Self {
+        Self {
+            server_id: server_id.into(),
+            server_name: server_name.into(),
+        }
+    }
+
+    pub async fn load_tool_definitions(
+        &self,
+        client: &dyn MCPToolCatalogClient,
+    ) -> MCPRuntimeResult<Vec<MCPDynamicToolDefinition>> {
+        Ok(client
+            .list_mcp_tools()
+            .await?
+            .into_iter()
+            .map(|mcp_tool| {
+                let descriptor =
+                    build_mcp_tool_descriptor(&self.server_id, &self.server_name, &mcp_tool);
+                MCPDynamicToolDefinition {
+                    mcp_tool,
+                    descriptor,
+                }
+            })
+            .collect())
+    }
 }
 
 fn tool_title(tool: &MCPTool) -> String {

@@ -10,7 +10,8 @@ use crate::service::mcp::server::MCPConnection;
 use crate::util::errors::BitFunResult;
 use async_trait::async_trait;
 use bitfun_services_integrations::mcp::adapter::{
-    build_mcp_tool_descriptor, render_mcp_tool_result_for_assistant, McpDynamicToolDescriptor,
+    build_mcp_tool_descriptor, render_mcp_tool_result_for_assistant, MCPDynamicToolProvider,
+    McpDynamicToolDescriptor,
 };
 use log::{debug, error, info, warn};
 use serde_json::Value;
@@ -246,25 +247,29 @@ impl MCPToolAdapter {
             server_name, server_id
         );
 
-        let result = connection.list_tools(None).await.map_err(|e| {
-            error!("list_tools call failed: {}", e);
-            e
-        })?;
+        let provider = MCPDynamicToolProvider::new(server_id, server_name);
+        let definitions = provider
+            .load_tool_definitions(connection.as_ref())
+            .await
+            .map_err(|e| {
+                error!("list_tools call failed: {}", e);
+                crate::util::errors::BitFunError::from(e)
+            })?;
 
         info!(
             "Found {} MCP tool(s) from server {}",
-            result.tools.len(),
+            definitions.len(),
             server_name
         );
 
-        if result.tools.is_empty() {
+        if definitions.is_empty() {
             warn!("Server {} provided no tools", server_name);
             return Ok(());
         }
 
-        for mcp_tool in result.tools.into_iter() {
+        for definition in definitions.into_iter() {
             let wrapper = Arc::new(MCPToolWrapper::new(
-                mcp_tool,
+                definition.mcp_tool,
                 connection.clone(),
                 server_id.to_string(),
                 server_name.to_string(),

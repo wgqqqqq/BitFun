@@ -10,12 +10,14 @@ pub mod adapter;
 pub mod auth;
 pub mod config;
 pub mod protocol;
+mod runtime_error;
 pub mod server;
 
 pub use adapter::*;
 pub use auth::*;
 pub use config::*;
 pub use protocol::*;
+pub use runtime_error::*;
 pub use server::*;
 pub use tool_info::McpToolInfo;
 pub use tool_name::{
