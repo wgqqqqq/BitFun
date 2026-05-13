@@ -13,6 +13,7 @@ use crate::service::search::flashgrep::{
     QuerySpec, RefreshPolicyConfig, RepoConfig, RepoRef, RepoStatus, Request, Response,
     SearchBackend, SearchModeConfig, SearchOutcome, SearchParams, SearchRequest, SearchResults,
     TaskRef, TaskStatus,
+    FLASHGREP_LOG_TARGET, log_flashgrep_stderr_line_with_context,
 };
 use crate::service::search::flashgrep::{error::AppError, FlashgrepRepoSession};
 use crate::service::search::{
@@ -437,6 +438,7 @@ fn spawn_remote_stdio_owner(
                     };
                     if let Err(error) = writer.write_all(&outbound).await {
                         log::warn!(
+                            target: FLASHGREP_LOG_TARGET,
                             "Failed to write remote flashgrep stdio request: connection_id={}, error={}",
                             connection_id,
                             error
@@ -448,6 +450,7 @@ fn spawn_remote_stdio_owner(
                     }
                     if let Err(error) = writer.flush().await {
                         log::warn!(
+                            target: FLASHGREP_LOG_TARGET,
                             "Failed to flush remote flashgrep stdio request: connection_id={}, error={}",
                             connection_id,
                             error
@@ -471,6 +474,7 @@ fn spawn_remote_stdio_owner(
                                 }
                                 Err(error) => {
                                     log::warn!(
+                                        target: FLASHGREP_LOG_TARGET,
                                         "Failed to decode remote flashgrep stdio message: connection_id={}, error={}",
                                         connection_id,
                                         error
@@ -487,15 +491,15 @@ fn spawn_remote_stdio_owner(
                         Some(russh::ChannelMsg::ExtendedData { data, .. }) => {
                             let text = String::from_utf8_lossy(&data);
                             for line in text.lines() {
-                                log::debug!(
-                                    "remote flashgrep stdio daemon stderr: connection_id={}, line={}",
-                                    connection_id,
-                                    line
+                                log_flashgrep_stderr_line_with_context(
+                                    Some(&format!("connection_id={connection_id}")),
+                                    line,
                                 );
                             }
                         }
                         Some(russh::ChannelMsg::ExitStatus { exit_status }) => {
                             log::debug!(
+                                target: FLASHGREP_LOG_TARGET,
                                 "Remote flashgrep stdio daemon exited: connection_id={}, exit_status={}",
                                 connection_id,
                                 exit_status
@@ -569,6 +573,7 @@ impl RemoteWorkspaceSearchService {
                 Ok(task) => Some(task.into()),
                 Err(error) => {
                     log::warn!(
+                        target: FLASHGREP_LOG_TARGET,
                         "Failed to fetch active remote flashgrep task status: {}",
                         error
                     );
@@ -789,6 +794,7 @@ impl RemoteWorkspaceSearchService {
                 return Ok(RemoteStdioSessionLease::new(entry.session.clone()));
             }
             log::warn!(
+                target: FLASHGREP_LOG_TARGET,
                 "Remote workspace search stdio session became unhealthy, reopening: connection_id={}, path={}",
                 context.connection.connection_id,
                 context.repo_root
@@ -870,6 +876,7 @@ impl RemoteWorkspaceSearchService {
             }
 
             log::info!(
+                target: FLASHGREP_LOG_TARGET,
                 "Bundled remote flashgrep binary changed; reopening remote search session: connection_id={}, path={}, old_sha256={}, new_sha256={}",
                 context.connection.connection_id,
                 context.repo_root,
@@ -997,6 +1004,7 @@ impl RemoteWorkspaceSearchService {
             .await?;
         if remote_sha256.as_deref() != Some(local_bundle.sha256.as_str()) {
             log::info!(
+                target: FLASHGREP_LOG_TARGET,
                 "Uploading bundled remote flashgrep binary: connection_id={}, path={}, bundle={}, local_path={}, local_sha256={}, remote_sha256={}",
                 connection_id,
                 remote_binary_path,
@@ -1056,6 +1064,7 @@ impl RemoteWorkspaceSearchService {
             Ok(workspace_config) => workspace_config.max_file_size,
             Err(error) => {
                 log::warn!(
+                    target: FLASHGREP_LOG_TARGET,
                     "Failed to read workspace config for remote flashgrep repo open, using default max_file_size: {}",
                     error
                 );
@@ -1137,6 +1146,7 @@ fn schedule_remote_stdio_session_release(key: String, activity_epoch: Arc<Atomic
             Ok(_) => {}
             Err(error) => {
                 log::warn!(
+                    target: FLASHGREP_LOG_TARGET,
                     "Failed to check idle remote workspace search status before release: key={}, error={}",
                     key.replace('\0', ":"),
                     error
@@ -1175,7 +1185,8 @@ fn schedule_remote_stdio_session_release(key: String, activity_epoch: Arc<Atomic
         };
 
         if let Some(entry) = entry {
-            log::info!(
+            log::debug!(
+                target: FLASHGREP_LOG_TARGET,
                 "Releasing idle remote workspace search stdio session: key={}",
                 key.replace('\0', ":")
             );

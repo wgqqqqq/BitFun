@@ -558,6 +558,7 @@ export interface RuntimeLoggingInfo {
   sessionLogDir: string;
   appLogPath: string;
   aiLogPath: string;
+  flashgrepLogPath: string;
   webviewLogPath: string;
 }
 

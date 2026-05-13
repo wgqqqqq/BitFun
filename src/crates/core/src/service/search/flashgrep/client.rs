@@ -19,6 +19,7 @@ use tokio::{
 
 use super::{
     error::{AppError, Result},
+    log_flashgrep_stderr_line, FLASHGREP_LOG_TARGET,
     protocol::{
         ClientCapabilities, ClientInfo, GlobParams, InitializeParams, RepoRef, Request, Response,
         SearchParams, TaskRef,
@@ -169,6 +170,7 @@ impl ManagedClient {
                 self.clear_daemon_if_current(&daemon).await;
                 if let Err(shutdown_error) = daemon.shutdown().await {
                     log::debug!(
+                        target: FLASHGREP_LOG_TARGET,
                         "Flashgrep stdio daemon shutdown after transport error failed: {}",
                         shutdown_error
                     );
@@ -469,6 +471,7 @@ impl AsyncDaemonClient {
                 .await;
             if let Err(terminate_error) = client.wait_for_child_exit().await {
                 log::debug!(
+                    target: FLASHGREP_LOG_TARGET,
                     "Flashgrep stdio daemon cleanup after failed startup errored: {}",
                     terminate_error
                 );
@@ -584,14 +587,22 @@ impl AsyncDaemonClient {
             let mut writer = BufWriter::new(stdin);
             while let Some(outbound) = write_rx.recv().await {
                 if let Err(error) = writer.write_all(&outbound).await {
-                    log::debug!("flashgrep stdio daemon stdin write failed: {}", error);
+                    log::debug!(
+                        target: FLASHGREP_LOG_TARGET,
+                        "flashgrep stdio daemon stdin write failed: {}",
+                        error
+                    );
                     protocol
                         .close_with_message("flashgrep stdio backend stdin write failed")
                         .await;
                     return;
                 }
                 if let Err(error) = writer.flush().await {
-                    log::debug!("flashgrep stdio daemon stdin flush failed: {}", error);
+                    log::debug!(
+                        target: FLASHGREP_LOG_TARGET,
+                        "flashgrep stdio daemon stdin flush failed: {}",
+                        error
+                    );
                     protocol
                         .close_with_message("flashgrep stdio backend stdin flush failed")
                         .await;
@@ -639,9 +650,13 @@ impl AsyncDaemonClient {
                 line.clear();
                 match reader.read_line(&mut line).await {
                     Ok(0) => break,
-                    Ok(_) => log::debug!("flashgrep stdio daemon stderr: {}", line.trim_end()),
+                    Ok(_) => log_flashgrep_stderr_line(&line),
                     Err(error) => {
-                        log::debug!("flashgrep stdio daemon stderr read failed: {}", error);
+                        log::debug!(
+                            target: FLASHGREP_LOG_TARGET,
+                            "flashgrep stdio daemon stderr read failed: {}",
+                            error
+                        );
                         break;
                     }
                 }

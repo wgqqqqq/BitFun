@@ -4,6 +4,7 @@ use crate::service::config::{get_global_config_service, types::WorkspaceConfig};
 use crate::service::search::flashgrep::{
     ConsistencyMode, FlashgrepRepoSession, GlobRequest, ManagedClient, OpenRepoParams, PathScope,
     QuerySpec, RefreshPolicyConfig, RepoConfig, RepoSession, SearchRequest, SearchResults,
+    FLASHGREP_LOG_TARGET,
 };
 use crate::util::errors::{BitFunError, BitFunResult};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -49,12 +50,16 @@ impl WorkspaceSearchService {
         let program = resolve_daemon_program();
         if let Some(program) = program {
             log::info!(
+                target: FLASHGREP_LOG_TARGET,
                 "WorkspaceSearchService daemon configured: program={}",
                 PathBuf::from(&program).display()
             );
             client = client.with_daemon_program(program);
         } else {
-            log::info!("WorkspaceSearchService daemon configured: program=flashgrep");
+            log::info!(
+                target: FLASHGREP_LOG_TARGET,
+                "WorkspaceSearchService daemon configured: program=flashgrep"
+            );
         }
 
         Self {
@@ -90,6 +95,13 @@ impl WorkspaceSearchService {
             .status()
             .await
             .map_err(map_flashgrep_error("Failed to fetch repository status"))?;
+        log::info!(
+            target: FLASHGREP_LOG_TARGET,
+            "Workspace search build index requested: repo_root={}, task_id={}, phase={:?}",
+            repo_root.as_ref().display(),
+            task.task_id,
+            repo_status.phase
+        );
         Ok(IndexTaskHandle {
             task: task.into(),
             repo_status: repo_status.into(),
@@ -108,6 +120,13 @@ impl WorkspaceSearchService {
             .status()
             .await
             .map_err(map_flashgrep_error("Failed to fetch repository status"))?;
+        log::info!(
+            target: FLASHGREP_LOG_TARGET,
+            "Workspace search rebuild index requested: repo_root={}, task_id={}, phase={:?}",
+            repo_root.as_ref().display(),
+            task.task_id,
+            repo_status.phase
+        );
         Ok(IndexTaskHandle {
             task: task.into(),
             repo_status: repo_status.into(),
@@ -196,7 +215,8 @@ impl WorkspaceSearchService {
             matched_occurrences: search.results.matched_occurrences,
         };
 
-        log::info!(
+        log::debug!(
+            target: FLASHGREP_LOG_TARGET,
             "Workspace content search completed: repo_root={}, pattern={}, output_mode={:?}, search_mode={:?}, scope_roots={}, globs={}, file_types={}, max_results={:?}, backend={:?}, repo_phase={:?}, rebuild_recommended={}, dirty_modified={}, dirty_deleted={}, dirty_new={}, candidate_docs={}, matched_lines={}, matched_occurrences={}, returned_results={}, truncated={}, normalize_ms={}, build_scope_ms={}, session_ms={}, search_ms={}, convert_ms={}, total_ms={}",
             repo_root.display(),
             pattern_for_log,
@@ -275,12 +295,17 @@ impl WorkspaceSearchService {
         self.open_guards.lock().await.clear();
         if released_sessions > 0 {
             log::info!(
+                target: FLASHGREP_LOG_TARGET,
                 "Workspace search shutdown releasing sessions via daemon shutdown: count={}",
                 released_sessions
             );
         }
         if let Err(error) = self.client.shutdown_daemon().await {
-            log::debug!("Workspace search daemon shutdown skipped: {}", error);
+            log::debug!(
+                target: FLASHGREP_LOG_TARGET,
+                "Workspace search daemon shutdown skipped: {}",
+                error
+            );
         }
     }
 
@@ -289,12 +314,17 @@ impl WorkspaceSearchService {
         self.open_guards.lock().await.clear();
         if released_sessions > 0 {
             log::info!(
+                target: FLASHGREP_LOG_TARGET,
                 "Workspace search stop releasing sessions via daemon stop: count={}",
                 released_sessions
             );
         }
         if let Err(error) = self.client.stop_daemon().await {
-            log::debug!("Workspace search daemon stop skipped: {}", error);
+            log::debug!(
+                target: FLASHGREP_LOG_TARGET,
+                "Workspace search daemon stop skipped: {}",
+                error
+            );
         }
     }
 
@@ -314,6 +344,7 @@ impl WorkspaceSearchService {
                     }
                     Err(error) => {
                         log::warn!(
+                            target: FLASHGREP_LOG_TARGET,
                             "Failed to create runtime for workspace search shutdown: {}",
                             error
                         );
@@ -323,12 +354,14 @@ impl WorkspaceSearchService {
             Ok(handle) => {
                 if handle.join().is_err() {
                     log::warn!(
+                        target: FLASHGREP_LOG_TARGET,
                         "Workspace search shutdown thread panicked during blocking shutdown"
                     );
                 }
             }
             Err(error) => {
                 log::warn!(
+                    target: FLASHGREP_LOG_TARGET,
                     "Failed to spawn workspace search shutdown thread: {}",
                     error
                 );
@@ -353,12 +386,14 @@ impl WorkspaceSearchService {
                 return Ok(existing.session);
             }
             log::warn!(
+                target: FLASHGREP_LOG_TARGET,
                 "Workspace search session became unhealthy, reopening repository session: path={}",
                 repo_root.display()
             );
             self.sessions.write().await.remove(&repo_root);
             if let Err(error) = existing.session.close().await {
                 log::debug!(
+                    target: FLASHGREP_LOG_TARGET,
                     "Workspace search repo close after unhealthy session failed: path={}, error={}",
                     repo_root.display(),
                     error
@@ -369,6 +404,7 @@ impl WorkspaceSearchService {
         let repo_config = repo_config_for_workspace_search().await;
         if let Err(error) = ensure_workspace_gitignore_ignores_bitfun(&repo_root).await {
             log::warn!(
+                target: FLASHGREP_LOG_TARGET,
                 "Failed to ensure workspace .gitignore ignores .bitfun before search warmup: path={}, error={}",
                 repo_root.display(),
                 error
@@ -380,6 +416,11 @@ impl WorkspaceSearchService {
             config: repo_config,
             refresh: RefreshPolicyConfig::default(),
         };
+        let storage_root = params
+            .storage_root
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "-".to_string());
 
         let entry =
             SessionEntry {
@@ -388,6 +429,12 @@ impl WorkspaceSearchService {
                 )?),
                 activity_epoch: Arc::new(AtomicU64::new(1)),
             };
+        log::info!(
+            target: FLASHGREP_LOG_TARGET,
+            "Opened workspace search repository session: path={}, storage_root={}",
+            repo_root.display(),
+            storage_root
+        );
 
         let mut sessions = self.sessions.write().await;
         Ok(sessions
@@ -412,7 +459,11 @@ impl WorkspaceSearchService {
             Some(task_id) => match session.task_status(task_id).await {
                 Ok(task) => Some(task),
                 Err(error) => {
-                    log::warn!("Failed to fetch active flashgrep task status: {}", error);
+                    log::warn!(
+                        target: FLASHGREP_LOG_TARGET,
+                        "Failed to fetch active flashgrep task status: {}",
+                        error
+                    );
                     None
                 }
             },
@@ -448,12 +499,14 @@ impl WorkspaceSearchService {
         };
 
         if let Some(entry) = entry {
-            log::info!(
+            log::debug!(
+                target: FLASHGREP_LOG_TARGET,
                 "Releasing idle workspace search repository session: path={}",
                 repo_root.display()
             );
             if let Err(error) = FlashgrepRepoSession::close(entry.session.as_ref()).await {
                 log::warn!(
+                    target: FLASHGREP_LOG_TARGET,
                     "Failed to release idle workspace search repository session: path={}, error={}",
                     repo_root.display(),
                     error

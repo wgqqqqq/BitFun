@@ -13,6 +13,7 @@ use tokio::time::timeout;
 
 use super::error::{AppError, Result};
 use super::protocol::{Request, RequestEnvelope, Response, ResponseEnvelope, ServerMessage};
+use super::FLASHGREP_LOG_TARGET;
 
 const JSONRPC_VERSION: &str = "2.0";
 
@@ -148,7 +149,8 @@ impl ProtocolClient {
                 }
             }
             ServerMessage::Notification(notification) => {
-                log::debug!(
+                log::trace!(
+                    target: FLASHGREP_LOG_TARGET,
                     "Flashgrep protocol notification: backend={}, method={}",
                     self.inner.backend_name,
                     notification.method
