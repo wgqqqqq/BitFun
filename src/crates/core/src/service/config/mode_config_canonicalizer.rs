@@ -220,6 +220,9 @@ fn canonicalize_mode_config(
     let Some(raw_mode) = raw_mode else {
         return Ok(None);
     };
+    if raw_mode.is_null() {
+        return Ok(None);
+    }
 
     let mut stored: ModeConfig = serde_json::from_value(raw_mode.clone()).map_err(|error| {
         BitFunError::config(format!(
@@ -454,7 +457,9 @@ pub async fn canonicalize_mode_configs() -> BitFunResult<ModeConfigCanonicalizat
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_skill_override_lists, stored_mode_from_overrides};
+    use super::{
+        canonicalize_mode_config, normalize_skill_override_lists, stored_mode_from_overrides,
+    };
     use std::collections::HashSet;
 
     #[test]
@@ -495,5 +500,18 @@ mod tests {
             vec!["user::bitfun-system::pdf".to_string()]
         );
         assert!(stored.disabled_user_skills.is_empty());
+    }
+
+    #[test]
+    fn canonicalize_mode_config_treats_null_as_missing() {
+        let canonical = canonicalize_mode_config(
+            "Claw",
+            Some(&Value::Null),
+            &[],
+            &HashSet::new(),
+        )
+        .expect("null mode config should be ignored");
+
+        assert!(canonical.is_none());
     }
 }

@@ -7,6 +7,18 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+fn deserialize_mode_configs<'de, D>(deserializer: D) -> Result<HashMap<String, ModeConfig>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = Option::<HashMap<String, Option<ModeConfig>>>::deserialize(deserializer)?;
+    Ok(raw
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(mode_id, config)| config.map(|config| (mode_id, config)))
+        .collect())
+}
+
 /// Web UI font preferences (settings → basics). Keys match `FontPreference` in the frontend (camelCase).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -516,7 +528,7 @@ pub struct AIConfig {
 
     /// Mode configuration.
     /// mode_id -> ModeConfig
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_mode_configs")]
     pub mode_configs: HashMap<String, ModeConfig>,
 
     /// SubAgent configuration (enable/disable state).
@@ -2006,6 +2018,39 @@ mod tests {
         .expect("config with subagent_max_concurrency should deserialize");
 
         assert_eq!(config.subagent_max_concurrency, 9);
+    }
+
+    #[test]
+    fn deserializes_mode_configs_with_null_entries() {
+        let config: AIConfig = serde_json::from_value(serde_json::json!({
+            "models": [],
+            "agent_models": {},
+            "func_agent_models": {},
+            "default_models": {},
+            "mode_configs": {
+                "Claw": null,
+                "Cowork": {
+                    "mode_id": "Cowork",
+                    "removed_tools": ["shell"]
+                }
+            },
+            "subagent_configs": {},
+            "proxy": {
+                "enabled": false,
+                "url": ""
+            }
+        }))
+        .expect("config with null mode config entries should deserialize");
+
+        assert!(!config.mode_configs.contains_key("Claw"));
+        assert_eq!(
+            config
+                .mode_configs
+                .get("Cowork")
+                .expect("non-null mode config should be retained")
+                .removed_tools,
+            vec!["shell".to_string()]
+        );
     }
 
     #[test]
