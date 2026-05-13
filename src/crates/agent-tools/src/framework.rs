@@ -1,9 +1,15 @@
+use crate::{
+    DynamicToolDescriptor, DynamicToolProvider, PortError, PortErrorKind, PortResult, ToolDecorator,
+};
+use async_trait::async_trait;
 use bitfun_core_types::ToolImageAttachment;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// Dynamic MCP tool subtype metadata.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -23,6 +29,181 @@ pub struct DynamicToolInfo {
     pub provider_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp: Option<DynamicMcpToolInfo>,
+}
+
+#[async_trait]
+pub trait ToolRegistryItem: Send + Sync {
+    fn name(&self) -> &str;
+
+    async fn description(&self) -> Result<String, String>;
+
+    fn input_schema(&self) -> Value;
+
+    async fn input_schema_for_model(&self) -> Value {
+        self.input_schema()
+    }
+
+    fn dynamic_provider_id(&self) -> Option<&str> {
+        None
+    }
+
+    fn dynamic_tool_info(&self) -> Option<DynamicToolInfo> {
+        self.dynamic_provider_id()
+            .map(|provider_id| DynamicToolInfo {
+                provider_id: provider_id.to_string(),
+                provider_kind: None,
+                mcp: None,
+            })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct DynamicToolMetadata {
+    provider_id: String,
+    info: DynamicToolInfo,
+}
+
+struct IdentityToolDecorator;
+
+impl<Tool> ToolDecorator<Tool> for IdentityToolDecorator {
+    fn decorate(&self, tool: Tool) -> Tool {
+        tool
+    }
+}
+
+pub type ToolRef<Tool> = Arc<Tool>;
+pub type ToolDecoratorRef<Tool> = Arc<dyn ToolDecorator<ToolRef<Tool>>>;
+
+pub struct ToolRegistry<Tool: ToolRegistryItem + ?Sized> {
+    tools: IndexMap<String, ToolRef<Tool>>,
+    dynamic_tools: IndexMap<String, DynamicToolMetadata>,
+    tool_decorator: ToolDecoratorRef<Tool>,
+}
+
+impl<Tool: ToolRegistryItem + ?Sized> Default for ToolRegistry<Tool> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<Tool: ToolRegistryItem + ?Sized> ToolRegistry<Tool> {
+    pub fn new() -> Self {
+        Self::with_tool_decorator(Arc::new(IdentityToolDecorator))
+    }
+
+    pub fn with_tool_decorator(tool_decorator: ToolDecoratorRef<Tool>) -> Self {
+        Self {
+            tools: IndexMap::new(),
+            dynamic_tools: IndexMap::new(),
+            tool_decorator,
+        }
+    }
+
+    pub fn register_tool(&mut self, tool: ToolRef<Tool>) {
+        let tool = self.tool_decorator.decorate(tool);
+        let name = tool.name().to_string();
+        let dynamic_info = tool.dynamic_tool_info().and_then(|info| {
+            if info.provider_id.trim().is_empty() {
+                None
+            } else {
+                Some(info)
+            }
+        });
+
+        if let Some(info) = dynamic_info {
+            self.dynamic_tools.insert(
+                name.clone(),
+                DynamicToolMetadata {
+                    provider_id: info.provider_id.clone(),
+                    info,
+                },
+            );
+        } else {
+            self.dynamic_tools.shift_remove(&name);
+        }
+        self.tools.insert(name, tool);
+    }
+
+    pub fn unregister_mcp_server_tools(&mut self, server_id: &str) {
+        let to_remove = self
+            .dynamic_tools
+            .iter()
+            .filter(|(_, metadata)| {
+                metadata
+                    .info
+                    .mcp
+                    .as_ref()
+                    .is_some_and(|info| info.server_id == server_id)
+            })
+            .map(|(tool_name, _)| tool_name.clone())
+            .collect::<Vec<_>>();
+
+        for key in to_remove {
+            self.tools.shift_remove(&key);
+            self.dynamic_tools.shift_remove(&key);
+        }
+    }
+
+    pub fn unregister_tools_by_prefix(&mut self, prefix: &str) -> usize {
+        let to_remove = self
+            .tools
+            .keys()
+            .filter(|key| key.starts_with(prefix))
+            .cloned()
+            .collect::<Vec<_>>();
+        let count = to_remove.len();
+
+        for key in to_remove {
+            self.tools.shift_remove(&key);
+            self.dynamic_tools.shift_remove(&key);
+        }
+
+        count
+    }
+
+    pub fn get_tool(&self, name: &str) -> Option<ToolRef<Tool>> {
+        self.tools.get(name).cloned()
+    }
+
+    pub fn get_dynamic_tool_info(&self, name: &str) -> Option<DynamicToolInfo> {
+        self.dynamic_tools
+            .get(name)
+            .map(|metadata| metadata.info.clone())
+    }
+
+    pub fn get_tool_names(&self) -> Vec<String> {
+        self.tools.keys().cloned().collect()
+    }
+
+    pub fn get_all_tools(&self) -> Vec<ToolRef<Tool>> {
+        self.tools.values().cloned().collect()
+    }
+}
+
+#[async_trait]
+impl<Tool: ToolRegistryItem + ?Sized> DynamicToolProvider for ToolRegistry<Tool> {
+    async fn list_dynamic_tools(&self) -> PortResult<Vec<DynamicToolDescriptor>> {
+        let mut descriptors = Vec::new();
+
+        for (name, tool) in self.tools.iter() {
+            let Some(metadata) = self.dynamic_tools.get(name) else {
+                continue;
+            };
+            let description = tool
+                .description()
+                .await
+                .map_err(|error| PortError::new(PortErrorKind::Backend, error))?;
+
+            descriptors.push(DynamicToolDescriptor {
+                name: tool.name().to_string(),
+                description,
+                input_schema: tool.input_schema_for_model().await,
+                provider_id: Some(metadata.provider_id.clone()),
+            });
+        }
+
+        Ok(descriptors)
+    }
 }
 
 /// Tool result rendering options.

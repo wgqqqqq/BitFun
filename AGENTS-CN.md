@@ -115,6 +115,18 @@ await api.invoke('your_command', { request: { ... } });
 [`docs/architecture/core-decomposition.md`](docs/architecture/core-decomposition.md)。
 该文档定义产品行为不变量、crate 归属目标、禁止依赖方向、feature 安全规则和里程碑验证门禁。
 
+### Tool 归属护栏
+
+- `src/crates/agent-tools` 拥有轻量 tool contract，以及 generic registry / dynamic-provider container。
+- `src/crates/core/src/agentic/tools/registry.rs` 只负责产品工具组装、`dyn Tool` 适配和 snapshot decoration。
+- `ToolUseContext` 与具体工具实现继续留在 core，直到有已评审的 port/provider 设计和等价测试。
+
+### DeepReview 护栏
+
+Deep Review / 代码审核团队横跨 core runtime 与 Web UI。target resolution 与
+manifest construction 保持在前端；policy validation、queue/retry state 和
+report enrichment 保持在 shared core。
+
 ### 后端链路
 
 大多数功能建议按这个顺序追踪：

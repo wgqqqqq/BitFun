@@ -117,6 +117,15 @@ before editing. The guardrail document defines product-behavior invariants,
 crate ownership targets, forbidden dependency directions, feature safety rules,
 and milestone verification gates.
 
+### Tool ownership guardrails
+
+- `src/crates/agent-tools` owns lightweight tool contracts and the generic
+  registry / dynamic-provider container.
+- `src/crates/core/src/agentic/tools/registry.rs` owns product tool assembly,
+  `dyn Tool` adaptation, and snapshot decoration only.
+- Keep `ToolUseContext` and concrete tool implementations in core until a
+  reviewed port/provider design and equivalence tests exist.
+
 ### DeepReview guardrails
 
 Deep Review / Code Review Team work spans the core runtime and web UI. Keep

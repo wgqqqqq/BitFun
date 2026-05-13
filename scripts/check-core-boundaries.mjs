@@ -361,6 +361,26 @@ const forbiddenContentRules = [
     ],
   },
   {
+    path: 'src/crates/core/src/agentic/tools/registry.rs',
+    patterns: [
+      {
+        regex: /\bstruct DynamicToolMetadata\b/,
+        message:
+          'core tool registry must not own dynamic tool metadata storage; use bitfun-agent-tools ToolRegistry',
+      },
+      {
+        regex: /\btools\s*:\s*IndexMap\b/,
+        message:
+          'core tool registry must not own the generic tool map; use bitfun-agent-tools ToolRegistry',
+      },
+      {
+        regex: /\bdynamic_tools\s*:\s*IndexMap\b/,
+        message:
+          'core tool registry must not own the dynamic tool map; use bitfun-agent-tools ToolRegistry',
+      },
+    ],
+  },
+  {
     path: 'src/crates/core/src/service/mcp/server/process.rs',
     patterns: [
       {
@@ -1080,6 +1100,25 @@ function runManifestParserSelfTest() {
   for (const contract of coreToolRestrictionContracts) {
     if (!coreToolRestrictionRuleText.includes(contract)) {
       throw new Error(`core tool restrictions boundary rule must forbid contract: ${contract}`);
+    }
+  }
+  const coreToolRegistryRule = forbiddenContentRules.find(
+    (rule) => rule.path === 'src/crates/core/src/agentic/tools/registry.rs',
+  );
+  if (!coreToolRegistryRule) {
+    throw new Error('missing core tool registry boundary rule');
+  }
+  const coreToolRegistryRuleText = coreToolRegistryRule.patterns
+    .map((pattern) => pattern.regex.source)
+    .join('\n');
+  const coreToolRegistryContracts = [
+    'DynamicToolMetadata',
+    'tools\\s*:\\s*IndexMap',
+    'dynamic_tools\\s*:\\s*IndexMap',
+  ];
+  for (const contract of coreToolRegistryContracts) {
+    if (!coreToolRegistryRuleText.includes(contract)) {
+      throw new Error(`core tool registry boundary rule must forbid contract: ${contract}`);
     }
   }
 

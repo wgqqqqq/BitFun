@@ -4,20 +4,15 @@ use crate::agentic::tools::framework::{DynamicToolInfo, Tool};
 use crate::agentic::tools::implementations::*;
 use crate::util::errors::BitFunResult;
 use bitfun_agent_tools::{
-    DynamicToolDescriptor, DynamicToolProvider, PortError, PortErrorKind, PortResult, ToolDecorator,
+    DynamicToolDescriptor, DynamicToolProvider, PortResult, ToolDecorator,
+    ToolRegistry as AgentToolRegistry, ToolRegistryItem,
 };
-use indexmap::IndexMap;
 use log::{debug, info, trace, warn};
+use serde_json::Value;
 use std::sync::Arc;
 
 type ToolRef = Arc<dyn Tool>;
 type ToolDecoratorRef = Arc<dyn ToolDecorator<ToolRef>>;
-
-#[derive(Debug, Clone)]
-struct DynamicToolMetadata {
-    provider_id: String,
-    info: DynamicToolInfo,
-}
 
 struct SnapshotToolDecorator;
 
@@ -29,9 +24,7 @@ impl ToolDecorator<ToolRef> for SnapshotToolDecorator {
 
 /// Tool registry - manages all available tools (using IndexMap to maintain registration order)
 pub struct ToolRegistry {
-    tools: IndexMap<String, ToolRef>,
-    dynamic_tools: IndexMap<String, DynamicToolMetadata>,
-    tool_decorator: ToolDecoratorRef,
+    inner: AgentToolRegistry<dyn Tool>,
 }
 
 impl Default for ToolRegistry {
@@ -53,9 +46,7 @@ impl ToolRegistry {
     /// through the `bitfun-runtime-ports` interface.
     pub fn with_tool_decorator(tool_decorator: ToolDecoratorRef) -> Self {
         let mut registry = Self {
-            tools: IndexMap::new(),
-            dynamic_tools: IndexMap::new(),
-            tool_decorator,
+            inner: AgentToolRegistry::with_tool_decorator(tool_decorator),
         };
 
         // Register all tools
@@ -68,7 +59,7 @@ impl ToolRegistry {
         let tool_count = tools.len();
         info!("Registering MCP tools: count={}", tool_count);
 
-        let before_count = self.tools.len();
+        let before_count = self.get_tool_names().len();
         debug!("Tool count before registration: {}", before_count);
 
         for (index, tool) in tools.into_iter().enumerate() {
@@ -81,7 +72,7 @@ impl ToolRegistry {
             );
 
             // Check if a tool with the same name already exists
-            if self.tools.contains_key(&name) {
+            if self.get_tool(&name).is_some() {
                 warn!(
                     "Tool already exists, will be overwritten: tool_name={}",
                     name
@@ -92,7 +83,7 @@ impl ToolRegistry {
             debug!("MCP tool registered: tool_name={}", name);
         }
 
-        let after_count = self.tools.len();
+        let after_count = self.get_tool_names().len();
         let added_count = after_count - before_count;
 
         info!(
@@ -103,41 +94,36 @@ impl ToolRegistry {
 
     /// Remove all tools from the MCP server
     pub fn unregister_mcp_server_tools(&mut self, server_id: &str) {
-        let to_remove: Vec<String> = self
-            .dynamic_tools
-            .iter()
-            .filter(|(_, metadata)| {
-                metadata
-                    .info
-                    .mcp
-                    .as_ref()
-                    .is_some_and(|info| info.server_id == server_id)
+        let removed_tool_names = self
+            .get_tool_names()
+            .into_iter()
+            .filter(|name| {
+                self.get_dynamic_tool_info(name)
+                    .and_then(|info| info.mcp)
+                    .is_some_and(|mcp| mcp.server_id == server_id)
             })
-            .map(|(tool_name, _)| tool_name.clone())
-            .collect();
+            .collect::<Vec<_>>();
 
-        for key in to_remove {
+        self.inner.unregister_mcp_server_tools(server_id);
+
+        for key in removed_tool_names {
             info!("Unregistering dynamic tool: tool_name={}", key);
-            self.tools.shift_remove(&key);
-            self.dynamic_tools.shift_remove(&key);
         }
     }
 
     /// Remove all tools whose registry name starts with the given prefix.
     pub fn unregister_tools_by_prefix(&mut self, prefix: &str) -> usize {
-        let to_remove: Vec<String> = self
-            .tools
-            .keys()
-            .filter(|k| k.starts_with(prefix))
-            .cloned()
-            .collect();
-        let count = to_remove.len();
+        let removed_tool_names = self
+            .get_tool_names()
+            .into_iter()
+            .filter(|name| name.starts_with(prefix))
+            .collect::<Vec<_>>();
+        let count = self.inner.unregister_tools_by_prefix(prefix);
 
-        for key in to_remove {
+        for key in removed_tool_names {
             info!("Unregistering dynamic tool: tool_name={}", key);
-            self.tools.shift_remove(&key);
-            self.dynamic_tools.shift_remove(&key);
         }
+
         count
     }
 
@@ -213,81 +199,66 @@ impl ToolRegistry {
 
     /// Register a single tool
     pub fn register_tool(&mut self, tool: ToolRef) {
-        // Snapshot-aware wrapping happens once at registration time so every
-        // subsequent lookup returns the same runtime implementation.
-        let tool = self.tool_decorator.decorate(tool);
-        let name = tool.name().to_string();
-        let dynamic_info = tool.dynamic_tool_info().and_then(|info| {
-            if info.provider_id.trim().is_empty() {
-                None
-            } else {
-                Some(info)
-            }
-        });
-
-        if let Some(info) = dynamic_info {
-            self.dynamic_tools.insert(
-                name.clone(),
-                DynamicToolMetadata {
-                    provider_id: info.provider_id.clone(),
-                    info,
-                },
-            );
-        } else {
-            self.dynamic_tools.shift_remove(&name);
-        }
-        self.tools.insert(name, tool);
+        self.inner.register_tool(tool);
     }
 
     /// Get tool
     pub fn get_tool(&self, name: &str) -> Option<Arc<dyn Tool>> {
-        self.tools.get(name).cloned()
+        self.inner.get_tool(name)
     }
 
     pub fn get_dynamic_tool_info(&self, name: &str) -> Option<DynamicToolInfo> {
-        self.dynamic_tools
-            .get(name)
-            .map(|metadata| metadata.info.clone())
+        self.inner.get_dynamic_tool_info(name)
     }
 
     /// Get all tool names
     pub fn get_tool_names(&self) -> Vec<String> {
-        self.tools.keys().cloned().collect()
+        self.inner.get_tool_names()
     }
 
     /// Get all tools
     pub fn get_all_tools(&self) -> Vec<Arc<dyn Tool>> {
         trace!(
             "ToolRegistry::get_all_tools() called: total={}",
-            self.tools.len()
+            self.get_tool_names().len()
         );
-        self.tools.values().cloned().collect()
+        self.inner.get_all_tools()
     }
 }
 
 #[async_trait::async_trait]
 impl DynamicToolProvider for ToolRegistry {
     async fn list_dynamic_tools(&self) -> PortResult<Vec<DynamicToolDescriptor>> {
-        let mut descriptors = Vec::new();
+        self.inner.list_dynamic_tools().await
+    }
+}
 
-        for (name, tool) in self.tools.iter() {
-            let Some(metadata) = self.dynamic_tools.get(name) else {
-                continue;
-            };
-            let description = tool
-                .description()
-                .await
-                .map_err(|error| PortError::new(PortErrorKind::Backend, error.to_string()))?;
+#[async_trait::async_trait]
+impl ToolRegistryItem for dyn Tool {
+    fn name(&self) -> &str {
+        Tool::name(self)
+    }
 
-            descriptors.push(DynamicToolDescriptor {
-                name: tool.name().to_string(),
-                description,
-                input_schema: tool.input_schema_for_model().await,
-                provider_id: Some(metadata.provider_id.clone()),
-            });
-        }
+    async fn description(&self) -> Result<String, String> {
+        Tool::description(self)
+            .await
+            .map_err(|error| error.to_string())
+    }
 
-        Ok(descriptors)
+    fn input_schema(&self) -> Value {
+        Tool::input_schema(self)
+    }
+
+    async fn input_schema_for_model(&self) -> Value {
+        Tool::input_schema_for_model(self).await
+    }
+
+    fn dynamic_provider_id(&self) -> Option<&str> {
+        Tool::dynamic_provider_id(self)
+    }
+
+    fn dynamic_tool_info(&self) -> Option<DynamicToolInfo> {
+        Tool::dynamic_tool_info(self)
     }
 }
 

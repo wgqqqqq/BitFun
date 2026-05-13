@@ -12,7 +12,7 @@ pub use bitfun_runtime_ports::{
 };
 pub use framework::{
     DynamicMcpToolInfo, DynamicToolInfo, ToolPathBackend, ToolPathOperation, ToolPathPolicy,
-    ToolPathResolution, ToolRenderOptions, ToolRestrictionError, ToolResult,
-    ToolRuntimeRestrictions, ValidationResult,
+    ToolPathResolution, ToolRef, ToolRegistry, ToolRegistryItem, ToolRenderOptions,
+    ToolRestrictionError, ToolResult, ToolRuntimeRestrictions, ValidationResult,
 };
 pub use input_validator::InputValidator;

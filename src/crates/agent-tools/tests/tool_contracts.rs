@@ -2,9 +2,13 @@ use bitfun_agent_tools::{
     DynamicMcpToolInfo, DynamicToolInfo, InputValidator, ToolImageAttachment, ToolPathBackend,
     ToolPathResolution, ToolRenderOptions, ToolResult, ToolRuntimeRestrictions, ValidationResult,
 };
-use bitfun_agent_tools::{DynamicToolDescriptor, DynamicToolProvider, PortResult, ToolDecorator};
+use bitfun_agent_tools::{
+    DynamicToolDescriptor, DynamicToolProvider, PortResult, ToolDecorator, ToolRegistry,
+    ToolRegistryItem,
+};
 use serde_json::json;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[test]
 fn validation_result_default_preserves_success_contract() {
@@ -218,4 +222,97 @@ fn dynamic_tool_provider_contract_is_available_from_agent_tools_boundary() {
 
     assert_provider_contract::<MarkerProvider>();
     assert_decorator_contract::<MarkerDecorator>();
+}
+
+struct RegistryMarkerTool {
+    name: String,
+    provider_id: Option<String>,
+}
+
+#[async_trait::async_trait]
+impl ToolRegistryItem for RegistryMarkerTool {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    async fn description(&self) -> Result<String, String> {
+        Ok("marker tool".to_string())
+    }
+
+    fn input_schema(&self) -> serde_json::Value {
+        json!({ "type": "object" })
+    }
+
+    async fn input_schema_for_model(&self) -> serde_json::Value {
+        self.input_schema()
+    }
+
+    fn dynamic_tool_info(&self) -> Option<DynamicToolInfo> {
+        self.provider_id
+            .as_ref()
+            .map(|provider_id| DynamicToolInfo {
+                provider_id: provider_id.clone(),
+                provider_kind: None,
+                mcp: None,
+            })
+    }
+}
+
+fn registry_marker_tool(name: &str, provider_id: Option<&str>) -> Arc<RegistryMarkerTool> {
+    Arc::new(RegistryMarkerTool {
+        name: name.to_string(),
+        provider_id: provider_id.map(str::to_string),
+    })
+}
+
+#[tokio::test]
+async fn generic_tool_registry_preserves_dynamic_descriptor_contract() {
+    let mut registry = ToolRegistry::new();
+    registry.register_tool(registry_marker_tool("external_search", Some("provider-a")));
+    registry.register_tool(registry_marker_tool("local_docs", Some("provider-b")));
+    registry.register_tool(registry_marker_tool("static_tool", None));
+
+    assert_eq!(
+        registry.get_tool_names(),
+        vec!["external_search", "local_docs", "static_tool"]
+    );
+    assert_eq!(
+        registry
+            .get_dynamic_tool_info("external_search")
+            .expect("dynamic metadata")
+            .provider_id,
+        "provider-a"
+    );
+
+    let descriptors = registry
+        .list_dynamic_tools()
+        .await
+        .expect("list dynamic tools");
+    assert_eq!(
+        descriptors
+            .iter()
+            .map(|descriptor| (descriptor.name.as_str(), descriptor.provider_id.as_deref()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("external_search", Some("provider-a")),
+            ("local_docs", Some("provider-b")),
+        ]
+    );
+    assert_eq!(descriptors[0].description, "marker tool");
+    assert_eq!(descriptors[0].input_schema, json!({ "type": "object" }));
+}
+
+#[tokio::test]
+async fn generic_tool_registry_clears_stale_dynamic_metadata_on_overwrite() {
+    let mut registry = ToolRegistry::new();
+    registry.register_tool(registry_marker_tool("external_search", Some("provider-a")));
+
+    registry.register_tool(registry_marker_tool("external_search", None));
+
+    assert!(registry.get_dynamic_tool_info("external_search").is_none());
+    let descriptors = registry
+        .list_dynamic_tools()
+        .await
+        .expect("list dynamic tools");
+    assert!(descriptors.is_empty());
 }
