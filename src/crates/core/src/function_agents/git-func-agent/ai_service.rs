@@ -1,7 +1,5 @@
-use super::types::{
-    AICommitAnalysis, CommitFormat, CommitMessageOptions, CommitType, ProjectContext,
-};
-use crate::function_agents::common::{AgentError, AgentResult, Language};
+use super::types::{AICommitAnalysis, CommitMessageOptions, ProjectContext};
+use crate::function_agents::common::{AgentError, AgentResult};
 use crate::infrastructure::ai::AIClient;
 use crate::util::types::Message;
 /**
@@ -92,25 +90,12 @@ impl AIAnalysisService {
         project_context: &ProjectContext,
         options: &CommitMessageOptions,
     ) -> String {
-        let language_desc = match options.language {
-            Language::Chinese => "Chinese",
-            Language::English => "English",
-        };
-
-        let format_desc = match options.format {
-            CommitFormat::Conventional => "Conventional Commits",
-            CommitFormat::Angular => "Angular Style",
-            CommitFormat::Simple => "Simple Format",
-            CommitFormat::Custom => "Custom Format",
-        };
-
-        COMMIT_MESSAGE_PROMPT
-            .replace("{project_type}", &project_context.project_type)
-            .replace("{tech_stack}", &project_context.tech_stack.join(", "))
-            .replace("{format_desc}", format_desc)
-            .replace("{language_desc}", language_desc)
-            .replace("{diff_content}", diff_content)
-            .replace("{max_title_length}", &options.max_title_length.to_string())
+        super::utils::build_commit_prompt(
+            COMMIT_MESSAGE_PROMPT,
+            diff_content,
+            project_context,
+            options,
+        )
     }
 
     fn parse_commit_response(&self, response: &str) -> AgentResult<AICommitAnalysis> {
@@ -122,7 +107,9 @@ impl AIAnalysisService {
         })?;
 
         Ok(AICommitAnalysis {
-            commit_type: self.parse_commit_type(value["type"].as_str().unwrap_or("chore"))?,
+            commit_type: super::utils::parse_commit_type_label(
+                value["type"].as_str().unwrap_or("chore"),
+            ),
             scope: value["scope"].as_str().map(|s| s.to_string()),
             title: value["title"]
                 .as_str()
@@ -153,21 +140,5 @@ impl AIAnalysisService {
         truncated.push_str("\n\n... [content truncated] ...");
 
         truncated
-    }
-
-    fn parse_commit_type(&self, s: &str) -> AgentResult<CommitType> {
-        match s.to_lowercase().as_str() {
-            "feat" | "feature" => Ok(CommitType::Feat),
-            "fix" => Ok(CommitType::Fix),
-            "docs" | "doc" => Ok(CommitType::Docs),
-            "style" => Ok(CommitType::Style),
-            "refactor" => Ok(CommitType::Refactor),
-            "perf" | "performance" => Ok(CommitType::Perf),
-            "test" => Ok(CommitType::Test),
-            "chore" => Ok(CommitType::Chore),
-            "ci" => Ok(CommitType::CI),
-            "revert" => Ok(CommitType::Revert),
-            _ => Ok(CommitType::Chore),
-        }
     }
 }

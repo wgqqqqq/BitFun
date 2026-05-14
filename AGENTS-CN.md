@@ -18,7 +18,8 @@ BitFun 是一个由 Rust workspace 与共享 React 前端组成的项目。
 |---|---|---|
 | Core（产品逻辑） | `src/crates/core` | [AGENTS.md](src/crates/core/AGENTS.md) |
 | 已拆出的 core 支撑 crate | `src/crates/{core-types,agent-stream,runtime-ports,terminal,tool-runtime}` | （使用 core 指南） |
-| Core owner crate | `src/crates/{services-core,services-integrations,agent-tools,tool-packs,product-domains}` | （使用 core 指南 + 拆解护栏） |
+| Core owner crate | `src/crates/{services-core,services-integrations,agent-tools,tool-packs}` | （使用 core 指南 + 拆解护栏） |
+| 产品领域 crate | `src/crates/product-domains` | [AGENTS.md](src/crates/product-domains/AGENTS.md) |
 | Transport 适配层 | `src/crates/transport` | （使用 core 指南） |
 | API layer | `src/crates/api-layer` | （使用 core 指南） |
 | AI adapters | `src/crates/ai-adapters` | [AGENTS.md](src/crates/ai-adapters/AGENTS.md) |
@@ -118,8 +119,9 @@ await api.invoke('your_command', { request: { ... } });
 ### Tool 归属护栏
 
 - `src/crates/agent-tools` 拥有轻量 tool contract，以及 generic registry / dynamic-provider container。
-- `src/crates/core/src/agentic/tools/registry.rs` 只负责产品工具组装、`dyn Tool` 适配和 snapshot decoration。
+- `src/crates/core/src/agentic/tools` 当前负责产品工具组装、`dyn Tool` 适配、snapshot decoration、tool exposure / manifest resolution，以及按需工具说明发现（`GetToolSpec`）。
 - `ToolUseContext` 与具体工具实现继续留在 core，直到有已评审的 port/provider 设计和等价测试。
+- Tool 迁移必须保持 expanded/collapsed exposure、prompt 可见 manifest、`ToolUseContext.unlocked_collapsed_tools`，以及 desktop/MCP/ACP tool catalog 行为等价。
 
 ### DeepReview 护栏
 

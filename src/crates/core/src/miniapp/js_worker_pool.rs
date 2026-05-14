@@ -4,6 +4,12 @@ use crate::miniapp::js_worker::JsWorker;
 use crate::miniapp::runtime_detect::{detect_runtime, DetectedRuntime};
 use crate::miniapp::types::{NodePermissions, NpmDep};
 use crate::util::errors::{BitFunError, BitFunResult};
+use bitfun_product_domains::miniapp::ports::{
+    MiniAppInstallDepsRequest, MiniAppPortError, MiniAppPortErrorKind, MiniAppPortFuture,
+    MiniAppRuntimePort,
+};
+use bitfun_product_domains::miniapp::worker::install_command_for_runtime;
+pub use bitfun_product_domains::miniapp::worker::InstallResult;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,14 +17,6 @@ use tokio::sync::Mutex;
 
 const MAX_WORKERS: usize = 5;
 const IDLE_TIMEOUT_MS: i64 = 3 * 60 * 1000; // 3 minutes
-
-/// Result of npm/bun install.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct InstallResult {
-    pub success: bool,
-    pub stdout: String,
-    pub stderr: String,
-}
 
 struct WorkerEntry {
     revision: String,
@@ -262,21 +260,10 @@ impl JsWorkerPool {
             });
         }
 
-        let (cmd, args): (&str, &[&str]) = match self.runtime.kind {
-            crate::miniapp::runtime_detect::RuntimeKind::Bun => {
-                ("bun", &["install", "--production"][..])
-            }
-            crate::miniapp::runtime_detect::RuntimeKind::Node => {
-                if which::which("pnpm").is_ok() {
-                    ("pnpm", &["install", "--prod"][..])
-                } else {
-                    ("npm", &["install", "--production"][..])
-                }
-            }
-        };
+        let command = install_command_for_runtime(&self.runtime.kind, which::which("pnpm").is_ok());
 
-        let output = crate::util::process_manager::create_tokio_command(cmd)
-            .args(args)
+        let output = crate::util::process_manager::create_tokio_command(command.program)
+            .args(command.args)
             .current_dir(&app_dir)
             .output()
             .await
@@ -287,5 +274,90 @@ impl JsWorkerPool {
             stdout: String::from_utf8_lossy(&output.stdout).to_string(),
             stderr: String::from_utf8_lossy(&output.stderr).to_string(),
         })
+    }
+}
+
+impl MiniAppRuntimePort for JsWorkerPool {
+    fn detect_runtime(&self) -> MiniAppPortFuture<'_, Option<DetectedRuntime>> {
+        Box::pin(async move { Ok(Some(self.runtime.clone())) })
+    }
+
+    fn install_deps(
+        &self,
+        request: MiniAppInstallDepsRequest,
+    ) -> MiniAppPortFuture<'_, InstallResult> {
+        Box::pin(async move {
+            self.install_deps(&request.app_id, &request.dependencies)
+                .await
+                .map_err(map_miniapp_runtime_port_error)
+        })
+    }
+}
+
+fn map_miniapp_runtime_port_error(error: BitFunError) -> MiniAppPortError {
+    let kind = match &error {
+        BitFunError::NotFound(_) => MiniAppPortErrorKind::NotFound,
+        BitFunError::Validation(_) | BitFunError::Deserialization(_) => {
+            MiniAppPortErrorKind::InvalidInput
+        }
+        BitFunError::Io(io_error) if io_error.kind() == std::io::ErrorKind::PermissionDenied => {
+            MiniAppPortErrorKind::PermissionDenied
+        }
+        BitFunError::Io(_) => MiniAppPortErrorKind::Io,
+        BitFunError::ProcessError(_) | BitFunError::Timeout(_) => {
+            MiniAppPortErrorKind::RuntimeUnavailable
+        }
+        _ => MiniAppPortErrorKind::Backend,
+    };
+    MiniAppPortError::new(kind, error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bitfun_product_domains::miniapp::runtime::RuntimeKind;
+    use std::collections::HashMap;
+
+    #[tokio::test]
+    async fn runtime_port_adapter_preserves_existing_runtime_and_noop_install() {
+        let root = std::env::temp_dir().join(format!(
+            "bitfun-miniapp-runtime-port-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let path_manager =
+            Arc::new(crate::infrastructure::PathManager::with_user_root_for_tests(root));
+        let app_id = "demo_app";
+        tokio::fs::create_dir_all(path_manager.miniapp_dir(app_id))
+            .await
+            .unwrap();
+        let pool = JsWorkerPool {
+            workers: Arc::new(Mutex::new(HashMap::new())),
+            runtime: DetectedRuntime {
+                kind: RuntimeKind::Node,
+                path: PathBuf::from("node"),
+                version: "v20.0.0".to_string(),
+            },
+            worker_host_path: PathBuf::from("worker-host.js"),
+            path_manager,
+        };
+        let port: &dyn MiniAppRuntimePort = &pool;
+
+        let runtime = port.detect_runtime().await.unwrap().unwrap();
+        assert_eq!(runtime.kind, RuntimeKind::Node);
+        assert_eq!(runtime.version, "v20.0.0");
+
+        let result = port
+            .install_deps(MiniAppInstallDepsRequest {
+                app_id: app_id.to_string(),
+                dependencies: vec![NpmDep {
+                    name: "lodash".to_string(),
+                    version: "^4.17.21".to_string(),
+                }],
+            })
+            .await
+            .unwrap();
+        assert!(result.success);
+        assert!(result.stdout.is_empty());
+        assert!(result.stderr.is_empty());
     }
 }

@@ -4,9 +4,13 @@ use crate::miniapp::compiler::compile;
 use crate::miniapp::permission_policy::resolve_policy;
 use crate::miniapp::storage::MiniAppStorage;
 use crate::miniapp::types::{
-    MiniApp, MiniAppAiContext, MiniAppMeta, MiniAppPermissions, MiniAppRuntimeState, MiniAppSource,
+    MiniApp, MiniAppAiContext, MiniAppMeta, MiniAppPermissions, MiniAppSource,
 };
 use crate::util::errors::BitFunResult;
+use bitfun_product_domains::miniapp::lifecycle::{
+    build_deps_revision, build_runtime_state, build_source_revision, build_worker_revision,
+    ensure_runtime_state, workspace_dir_string,
+};
 use chrono::Utc;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -44,61 +48,8 @@ impl MiniAppManager {
         }
     }
 
-    fn build_source_revision(version: u32, updated_at: i64) -> String {
-        format!("src:{version}:{updated_at}")
-    }
-
-    fn build_deps_revision(source: &MiniAppSource) -> String {
-        let mut deps: Vec<String> = source
-            .npm_dependencies
-            .iter()
-            .map(|dep| format!("{}@{}", dep.name, dep.version))
-            .collect();
-        deps.sort();
-        deps.join("|")
-    }
-
-    fn build_runtime_state(
-        version: u32,
-        updated_at: i64,
-        source: &MiniAppSource,
-        deps_dirty: bool,
-        worker_restart_required: bool,
-    ) -> MiniAppRuntimeState {
-        MiniAppRuntimeState {
-            source_revision: Self::build_source_revision(version, updated_at),
-            deps_revision: Self::build_deps_revision(source),
-            deps_dirty,
-            worker_restart_required,
-            ui_recompile_required: false,
-        }
-    }
-
-    fn ensure_runtime_state(app: &mut MiniApp) -> bool {
-        let mut changed = false;
-        if app.runtime.source_revision.is_empty() {
-            app.runtime.source_revision = Self::build_source_revision(app.version, app.updated_at);
-            changed = true;
-        }
-        let deps_revision = Self::build_deps_revision(&app.source);
-        if app.runtime.deps_revision != deps_revision {
-            app.runtime.deps_revision = deps_revision;
-            changed = true;
-        }
-        changed
-    }
-
     pub fn build_worker_revision(&self, app: &MiniApp, policy_json: &str) -> String {
-        format!(
-            "{}::{}::{}",
-            app.runtime.source_revision, app.runtime.deps_revision, policy_json
-        )
-    }
-
-    fn workspace_dir_string(workspace_root: Option<&Path>) -> String {
-        workspace_root
-            .map(|path| path.to_string_lossy().to_string())
-            .unwrap_or_default()
+        build_worker_revision(app, policy_json)
     }
 
     pub fn compile_source(
@@ -111,7 +62,7 @@ impl MiniAppManager {
     ) -> BitFunResult<String> {
         let app_data_dir = self.path_manager.miniapp_dir(app_id);
         let app_data_dir_str = app_data_dir.to_string_lossy().to_string();
-        let workspace_dir = Self::workspace_dir_string(workspace_root);
+        let workspace_dir = workspace_dir_string(workspace_root);
 
         compile(
             source,
@@ -139,7 +90,7 @@ impl MiniAppManager {
     /// Get full MiniApp by id.
     pub async fn get(&self, app_id: &str) -> BitFunResult<MiniApp> {
         let mut app = self.storage.load(app_id).await?;
-        if Self::ensure_runtime_state(&mut app) {
+        if ensure_runtime_state(&mut app) {
             self.storage.save(&app).await?;
         }
         Ok(app)
@@ -165,7 +116,7 @@ impl MiniAppManager {
         let compiled_html =
             self.compile_source(&id, &source, &permissions, "dark", workspace_root)?;
         let runtime =
-            Self::build_runtime_state(1, now, &source, !source.npm_dependencies.is_empty(), true);
+            build_runtime_state(1, now, &source, !source.npm_dependencies.is_empty(), true);
 
         let app = MiniApp {
             id: id.clone(),
@@ -246,16 +197,16 @@ impl MiniAppManager {
         )?;
         let deps_changed = previous_app.source.npm_dependencies != app.source.npm_dependencies;
         if source_changed || permissions_changed {
-            app.runtime.source_revision = Self::build_source_revision(app.version, app.updated_at);
+            app.runtime.source_revision = build_source_revision(app.version, app.updated_at);
             app.runtime.worker_restart_required = true;
         }
         if deps_changed {
-            app.runtime.deps_revision = Self::build_deps_revision(&app.source);
+            app.runtime.deps_revision = build_deps_revision(&app.source);
             app.runtime.deps_dirty = !app.source.npm_dependencies.is_empty();
             app.runtime.worker_restart_required = true;
         }
         app.runtime.ui_recompile_required = false;
-        Self::ensure_runtime_state(&mut app);
+        ensure_runtime_state(&mut app);
 
         self.storage
             .save_version(app_id, previous_app.version, &previous_app)
@@ -325,7 +276,7 @@ impl MiniAppManager {
 
     pub async fn mark_deps_installed(&self, app_id: &str) -> BitFunResult<MiniApp> {
         let mut app = self.storage.load(app_id).await?;
-        Self::ensure_runtime_state(&mut app);
+        ensure_runtime_state(&mut app);
         app.runtime.deps_dirty = false;
         app.runtime.worker_restart_required = true;
         self.storage.save(&app).await?;
@@ -334,7 +285,7 @@ impl MiniAppManager {
 
     pub async fn clear_worker_restart_required(&self, app_id: &str) -> BitFunResult<MiniApp> {
         let mut app = self.storage.load(app_id).await?;
-        Self::ensure_runtime_state(&mut app);
+        ensure_runtime_state(&mut app);
         if app.runtime.worker_restart_required {
             app.runtime.worker_restart_required = false;
             self.storage.save(&app).await?;
@@ -354,7 +305,7 @@ impl MiniAppManager {
         let now = Utc::now().timestamp_millis();
         app.version = current.version + 1;
         app.updated_at = now;
-        app.runtime = Self::build_runtime_state(
+        app.runtime = build_runtime_state(
             app.version,
             app.updated_at,
             &app.source,
@@ -379,7 +330,7 @@ impl MiniAppManager {
         app.compiled_html =
             self.compile_source(app_id, &app.source, &app.permissions, theme, workspace_root)?;
         app.updated_at = Utc::now().timestamp_millis();
-        Self::ensure_runtime_state(&mut app);
+        ensure_runtime_state(&mut app);
         app.runtime.ui_recompile_required = false;
         self.storage.save(&app).await?;
         Ok(app)
@@ -399,7 +350,7 @@ impl MiniAppManager {
 
         app.compiled_html =
             self.compile_source(app_id, &app.source, &app.permissions, theme, workspace_root)?;
-        app.runtime = Self::build_runtime_state(
+        app.runtime = build_runtime_state(
             app.version,
             app.updated_at,
             &app.source,
@@ -534,7 +485,7 @@ impl MiniAppManager {
             .map_err(|_e| BitFunError::io("Failed to write placeholder compiled.html"))?;
 
         let mut app = self.recompile(&id, "dark", workspace_root).await?;
-        app.runtime = Self::build_runtime_state(
+        app.runtime = build_runtime_state(
             app.version,
             app.updated_at,
             &app.source,

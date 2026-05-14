@@ -18,7 +18,8 @@ Repository rule: **keep product logic platform-agnostic, then expose it through 
 |---|---|---|
 | Core (product logic) | `src/crates/core` | [AGENTS.md](src/crates/core/AGENTS.md) |
 | Extracted core support | `src/crates/{core-types,agent-stream,runtime-ports,terminal,tool-runtime}` | (use core guide) |
-| Core owner crates | `src/crates/{services-core,services-integrations,agent-tools,tool-packs,product-domains}` | (use core guide + decomposition guardrails) |
+| Core owner crates | `src/crates/{services-core,services-integrations,agent-tools,tool-packs}` | (use core guide + decomposition guardrails) |
+| Product domains | `src/crates/product-domains` | [AGENTS.md](src/crates/product-domains/AGENTS.md) |
 | Transport adapters | `src/crates/transport` | (use core guide) |
 | API layer | `src/crates/api-layer` | (use core guide) |
 | AI adapters | `src/crates/ai-adapters` | [AGENTS.md](src/crates/ai-adapters/AGENTS.md) |
@@ -121,10 +122,14 @@ and milestone verification gates.
 
 - `src/crates/agent-tools` owns lightweight tool contracts and the generic
   registry / dynamic-provider container.
-- `src/crates/core/src/agentic/tools/registry.rs` owns product tool assembly,
-  `dyn Tool` adaptation, and snapshot decoration only.
+- `src/crates/core/src/agentic/tools` owns product tool assembly, `dyn Tool`
+  adaptation, snapshot decoration, tool exposure / manifest resolution, and
+  on-demand tool spec discovery (`GetToolSpec`) for now.
 - Keep `ToolUseContext` and concrete tool implementations in core until a
   reviewed port/provider design and equivalence tests exist.
+- Tool migrations must preserve expanded/collapsed exposure, prompt-visible
+  manifests, `ToolUseContext.unlocked_collapsed_tools`, and desktop/MCP/ACP
+  tool catalog behavior.
 
 ### DeepReview guardrails
 

@@ -13,9 +13,10 @@ crate-type = ["rlib"]
 serde = { workspace = true }
 serde_json = { workspace = true }
 dirs = { workspace = true, optional = true }
+log = { workspace = true, optional = true }
 
 [features]
 default = []
 miniapp = ["dirs"]
-function-agents = []
+function-agents = ["log"]
 product-full = ["miniapp", "function-agents"]

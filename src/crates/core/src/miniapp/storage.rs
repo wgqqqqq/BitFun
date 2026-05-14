@@ -2,6 +2,10 @@
 
 use crate::miniapp::types::{MiniApp, MiniAppMeta, MiniAppSource, NpmDep};
 use crate::util::errors::{BitFunError, BitFunResult};
+use bitfun_product_domains::miniapp::ports::{
+    MiniAppPortError, MiniAppPortErrorKind, MiniAppPortFuture, MiniAppStoragePort,
+};
+use bitfun_product_domains::miniapp::storage::{build_package_json, parse_npm_dependencies};
 use serde_json;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -200,21 +204,8 @@ impl MiniAppStorage {
         let c = tokio::fs::read_to_string(&p)
             .await
             .map_err(|e| BitFunError::io(format!("Failed to read package.json: {}", e)))?;
-        let pkg: serde_json::Value = serde_json::from_str(&c)
-            .map_err(|e| BitFunError::parse(format!("Invalid package.json: {}", e)))?;
-        let empty = serde_json::Map::new();
-        let deps = pkg
-            .get("dependencies")
-            .and_then(|d| d.as_object())
-            .unwrap_or(&empty);
-        let npm_dependencies: Vec<NpmDep> = deps
-            .iter()
-            .map(|(name, v)| NpmDep {
-                name: name.clone(),
-                version: v.as_str().unwrap_or("*").to_string(),
-            })
-            .collect();
-        Ok(npm_dependencies)
+        parse_npm_dependencies(&c)
+            .map_err(|e| BitFunError::parse(format!("Invalid package.json: {}", e)))
     }
 
     async fn load_compiled_html(&self, app_id: &str) -> BitFunResult<String> {
@@ -272,15 +263,7 @@ impl MiniAppStorage {
     }
 
     async fn write_package_json(&self, app_id: &str, deps: &[NpmDep]) -> BitFunResult<()> {
-        let mut dependencies = serde_json::Map::new();
-        for d in deps {
-            dependencies.insert(d.name.clone(), serde_json::Value::String(d.version.clone()));
-        }
-        let pkg = serde_json::json!({
-            "name": format!("miniapp-{}", app_id),
-            "private": true,
-            "dependencies": dependencies
-        });
+        let pkg = build_package_json(app_id, deps);
         let p = self.app_dir(app_id).join(PACKAGE_JSON);
         let json = serde_json::to_string_pretty(&pkg).map_err(BitFunError::from)?;
         tokio::fs::write(&p, json)
@@ -391,5 +374,195 @@ impl MiniAppStorage {
         })?;
         serde_json::from_str(&c)
             .map_err(|e| BitFunError::parse(format!("Invalid version file: {}", e)))
+    }
+}
+
+impl MiniAppStoragePort for MiniAppStorage {
+    fn list_app_ids(&self) -> MiniAppPortFuture<'_, Vec<String>> {
+        Box::pin(async move { self.list_app_ids().await.map_err(map_miniapp_port_error) })
+    }
+
+    fn load(&self, app_id: String) -> MiniAppPortFuture<'_, MiniApp> {
+        Box::pin(async move { self.load(&app_id).await.map_err(map_miniapp_port_error) })
+    }
+
+    fn load_meta(&self, app_id: String) -> MiniAppPortFuture<'_, MiniAppMeta> {
+        Box::pin(async move {
+            self.load_meta(&app_id)
+                .await
+                .map_err(map_miniapp_port_error)
+        })
+    }
+
+    fn load_source(&self, app_id: String) -> MiniAppPortFuture<'_, MiniAppSource> {
+        Box::pin(async move {
+            self.load_source_only(&app_id)
+                .await
+                .map_err(map_miniapp_port_error)
+        })
+    }
+
+    fn save(&self, app: MiniApp) -> MiniAppPortFuture<'_, ()> {
+        Box::pin(async move { self.save(&app).await.map_err(map_miniapp_port_error) })
+    }
+
+    fn save_version(
+        &self,
+        app_id: String,
+        version: u32,
+        app: MiniApp,
+    ) -> MiniAppPortFuture<'_, ()> {
+        Box::pin(async move {
+            self.save_version(&app_id, version, &app)
+                .await
+                .map_err(map_miniapp_port_error)
+        })
+    }
+
+    fn load_app_storage(&self, app_id: String) -> MiniAppPortFuture<'_, serde_json::Value> {
+        Box::pin(async move {
+            self.load_app_storage(&app_id)
+                .await
+                .map_err(map_miniapp_port_error)
+        })
+    }
+
+    fn save_app_storage(
+        &self,
+        app_id: String,
+        key: String,
+        value: serde_json::Value,
+    ) -> MiniAppPortFuture<'_, ()> {
+        Box::pin(async move {
+            self.save_app_storage(&app_id, &key, value)
+                .await
+                .map_err(map_miniapp_port_error)
+        })
+    }
+
+    fn delete(&self, app_id: String) -> MiniAppPortFuture<'_, ()> {
+        Box::pin(async move { self.delete(&app_id).await.map_err(map_miniapp_port_error) })
+    }
+
+    fn list_versions(&self, app_id: String) -> MiniAppPortFuture<'_, Vec<u32>> {
+        Box::pin(async move {
+            self.list_versions(&app_id)
+                .await
+                .map_err(map_miniapp_port_error)
+        })
+    }
+
+    fn load_version(&self, app_id: String, version: u32) -> MiniAppPortFuture<'_, MiniApp> {
+        Box::pin(async move {
+            self.load_version(&app_id, version)
+                .await
+                .map_err(map_miniapp_port_error)
+        })
+    }
+}
+
+fn map_miniapp_port_error(error: BitFunError) -> MiniAppPortError {
+    let kind = match &error {
+        BitFunError::NotFound(_) => MiniAppPortErrorKind::NotFound,
+        BitFunError::Validation(_) | BitFunError::Deserialization(_) => {
+            MiniAppPortErrorKind::InvalidInput
+        }
+        BitFunError::Io(io_error) if io_error.kind() == std::io::ErrorKind::PermissionDenied => {
+            MiniAppPortErrorKind::PermissionDenied
+        }
+        BitFunError::Io(_) => MiniAppPortErrorKind::Io,
+        _ => MiniAppPortErrorKind::Backend,
+    };
+    MiniAppPortError::new(kind, error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn storage_port_adapter_preserves_existing_file_lifecycle() {
+        let root = std::env::temp_dir().join(format!(
+            "bitfun-miniapp-storage-port-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let path_manager =
+            Arc::new(crate::infrastructure::PathManager::with_user_root_for_tests(root));
+        let storage = MiniAppStorage::new(path_manager);
+        let port: &dyn MiniAppStoragePort = &storage;
+        let app = sample_app("demo_app");
+
+        port.save(app.clone()).await.unwrap();
+
+        let ids = port.list_app_ids().await.unwrap();
+        assert_eq!(ids, vec!["demo_app".to_string()]);
+
+        let meta = port.load_meta("demo_app".to_string()).await.unwrap();
+        assert_eq!(meta.name, "Demo");
+
+        let source = port.load_source("demo_app".to_string()).await.unwrap();
+        assert_eq!(source.ui_js, "console.log('ui');");
+
+        let loaded = port.load("demo_app".to_string()).await.unwrap();
+        assert_eq!(loaded.compiled_html, "<html></html>");
+
+        port.save_app_storage(
+            "demo_app".to_string(),
+            "answer".to_string(),
+            serde_json::json!(42),
+        )
+        .await
+        .unwrap();
+        let app_storage = port.load_app_storage("demo_app".to_string()).await.unwrap();
+        assert_eq!(app_storage["answer"], 42);
+
+        port.save_version("demo_app".to_string(), 1, app)
+            .await
+            .unwrap();
+        assert_eq!(
+            port.list_versions("demo_app".to_string()).await.unwrap(),
+            vec![1]
+        );
+        assert_eq!(
+            port.load_version("demo_app".to_string(), 1)
+                .await
+                .unwrap()
+                .id,
+            "demo_app"
+        );
+
+        port.delete("demo_app".to_string()).await.unwrap();
+        assert!(port.list_app_ids().await.unwrap().is_empty());
+    }
+
+    fn sample_app(id: &str) -> MiniApp {
+        MiniApp {
+            id: id.to_string(),
+            name: "Demo".to_string(),
+            description: "Demo app".to_string(),
+            icon: "sparkles".to_string(),
+            category: "tools".to_string(),
+            tags: vec!["demo".to_string()],
+            version: 1,
+            created_at: 1,
+            updated_at: 2,
+            source: MiniAppSource {
+                html: "<div id=\"app\"></div>".to_string(),
+                css: "body {}".to_string(),
+                ui_js: "console.log('ui');".to_string(),
+                esm_dependencies: Vec::new(),
+                worker_js: "export default {};".to_string(),
+                npm_dependencies: vec![NpmDep {
+                    name: "lodash".to_string(),
+                    version: "^4.17.21".to_string(),
+                }],
+            },
+            compiled_html: "<html></html>".to_string(),
+            permissions: Default::default(),
+            ai_context: None,
+            runtime: Default::default(),
+            i18n: None,
+        }
     }
 }

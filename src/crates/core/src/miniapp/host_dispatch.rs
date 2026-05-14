@@ -26,23 +26,11 @@ use crate::miniapp::permission_policy::resolve_policy;
 use crate::miniapp::types::MiniAppPermissions;
 use crate::util::errors::{BitFunError, BitFunResult};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use bitfun_product_domains::miniapp::host_routing::command_basename_for_allowlist;
+pub use bitfun_product_domains::miniapp::host_routing::is_host_primitive;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-
-/// Namespaces handled by the host-side dispatch (no Worker required).
-const HOST_NAMESPACES: &[&str] = &["fs", "shell", "os", "net"];
-
-/// Returns true when `method` belongs to a namespace served by the host directly.
-///
-/// `storage.*` is intentionally excluded: it is routed through `MiniAppManager` from the
-/// command layer so it can share locking with the rest of the app.
-pub fn is_host_primitive(method: &str) -> bool {
-    method
-        .split_once('.')
-        .map(|(ns, _)| HOST_NAMESPACES.contains(&ns))
-        .unwrap_or(false)
-}
 
 /// Dispatch a framework-primitive RPC on the host.
 ///
@@ -139,19 +127,6 @@ fn arg_path(params: &Value, key: &str) -> BitFunResult<PathBuf> {
         .and_then(|v| v.as_str())
         .map(PathBuf::from)
         .ok_or_else(|| BitFunError::parse(format!("missing param: {}", key)))
-}
-
-fn command_basename_for_allowlist(command: &str) -> String {
-    let file_name = command
-        .rsplit(['/', '\\'])
-        .next()
-        .filter(|name| !name.is_empty())
-        .unwrap_or(command);
-    Path::new(file_name)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or(file_name)
-        .to_lowercase()
 }
 
 fn resolve_shell_program(command: &str) -> PathBuf {
