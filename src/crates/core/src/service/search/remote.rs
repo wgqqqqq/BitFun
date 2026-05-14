@@ -1,21 +1,20 @@
 use crate::infrastructure::{FileSearchOutcome, FileSearchResult, SearchMatchType};
-use crate::service::config::{get_global_config_service, types::WorkspaceConfig, ConfigService};
+use crate::service::config::{ConfigService, get_global_config_service, types::WorkspaceConfig};
 use crate::service::remote_ssh::workspace_state::{
-    get_remote_workspace_manager, lookup_remote_connection, lookup_remote_connection_with_hint,
-    RemoteWorkspaceEntry,
+    RemoteWorkspaceEntry, get_remote_workspace_manager, lookup_remote_connection,
+    lookup_remote_connection_with_hint,
 };
 use crate::service::remote_ssh::{
-    normalize_remote_workspace_path, RemoteFileService, SSHConnectionManager,
+    RemoteFileService, SSHConnectionManager, normalize_remote_workspace_path,
 };
 use crate::service::search::flashgrep::{
-    drain_content_length_messages, ClientCapabilities, ClientInfo, ConsistencyMode, GlobOutcome,
-    GlobParams, GlobRequest, InitializeParams, OpenRepoParams, PathScope, ProtocolClient,
-    QuerySpec, RefreshPolicyConfig, RepoConfig, RepoRef, RepoStatus, Request, Response,
-    SearchBackend, SearchModeConfig, SearchOutcome, SearchParams, SearchRequest, SearchResults,
-    TaskRef, TaskStatus,
-    FLASHGREP_LOG_TARGET, log_flashgrep_stderr_line_with_context,
+    ClientCapabilities, ClientInfo, ConsistencyMode, FLASHGREP_LOG_TARGET, GlobOutcome, GlobParams,
+    GlobRequest, InitializeParams, OpenRepoParams, PathScope, ProtocolClient, QuerySpec,
+    RefreshPolicyConfig, RepoConfig, RepoRef, RepoStatus, Request, Response, SearchBackend,
+    SearchModeConfig, SearchOutcome, SearchParams, SearchRequest, SearchResults, TaskRef,
+    TaskStatus, drain_content_length_messages, log_flashgrep_stderr_line_with_context,
 };
-use crate::service::search::flashgrep::{error::AppError, FlashgrepRepoSession};
+use crate::service::search::flashgrep::{FlashgrepRepoSession, error::AppError};
 use crate::service::search::{
     ContentSearchOutputMode, ContentSearchRequest, ContentSearchResult, GlobSearchRequest,
     GlobSearchResult, IndexTaskHandle, WorkspaceIndexStatus, WorkspaceSearchFileCount,
@@ -27,12 +26,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     Arc, LazyLock,
+    atomic::{AtomicU64, Ordering},
 };
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock, mpsc};
 use tokio::time::{sleep, timeout};
 
 const REMOTE_FLASHGREP_INSTALL_DIR: &str = ".bitfun/bin";
@@ -1388,6 +1387,11 @@ fn convert_stdio_search_results(
                 return hit_results;
             }
 
+            let line_results = convert_stdio_line_matches_to_file_search_results(search_results);
+            if !line_results.is_empty() {
+                return line_results;
+            }
+
             let count_results = convert_stdio_file_counts_to_search_results(search_results);
             if !count_results.is_empty() {
                 return count_results;
@@ -1416,6 +1420,30 @@ fn remote_stdio_search_mode(output_mode: ContentSearchOutputMode) -> SearchModeC
         ContentSearchOutputMode::Count => SearchModeConfig::CountOnly,
         ContentSearchOutputMode::FilesWithMatches => SearchModeConfig::FilesWithMatches,
     }
+}
+
+fn convert_stdio_line_matches_to_file_search_results(
+    search_results: &SearchResults,
+) -> Vec<FileSearchResult> {
+    search_results
+        .line_matches
+        .iter()
+        .map(|matched| FileSearchResult {
+            path: matched.path.clone(),
+            name: Path::new(&matched.path)
+                .file_name()
+                .and_then(|file_name| file_name.to_str())
+                .unwrap_or(&matched.path)
+                .to_string(),
+            is_directory: false,
+            match_type: SearchMatchType::Content,
+            line_number: Some(matched.line_number),
+            matched_content: Some(matched.line_text.clone()),
+            preview_before: None,
+            preview_inside: Some(matched.line_text.clone()),
+            preview_after: None,
+        })
+        .collect()
 }
 
 fn convert_stdio_file_counts_to_search_results(

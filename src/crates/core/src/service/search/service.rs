@@ -2,17 +2,17 @@ use crate::infrastructure::{FileSearchOutcome, FileSearchResult, SearchMatchType
 use crate::service::bootstrap::ensure_workspace_gitignore_ignores_bitfun;
 use crate::service::config::{get_global_config_service, types::WorkspaceConfig};
 use crate::service::search::flashgrep::{
-    ConsistencyMode, FlashgrepRepoSession, GlobRequest, ManagedClient, OpenRepoParams, PathScope,
-    QuerySpec, RefreshPolicyConfig, RepoConfig, RepoSession, SearchRequest, SearchResults,
-    FLASHGREP_LOG_TARGET,
+    ConsistencyMode, FLASHGREP_LOG_TARGET, FlashgrepRepoSession, GlobRequest, ManagedClient,
+    OpenRepoParams, PathScope, QuerySpec, RefreshPolicyConfig, RepoConfig, RepoSession,
+    SearchRequest, SearchResults,
 };
 use crate::util::errors::{BitFunError, BitFunResult};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     Arc, LazyLock, Mutex as StdMutex, Weak,
+    atomic::{AtomicU64, Ordering},
 };
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock};
@@ -826,6 +826,11 @@ fn convert_search_results(
                 return hit_results;
             }
 
+            let line_results = convert_line_matches_to_file_search_results(search_results);
+            if !line_results.is_empty() {
+                return line_results;
+            }
+
             let count_results = convert_file_counts_to_search_results(search_results);
             if !count_results.is_empty() {
                 return count_results;
@@ -843,6 +848,30 @@ fn convert_search_results(
             convert_matched_paths_to_file_only_results(search_results)
         }
     }
+}
+
+fn convert_line_matches_to_file_search_results(
+    search_results: &SearchResults,
+) -> Vec<FileSearchResult> {
+    search_results
+        .line_matches
+        .iter()
+        .map(|matched| FileSearchResult {
+            path: matched.path.clone(),
+            name: Path::new(&matched.path)
+                .file_name()
+                .and_then(|file_name| file_name.to_str())
+                .unwrap_or(&matched.path)
+                .to_string(),
+            is_directory: false,
+            match_type: SearchMatchType::Content,
+            line_number: Some(matched.line_number),
+            matched_content: Some(matched.line_text.clone()),
+            preview_before: None,
+            preview_inside: Some(matched.line_text.clone()),
+            preview_after: None,
+        })
+        .collect()
 }
 
 fn convert_file_counts_to_search_results(search_results: &SearchResults) -> Vec<FileSearchResult> {
@@ -985,5 +1014,51 @@ fn map_flashgrep_error(
             _ => error.to_string(),
         };
         BitFunError::service(format!("{prefix}: {detail}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_search_results() -> SearchResults {
+        serde_json::from_value(serde_json::json!({
+            "candidate_docs": 0,
+            "searches_with_match": 0,
+            "bytes_searched": 0,
+            "matched_lines": 0,
+            "matched_occurrences": 0
+        }))
+        .expect("empty search results should decode with defaulted collections")
+    }
+
+    #[test]
+    fn content_search_uses_flashgrep_line_matches_protocol() {
+        assert_eq!(
+            ContentSearchOutputMode::Content.search_mode(),
+            crate::service::search::flashgrep::SearchModeConfig::LineMatches
+        );
+    }
+
+    #[test]
+    fn content_search_converts_legacy_line_matches() {
+        let mut search_results = empty_search_results();
+        search_results.line_matches = serde_json::from_value(serde_json::json!([{
+            "path": "src/search.rs",
+            "line_number": 42,
+            "line_text": "pub enum SearchMode"
+        }]))
+        .expect("legacy line_matches should decode");
+
+        let results = convert_search_results(&search_results, ContentSearchOutputMode::Content);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].path, "src/search.rs");
+        assert_eq!(results[0].name, "search.rs");
+        assert_eq!(results[0].line_number, Some(42));
+        assert_eq!(
+            results[0].matched_content.as_deref(),
+            Some("pub enum SearchMode")
+        );
     }
 }

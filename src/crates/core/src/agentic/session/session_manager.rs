@@ -538,6 +538,25 @@ pub struct SessionManager {
 }
 
 impl SessionManager {
+    async fn resolve_model_context_window(model_id: &str) -> Option<usize> {
+        let trimmed = model_id.trim();
+        if trimmed.is_empty() || trimmed == "auto" || trimmed == "default" {
+            return None;
+        }
+
+        let config_service = get_global_config_service().await.ok()?;
+        let ai_config: crate::service::config::types::AIConfig =
+            config_service.get_config(Some("ai")).await.ok()?;
+        let resolved_model_id = ai_config.resolve_model_selection(trimmed)?;
+
+        ai_config
+            .models
+            .iter()
+            .find(|model| model.id == resolved_model_id)
+            .and_then(|model| model.context_window)
+            .map(|tokens| tokens as usize)
+    }
+
     fn normalize_session_title_input(title: &str) -> BitFunResult<String> {
         let trimmed = title.trim();
         if trimmed.is_empty() {
@@ -1472,6 +1491,8 @@ impl SessionManager {
         session_id: &str,
         model_id: &str,
     ) -> BitFunResult<()> {
+        let resolved_context_window = Self::resolve_model_context_window(model_id).await;
+
         // If the session was evicted from memory (idle > 1h), try to restore it
         // using the workspace path recorded when it was first created/restored.
         if !self.sessions.contains_key(session_id) && self.config.enable_persistence {
@@ -1490,6 +1511,9 @@ impl SessionManager {
 
         if let Some(mut session) = self.sessions.get_mut(session_id) {
             session.config.model_id = Some(model_id.to_string());
+            if let Some(context_window) = resolved_context_window {
+                session.config.max_context_tokens = context_window;
+            }
             session.updated_at = SystemTime::now();
             session.last_activity_at = SystemTime::now();
         } else {
@@ -1511,8 +1535,8 @@ impl SessionManager {
         }
 
         debug!(
-            "Session model id updated: session_id={}, model_id={}",
-            session_id, model_id
+            "Session model id updated: session_id={}, model_id={}, max_context_tokens={:?}",
+            session_id, model_id, resolved_context_window
         );
 
         Ok(())
