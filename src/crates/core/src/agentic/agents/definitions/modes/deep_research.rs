@@ -55,7 +55,7 @@ impl Agent for DeepResearchMode {
     }
 
     fn description(&self) -> &str {
-        r#"Produces a comprehensive deep-research report on any subject using parallel sub-agent orchestration. Dispatches multiple research agents concurrently to investigate different chapters and competitors simultaneously, then synthesizes findings into a cohesive report. Uses the Longitudinal + Cross-sectional Analysis method covering full historical evolution, competitive landscape, and integrated synthesis. Best for open-ended research questions about products, companies, technologies, or individuals where depth, speed, and narrative quality matter."#
+        r#"Produces an evidence-driven deep-research report on any subject through a 6-phase quality pipeline: (1) query understanding + sub-question decomposition with user confirmation, (2) four parallel specialists gather primary sources, news/timeline, expert opinion, and counter-evidence, (3) every claim is registered as a citable cit_XXX entry, (4) two rounds of adversarial debate (Advocate vs Critic) stress-test the findings, (5) a fact checker classifies HARD_CONFLICT / GENUINE_UNCERTAINTY / UNVERIFIED, (6) a research manager arbitrates each sub-question and writes the final report. Designed for questions where source quality, contested points, and traceable reasoning matter — controversies, market analyses, technical comparisons, and open-ended investigative topics."#
     }
 
     fn prompt_template_name(&self, _model_name: Option<&str>) -> &str {
@@ -99,7 +99,7 @@ mod tests {
         assert!(tools.contains(&"ControlHub".to_string()));
         assert!(
             tools.contains(&"AskUserQuestion".to_string()),
-            "AskUserQuestion required for Pro mode Phase 0/5 user confirmation"
+            "AskUserQuestion required for Phase 0 plan confirmation and Phase 5 GAP fill"
         );
     }
 

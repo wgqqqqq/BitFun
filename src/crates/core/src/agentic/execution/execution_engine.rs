@@ -2368,6 +2368,20 @@ impl ExecutionEngine {
                 "finalize_failed" | "empty_round" | "max_rounds"
             );
 
+        // Post-processing hook: when a DeepResearch dialog turn finishes
+        // successfully, renumber `cit_XXX` references in the final report
+        // into consecutive `[N]` display IDs. Two gates apply (agent type +
+        // dialog success) so other agents and failed turns are unaffected.
+        if success && agent_type == "DeepResearch" {
+            if let Some(workspace) = context.workspace.as_ref() {
+                crate::agentic::agents::citation_renumber::run_for_session_workspace(
+                    workspace.root_path(),
+                    &context.session_id,
+                )
+                .await;
+            }
+        }
+
         // Emit dialog turn completed event
         debug!("Preparing to send DialogTurnCompleted event");
 
