@@ -21,7 +21,7 @@ pub enum ContentSearchOutputMode {
 impl ContentSearchOutputMode {
     pub(crate) fn search_mode(self) -> SearchModeConfig {
         match self {
-            Self::Content => SearchModeConfig::MaterializeMatches,
+            Self::Content => SearchModeConfig::LineMatches,
             Self::Count => SearchModeConfig::CountOnly,
             Self::FilesWithMatches => SearchModeConfig::FilesWithMatches,
         }

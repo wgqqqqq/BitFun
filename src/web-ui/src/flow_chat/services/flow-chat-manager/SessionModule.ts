@@ -11,6 +11,7 @@ import { i18nService } from '@/infrastructure/i18n';
 import { workspaceManager } from '@/infrastructure/services/business/workspaceManager';
 import { normalizeRemoteWorkspacePath } from '@/shared/utils/pathUtils';
 import { WorkspaceKind, type WorkspaceInfo } from '@/shared/types';
+import type { AIModelConfig, DefaultModelsConfig } from '@/infrastructure/config/types';
 import type { FlowChatContext, SessionConfig } from './types';
 import { touchSessionActivity, cleanupSaveState } from './PersistenceModule';
 import {
@@ -269,32 +270,73 @@ function requireSessionWorkspacePath(
 /**
  * Get model's maximum token count
  */
-export async function getModelMaxTokens(modelName?: string): Promise<number> {
+function findEnabledModel(models: AIModelConfig[], modelRef: string | null | undefined): AIModelConfig | null {
+  const value = modelRef?.trim();
+  if (!value) return null;
+  return models.find(model =>
+    model.enabled !== false
+    && (model.id === value || model.name === value || model.model_name === value)
+  ) ?? null;
+}
+
+function resolveModelForContextWindow(
+  modelRef: string | null | undefined,
+  models: AIModelConfig[],
+  defaultModels: DefaultModelsConfig,
+): AIModelConfig | null {
+  const value = modelRef?.trim();
+  if (!value) return null;
+
+  if (value === 'primary') {
+    return findEnabledModel(models, defaultModels.primary);
+  }
+
+  if (value === 'fast') {
+    return findEnabledModel(models, defaultModels.fast) ?? findEnabledModel(models, defaultModels.primary);
+  }
+
+  if (value === 'auto' || value === 'default') {
+    return null;
+  }
+
+  return findEnabledModel(models, value);
+}
+
+export async function getModelMaxTokens(modelName?: string, agentType?: string): Promise<number> {
   try {
     const configManager = await import('@/infrastructure/config/services/ConfigManager').then(m => m.configManager);
-    const models = await configManager.getConfig<any[]>('ai.models') || [];
+    const [modelsConfig, defaultModelsConfig, agentModelsConfig] = await Promise.all([
+      configManager.getConfig<AIModelConfig[]>('ai.models'),
+      configManager.getConfig<DefaultModelsConfig>('ai.default_models'),
+      configManager.getConfig<Record<string, string>>('ai.agent_models'),
+    ]);
+    const models = modelsConfig || [];
+    const defaultModels = defaultModelsConfig || {};
+    const agentModels = agentModelsConfig || {};
     
-    if (modelName) {
-      const model = models.find(m => m.name === modelName || m.id === modelName);
-      if (model?.context_window) {
-        return model.context_window;
-      }
+    const explicitModel = resolveModelForContextWindow(modelName, models, defaultModels);
+    if (explicitModel?.context_window) {
+      return explicitModel.context_window;
+    }
+
+    const agentModel = resolveModelForContextWindow(
+      agentType ? agentModels[agentType] : undefined,
+      models,
+      defaultModels,
+    );
+    if (agentModel?.context_window) {
+      return agentModel.context_window;
+    }
+
+    const primaryModel = resolveModelForContextWindow('primary', models, defaultModels);
+    if (primaryModel?.context_window) {
+      return primaryModel.context_window;
     }
     
-    const defaultModels = await configManager.getConfig<Record<string, string>>('ai.default_models');
-    const primaryModelId = defaultModels?.primary;
-    
-    if (primaryModelId) {
-      const primaryModel = models.find(m => m.id === primaryModelId);
-      if (primaryModel?.context_window) {
-        return primaryModel.context_window;
-      }
-    }
-    
-    log.debug('Model context_window config not found, using default', { modelName });
+    log.debug('Model context_window config not found, using default', { modelName, agentType });
     return 128128;
   } catch (error) {
-    log.warn('Failed to get model max tokens', { modelName, error });
+    log.warn('Failed to get model max tokens', { modelName, agentType, error });
     return 128128;
   }
 }
@@ -351,7 +393,7 @@ export async function createChatSession(
     );
     const sessionName = titleDescriptor.text;
     
-    const maxContextTokens = await getModelMaxTokens(config.modelName);
+    const maxContextTokens = await getModelMaxTokens(config.modelName, agentType);
 
     const mergedConfig: SessionConfig = {
       ...config,

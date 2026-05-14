@@ -238,7 +238,7 @@ pub(crate) enum CorpusModeConfig {
     NoIgnore,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum SearchModeConfig {
     CountOnly,
@@ -496,6 +496,8 @@ pub(crate) struct SearchResults {
     #[serde(default)]
     pub file_match_counts: Vec<FileMatchCount>,
     #[serde(default)]
+    pub line_matches: Vec<LineMatch>,
+    #[serde(default)]
     pub hits: Vec<SearchHit>,
 }
 
@@ -509,6 +511,13 @@ pub(crate) struct FileCount {
 pub(crate) struct FileMatchCount {
     pub path: String,
     pub matched_occurrences: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct LineMatch {
+    pub path: String,
+    pub line_number: usize,
+    pub line_text: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

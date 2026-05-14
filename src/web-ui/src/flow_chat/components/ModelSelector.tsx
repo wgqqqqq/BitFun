@@ -19,6 +19,7 @@ import { globalEventBus } from '@/infrastructure/event-bus';
 import type { AIModelConfig } from '@/infrastructure/config/types';
 import { Tooltip } from '@/component-library';
 import { FlowChatStore } from '../store/FlowChatStore';
+import { getModelMaxTokens } from '../services/flow-chat-manager/SessionModule';
 import { createLogger } from '@/shared/utils/logger';
 import './ModelSelector.scss';
 
@@ -386,6 +387,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       if (sessionId) {
         const store = FlowChatStore.getInstance();
         store.updateSessionModelName(sessionId, modelId);
+        const maxContextTokens = await getModelMaxTokens(modelId, currentMode);
+        store.updateSessionMaxContextTokens(sessionId, maxContextTokens);
         const session = store.getState().sessions.get(sessionId);
         if (!session?.isTransient) {
           await agentAPI.updateSessionModel({

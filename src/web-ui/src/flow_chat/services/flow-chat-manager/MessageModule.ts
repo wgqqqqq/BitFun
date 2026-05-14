@@ -13,7 +13,7 @@ import { SessionExecutionEvent, SessionExecutionState } from '../../state-machin
 import { generateTempTitle } from '../../utils/titleUtils';
 import { createLogger } from '@/shared/utils/logger';
 import type { FlowChatContext, DialogTurn } from './types';
-import { ensureBackendSession, retryCreateBackendSession } from './SessionModule';
+import { ensureBackendSession, getModelMaxTokens, retryCreateBackendSession } from './SessionModule';
 import { cleanupSessionBuffers } from './TextChunkModule';
 import type { ImageContextData as ImageInputContextData } from '@/infrastructure/api/service-api/ImageContextTypes';
 import { globalEventBus } from '@/infrastructure/event-bus';
@@ -68,21 +68,30 @@ async function syncSessionModelSelection(
     throw new Error(`Session does not exist: ${sessionId}`);
   }
 
-  const [agentModels, allModels, defaultModels] = await Promise.all([
-    configManager.getConfig<Record<string, string>>('ai.agent_models') || {},
-    configManager.getConfig<AIModelConfig[]>('ai.models') || [],
-    configManager.getConfig<DefaultModelsConfig>('ai.default_models') || {},
+  const [agentModelsConfig, allModelsConfig, defaultModelsConfig] = await Promise.all([
+    configManager.getConfig<Record<string, string>>('ai.agent_models'),
+    configManager.getConfig<AIModelConfig[]>('ai.models'),
+    configManager.getConfig<DefaultModelsConfig>('ai.default_models'),
   ]);
+  const agentModels = agentModelsConfig || {};
+  const allModels = allModelsConfig || [];
+  const defaultModels = defaultModelsConfig || {};
 
   const desiredModelId = normalizeModelSelection(agentModels[agentType], allModels, defaultModels);
   const currentModelId = (session.config.modelName || 'auto').trim() || 'auto';
   const shouldForceAutoSync = desiredModelId === 'auto';
-  if (!shouldForceAutoSync && desiredModelId === currentModelId) {
+  const desiredMaxContextTokens = await getModelMaxTokens(desiredModelId, agentType);
+  const shouldSyncContextWindow = session.maxContextTokens !== desiredMaxContextTokens;
+
+  if (!shouldForceAutoSync && desiredModelId === currentModelId && !shouldSyncContextWindow) {
     return;
   }
 
   if (currentModelId !== desiredModelId) {
     context.flowChatStore.updateSessionModelName(sessionId, desiredModelId);
+  }
+  if (shouldSyncContextWindow) {
+    context.flowChatStore.updateSessionMaxContextTokens(sessionId, desiredMaxContextTokens);
   }
   await agentAPI.updateSessionModel({
     sessionId,

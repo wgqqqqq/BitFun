@@ -1,19 +1,19 @@
 use crate::agentic::tools::framework::{Tool, ToolResult, ToolUseContext};
 use crate::service::search::{
+    ContentSearchOutputMode, ContentSearchRequest, WorkspaceSearchHit, WorkspaceSearchLine,
     get_global_workspace_search_service, remote_workspace_search_service_for_path,
-    workspace_search_feature_enabled, workspace_search_runtime_available, ContentSearchOutputMode,
-    ContentSearchRequest, WorkspaceSearchHit, WorkspaceSearchLine,
+    workspace_search_feature_enabled, workspace_search_runtime_available,
 };
 use crate::util::errors::{BitFunError, BitFunResult};
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 use tool_runtime::search::grep_search::{
-    grep_search, GrepOptions, GrepSearchResult, OutputMode, ProgressCallback,
+    GrepOptions, GrepSearchResult, OutputMode, ProgressCallback, grep_search,
 };
 
 const DEFAULT_HEAD_LIMIT: usize = 250;
@@ -425,14 +425,30 @@ impl GrepTool {
             "content" => {
                 let mut lines =
                     render_workspace_search_content_lines(&result.hits, show_line_numbers);
+                if lines.is_empty() {
+                    lines = render_workspace_search_result_lines(
+                        &result.outcome.results,
+                        show_line_numbers,
+                    );
+                }
                 apply_offset_and_limit(&mut lines, offset, head_limit);
                 let rendered = Self::relativize_result_text(&lines.join("\n"), display_base);
-                let file_count = result
-                    .hits
-                    .iter()
-                    .map(|hit| hit.path.as_str())
-                    .collect::<HashSet<_>>()
-                    .len();
+                let file_count = if result.hits.is_empty() {
+                    result
+                        .outcome
+                        .results
+                        .iter()
+                        .map(|item| item.path.as_str())
+                        .collect::<HashSet<_>>()
+                        .len()
+                } else {
+                    result
+                        .hits
+                        .iter()
+                        .map(|hit| hit.path.as_str())
+                        .collect::<HashSet<_>>()
+                        .len()
+                };
                 (rendered, file_count, result.matched_occurrences)
             }
             "count" => {
@@ -463,6 +479,26 @@ impl GrepTool {
             }
         }
     }
+}
+
+fn render_workspace_search_result_lines(
+    results: &[crate::infrastructure::FileSearchResult],
+    show_line_numbers: bool,
+) -> Vec<String> {
+    results
+        .iter()
+        .filter_map(|result| {
+            let content = result.matched_content.as_deref()?.trim_end();
+            if show_line_numbers {
+                result
+                    .line_number
+                    .map(|line| format!("{}:{}:{}", result.path, line, content))
+                    .or_else(|| Some(format!("{}:{}", result.path, content)))
+            } else {
+                Some(format!("{}:{}", result.path, content))
+            }
+        })
+        .collect()
 }
 
 fn render_workspace_search_content_lines(
@@ -514,8 +550,11 @@ fn apply_offset_and_limit(items: &mut Vec<String>, offset: usize, head_limit: Op
 
 #[cfg(test)]
 mod tests {
-    use super::{render_workspace_search_content_lines, GrepTool, DEFAULT_HEAD_LIMIT};
-    use crate::infrastructure::FileSearchOutcome;
+    use super::{
+        DEFAULT_HEAD_LIMIT, GrepTool, render_workspace_search_content_lines,
+        render_workspace_search_result_lines,
+    };
+    use crate::infrastructure::{FileSearchOutcome, FileSearchResult, SearchMatchType};
     use crate::service::search::{
         ContentSearchResult, WorkspaceSearchBackend, WorkspaceSearchHit, WorkspaceSearchLine,
         WorkspaceSearchMatch, WorkspaceSearchMatchLocation, WorkspaceSearchRepoPhase,
@@ -709,6 +748,99 @@ mod tests {
         );
         assert_eq!(file_count, 1);
         assert_eq!(total_matches, 1);
+    }
+
+    #[test]
+    fn content_workspace_output_falls_back_to_converted_line_results() {
+        let tool = GrepTool::new();
+        let result = ContentSearchResult {
+            outcome: FileSearchOutcome {
+                results: vec![
+                    FileSearchResult {
+                        path: "/repo/src/main.rs".to_string(),
+                        name: "main.rs".to_string(),
+                        is_directory: false,
+                        match_type: SearchMatchType::Content,
+                        line_number: Some(12),
+                        matched_content: Some("panic!(\"x\")".to_string()),
+                        preview_before: None,
+                        preview_inside: Some("panic!(\"x\")".to_string()),
+                        preview_after: None,
+                    },
+                    FileSearchResult {
+                        path: "/repo/src/lib.rs".to_string(),
+                        name: "lib.rs".to_string(),
+                        is_directory: false,
+                        match_type: SearchMatchType::Content,
+                        line_number: Some(3),
+                        matched_content: Some("pub fn lib() {}".to_string()),
+                        preview_before: None,
+                        preview_inside: Some("pub fn lib() {}".to_string()),
+                        preview_after: None,
+                    },
+                ],
+                truncated: false,
+            },
+            file_counts: Vec::new(),
+            hits: Vec::new(),
+            backend: WorkspaceSearchBackend::Indexed,
+            repo_status: WorkspaceSearchRepoStatus {
+                repo_id: "repo".to_string(),
+                repo_path: "/repo".to_string(),
+                storage_root: "/repo/.bitfun/search/flashgrep-index".to_string(),
+                base_snapshot_root: "/repo/.bitfun/search/flashgrep-index/base-snapshot"
+                    .to_string(),
+                workspace_overlay_root: "/repo/.bitfun/search/flashgrep-index/workspace-overlay"
+                    .to_string(),
+                phase: WorkspaceSearchRepoPhase::Ready,
+                snapshot_key: None,
+                last_probe_unix_secs: None,
+                last_rebuild_unix_secs: None,
+                dirty_files: crate::service::search::WorkspaceSearchDirtyFiles {
+                    modified: 0,
+                    deleted: 0,
+                    new: 0,
+                },
+                rebuild_recommended: false,
+                active_task_id: None,
+                probe_healthy: true,
+                last_error: None,
+                overlay: None,
+            },
+            candidate_docs: 2,
+            matched_lines: 2,
+            matched_occurrences: 2,
+        };
+
+        let (rendered, file_count, total_matches) =
+            tool.format_workspace_search_output("content", true, 0, None, &result, Some("/repo"));
+
+        assert_eq!(
+            rendered,
+            "src/main.rs:12:panic!(\"x\")\nsrc/lib.rs:3:pub fn lib() {}"
+        );
+        assert_eq!(file_count, 2);
+        assert_eq!(total_matches, 2);
+    }
+
+    #[test]
+    fn renders_workspace_search_result_lines_without_line_numbers() {
+        let lines = render_workspace_search_result_lines(
+            &[FileSearchResult {
+                path: "/repo/src/main.rs".to_string(),
+                name: "main.rs".to_string(),
+                is_directory: false,
+                match_type: SearchMatchType::Content,
+                line_number: Some(12),
+                matched_content: Some("panic!(\"x\")".to_string()),
+                preview_before: None,
+                preview_inside: Some("panic!(\"x\")".to_string()),
+                preview_after: None,
+            }],
+            false,
+        );
+
+        assert_eq!(lines, vec!["/repo/src/main.rs:panic!(\"x\")"]);
     }
 }
 
