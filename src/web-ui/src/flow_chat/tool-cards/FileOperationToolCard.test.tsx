@@ -10,6 +10,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
   currentWorkspace: undefined as undefined | { rootPath: string },
+  createDiffEditorTab: vi.fn(),
   openFile: vi.fn(),
   getOperationDiff: vi.fn(async () => ({
     originalContent: '',
@@ -64,7 +65,7 @@ vi.mock('../components/InlineDiffPreview', () => ({
 }));
 
 vi.mock('../../shared/utils/tabUtils', () => ({
-  createDiffEditorTab: vi.fn(),
+  createDiffEditorTab: mocks.createDiffEditorTab,
 }));
 
 vi.mock('../../shared/services/FileTabManager', () => ({
@@ -115,6 +116,7 @@ describe('FileOperationToolCard', () => {
     root = createRoot(container);
 
     mocks.currentWorkspace = undefined;
+    mocks.createDiffEditorTab.mockReset();
     mocks.openFile.mockReset();
     mocks.getOperationDiff.mockReset();
     mocks.getOperationDiff.mockResolvedValue({
@@ -240,5 +242,76 @@ describe('FileOperationToolCard', () => {
       fileName: 'newFile.ts',
       mode: 'agent',
     }));
+  });
+
+  it('opens a local diff for completed write cards without snapshot context', async () => {
+    const toolItem: FlowToolItem = {
+      id: 'tool-1',
+      type: 'tool',
+      toolName: 'Write',
+      status: 'completed',
+      toolCall: {
+        id: 'call-1',
+        name: 'Write',
+        input: {
+          filepath: 'src/newFile.ts',
+          content: 'export const value = 1;\n',
+        },
+      },
+      toolResult: {
+        success: true,
+        result: {
+          success: true,
+        },
+      },
+    } as FlowToolItem;
+
+    const config: ToolCardConfig = {
+      toolName: 'Write',
+      displayName: 'Write',
+      icon: 'WRITE',
+      requiresConfirmation: false,
+      resultDisplayType: 'detailed',
+      description: 'Write a file',
+      displayMode: 'standard',
+    };
+
+    await act(async () => {
+      root.render(
+        <FileOperationToolCard
+          toolItem={toolItem}
+          config={config}
+        />
+      );
+    });
+
+    const diffButton = container.querySelector('.file-op-diff-pill') as HTMLButtonElement | null;
+    expect(diffButton).not.toBeNull();
+
+    await act(async () => {
+      diffButton?.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+
+    await act(async () => {
+      dom.window.dispatchEvent(new dom.window.Event('tick'));
+      await new Promise(resolve => dom.window.setTimeout(resolve, 260));
+    });
+
+    expect(mocks.getOperationDiff).not.toHaveBeenCalled();
+    expect(mocks.createDiffEditorTab).toHaveBeenCalledWith(
+      'src/newFile.ts',
+      'newFile.ts',
+      '',
+      'export const value = 1;\n',
+      false,
+      'agent',
+      undefined,
+      undefined,
+      false,
+      {
+        titleKind: 'diff',
+        duplicateKeyPrefix: 'diff',
+      },
+    );
   });
 });

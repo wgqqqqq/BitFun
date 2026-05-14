@@ -59,6 +59,19 @@ function stringPath(value: unknown): string {
   return typeof value === 'string' && value.trim().length > 0 ? value : '';
 }
 
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? value as Record<string, unknown> : null;
+}
+
+function firstStringValue(source: Record<string, unknown> | null | undefined, keys: string[]): string {
+  if (!source) return '';
+  for (const key of keys) {
+    const value = stringPath(source[key]);
+    if (value) return value;
+  }
+  return '';
+}
+
 function isWindowsAbsolutePath(filePath: string): boolean {
   return /^[A-Za-z]:[\\/]/.test(filePath);
 }
@@ -131,12 +144,20 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
       return resultPath;
     }
 
-    const params = partialParams || toolCall?.input;
+    const params = objectValue(partialParams || toolCall?.input);
     if (!params) return '';
     
     if (Object.keys(params).length === 0) return '';
     
-    return params.file_path || params.target_file || params.path || params.filename || '';
+    return firstStringValue(params, [
+      'file_path',
+      'filePath',
+      'filepath',
+      'target_file',
+      'targetFile',
+      'path',
+      'filename',
+    ]);
   }, [toolCall, partialParams, toolResult]);
 
   const currentFilePath = getFilePath();
@@ -310,6 +331,24 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
   const currentFileDiffStats = useMemo(() => {
     return operationDiffStats ?? localDiffStats ?? { additions: 0, deletions: 0 };
   }, [operationDiffStats, localDiffStats]);
+
+  const localDiffContent = useMemo(() => {
+    if (toolItem.toolName === 'Edit' && (oldStringContent || newStringContent)) {
+      return {
+        originalContent: oldStringContent,
+        modifiedContent: newStringContent,
+      };
+    }
+
+    if (toolItem.toolName === 'Write' && contentPreview) {
+      return {
+        originalContent: '',
+        modifiedContent: contentPreview,
+      };
+    }
+
+    return null;
+  }, [contentPreview, newStringContent, oldStringContent, toolItem.toolName]);
 
   useEffect(() => {
     if (!sessionId || !toolCall?.id || status !== 'completed' || isFailed) return;
@@ -560,7 +599,7 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
   ]);
 
   const handleOpenBaselineDiff = useCallback(async () => {
-    if (!currentFilePath || !currentWorkspace || !sessionId) {
+    if (!currentFilePath) {
       log.warn('Cannot open diff: missing required info', {
         hasFilePath: !!currentFilePath,
         hasWorkspace: !!currentWorkspace,
@@ -571,6 +610,50 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
 
     const diffFilePath = currentFile?.filePath || currentFilePath;
     const fileName = diffFilePath.split(/[/\\]/).pop() || diffFilePath;
+
+    const openLocalDiff = () => {
+      if (!localDiffContent) return false;
+
+      if (localDiffContent.originalContent === localDiffContent.modifiedContent) {
+        notificationService.info(
+          `No changes to display for ${fileName}: original and modified content are identical.`
+        );
+        return true;
+      }
+
+      window.dispatchEvent(new CustomEvent('expand-right-panel'));
+
+      setTimeout(() => {
+        createDiffEditorTab(
+          diffFilePath,
+          fileName,
+          localDiffContent.originalContent,
+          localDiffContent.modifiedContent,
+          false,
+          'agent',
+          currentWorkspace?.rootPath,
+          undefined,
+          false,
+          {
+            titleKind: 'diff',
+            duplicateKeyPrefix: 'diff'
+          }
+        );
+      }, 250);
+
+      return true;
+    };
+
+    if (!currentWorkspace || !sessionId) {
+      if (openLocalDiff()) return;
+
+      log.warn('Cannot open diff: no snapshot context and no local diff content', {
+        filePath: currentFilePath,
+        hasWorkspace: !!currentWorkspace,
+        hasSessionId: !!sessionId,
+      });
+      return;
+    }
 
     try {
       const { snapshotAPI } = await import('../../infrastructure/api');
@@ -586,6 +669,14 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
       const modifiedContent = diffData.modifiedContent || '';
 
       if (originalContent === modifiedContent) {
+        if (
+          localDiffContent &&
+          localDiffContent.originalContent !== localDiffContent.modifiedContent
+        ) {
+          openLocalDiff();
+          return;
+        }
+
         log.info('Baseline diff has no changes, skipping diff editor', {
           filePath: diffFilePath,
           originalLength: originalContent.length,
@@ -619,9 +710,17 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
         );
       }, 250);
     } catch (error) {
+      if (openLocalDiff()) {
+        log.warn('Snapshot diff unavailable, opened local tool diff instead', {
+          filePath: currentFilePath,
+          error,
+        });
+        return;
+      }
+
       log.error('Failed to open Baseline Diff', { filePath: currentFilePath, error });
     }
-  }, [currentFile, currentFilePath, currentWorkspace, sessionId, toolCall?.id]);
+  }, [currentFile, currentFilePath, currentWorkspace, localDiffContent, sessionId, toolCall?.id]);
 
   const getToolIconInfo = () => {
     const iconMap: Record<string, { icon: React.ReactNode; className: string }> = {
@@ -799,7 +898,7 @@ export const FileOperationToolCard: React.FC<FileOperationToolCardProps> = ({
   const renderHeader = () => {
     const { className: iconClassName } = getToolIconInfo();
     const gitDiffDisabled =
-      !currentFilePath || !currentWorkspace || !sessionId;
+      !currentFilePath || (!localDiffContent && (!currentWorkspace || !sessionId));
     const hasDiffStats =
       currentFileDiffStats.additions > 0 || currentFileDiffStats.deletions > 0;
 
