@@ -56,7 +56,8 @@ use super::stream::{acp_dispatch_to_stream_events, AcpClientStreamEvent, AcpStre
 use super::tool::AcpAgentTool;
 
 const CONFIG_PATH: &str = "acp_clients";
-const CLIENT_STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
+const CLIENT_STARTUP_TIMEOUT_SECS: u64 = 60;
+const CLIENT_STARTUP_TIMEOUT: Duration = Duration::from_secs(CLIENT_STARTUP_TIMEOUT_SECS);
 const PERMISSION_TIMEOUT: Duration = Duration::from_secs(600);
 const SESSION_CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
 const LOAD_REPLAY_DRAIN_QUIET_WINDOW: Duration = Duration::from_millis(250);
@@ -587,7 +588,7 @@ impl AcpClientService {
                         "ACP client startup timed out during initialize: id={} connection_id={} timeout_secs={}",
                         client_id,
                         connection_id,
-                        CLIENT_STARTUP_TIMEOUT.as_secs()
+                        CLIENT_STARTUP_TIMEOUT_SECS
                     );
                     connect_task.abort();
                     self.cleanup_failed_startup(connection_id).await;
@@ -1309,7 +1310,7 @@ impl AcpClientService {
                     client.client_id,
                     client.id,
                     phase,
-                    CLIENT_STARTUP_TIMEOUT.as_secs()
+                    CLIENT_STARTUP_TIMEOUT_SECS
                 );
                 self.cleanup_failed_startup(&client.id).await;
                 Err(agent_client_protocol::util::internal_error(
@@ -1972,7 +1973,7 @@ fn startup_timeout_error_message(client_id: &str, phase: &str) -> String {
         "{} client '{}' exceeded {}s during {} and was terminated. Please try again after the client is ready.",
         STARTUP_TIMEOUT_ERROR_PREFIX,
         client_id,
-        CLIENT_STARTUP_TIMEOUT.as_secs(),
+        CLIENT_STARTUP_TIMEOUT_SECS,
         phase
     )
 }
@@ -2065,7 +2066,7 @@ mod tests {
     fn formats_startup_timeout_error_message() {
         assert_eq!(
             startup_timeout_error_message("codex", "initialize"),
-            "ACP startup timed out: client 'codex' exceeded 20s during initialize and was terminated. Please try again after the client is ready."
+            "ACP startup timed out: client 'codex' exceeded 60s during initialize and was terminated. Please try again after the client is ready."
         );
     }
 }
