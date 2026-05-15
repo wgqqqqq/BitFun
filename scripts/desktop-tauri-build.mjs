@@ -6,12 +6,18 @@
 import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { basename, dirname, join, relative, sep } from 'path';
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { ensureOpenSslWindows } from './ensure-openssl-windows.mjs';
 import { ensureFlashgrepBinary } from './prepare-flashgrep-resource.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
+const LINUX_FLASHGREP_BINARIES = [
+  'flashgrep-x86_64-unknown-linux-musl',
+  'flashgrep-x86_64-unknown-linux-gnu',
+  'flashgrep-aarch64-unknown-linux-musl',
+  'flashgrep-aarch64-unknown-linux-gnu',
+];
 
 function tauriBuildArgsFromArgv() {
   const args = process.argv.slice(2);
@@ -109,12 +115,29 @@ function injectTargetFlashgrepResource(config, desktopDir, flashgrepBinary) {
   const resources = { ...(config.bundle?.resources || {}) };
   delete resources['../../../resources/flashgrep'];
 
-  const source = toTauriPath(relative(desktopDir, flashgrepBinary));
-  resources[source] = `flashgrep/${basename(flashgrepBinary)}`;
+  for (const binaryPath of bundledFlashgrepResources(flashgrepBinary)) {
+    const source = toTauriPath(relative(desktopDir, binaryPath));
+    resources[source] = `flashgrep/${basename(binaryPath)}`;
+  }
   config.bundle = {
     ...(config.bundle || {}),
     resources,
   };
+}
+
+function bundledFlashgrepResources(primaryBinary) {
+  const binaries = [primaryBinary];
+
+  if (process.platform === 'win32') {
+    for (const binaryName of LINUX_FLASHGREP_BINARIES) {
+      const binaryPath = join(ROOT, 'resources', 'flashgrep', binaryName);
+      if (existsSync(binaryPath)) {
+        binaries.push(binaryPath);
+      }
+    }
+  }
+
+  return [...new Set(binaries)];
 }
 
 function toTauriPath(value) {
