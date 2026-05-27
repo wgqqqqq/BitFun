@@ -7,8 +7,17 @@ use crate::agentic::agents::{
 use crate::agentic::tools::get_all_registered_tool_names;
 use crate::service::config::mode_config_canonicalizer::resolve_effective_tools;
 use crate::service::config::types::SubAgentConfig;
+use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+
+#[derive(Debug, Deserialize)]
+struct HarnessToolPolicy {
+    #[serde(default)]
+    enabled_tools: Option<Vec<String>>,
+    #[serde(default)]
+    disabled_tools: Vec<String>,
+}
 
 impl AgentRegistry {
     fn subagent_source_rank(source: Option<crate::agentic::agents::SubAgentSource>) -> u8 {
@@ -58,6 +67,8 @@ impl AgentRegistry {
                     mode_configs.get(agent_type),
                     &valid_tools,
                 );
+                let resolved_tools =
+                    apply_harness_tool_policy(agent_type, resolved_tools, &valid_tools);
                 let allowed_tools = merge_dynamic_mcp_tools(resolved_tools, &registered_tool_names);
                 let allowed_tool_set: HashSet<&str> =
                     allowed_tools.iter().map(String::as_str).collect();
@@ -298,4 +309,59 @@ impl AgentRegistry {
                 Self::entry_is_visible_for_query(&entry, &query, &subagent_configs)
             })
     }
+}
+
+fn apply_harness_tool_policy(
+    agent_type: &str,
+    allowed_tools: Vec<String>,
+    valid_tools: &HashSet<String>,
+) -> Vec<String> {
+    let Some(policy) = load_harness_tool_policy(agent_type) else {
+        return allowed_tools;
+    };
+
+    let mut result = if let Some(enabled_tools) = policy.enabled_tools {
+        dedupe_valid_tools(enabled_tools, valid_tools)
+    } else {
+        dedupe_valid_tools(allowed_tools, valid_tools)
+    };
+
+    if !policy.disabled_tools.is_empty() {
+        let disabled: HashSet<String> = policy.disabled_tools.into_iter().collect();
+        result.retain(|tool| !disabled.contains(tool));
+    }
+
+    result
+}
+
+fn load_harness_tool_policy(agent_type: &str) -> Option<HarnessToolPolicy> {
+    let harness_dir = std::env::var("BITFUN_HARNESS_DIR").ok()?;
+    let policy_dir = Path::new(&harness_dir).join("tool_policy");
+    let exact_path = policy_dir.join(format!("{}.json", agent_type));
+    let lower_path = policy_dir.join(format!("{}.json", agent_type.to_ascii_lowercase()));
+    let policy_path = if exact_path.is_file() {
+        exact_path
+    } else if lower_path.is_file() {
+        lower_path
+    } else {
+        return None;
+    };
+    let text = std::fs::read_to_string(policy_path).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+fn dedupe_valid_tools(tools: Vec<String>, valid_tools: &HashSet<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for tool in tools {
+        let trimmed = tool.trim();
+        if trimmed.is_empty() || !valid_tools.contains(trimmed) {
+            continue;
+        }
+        let owned = trimmed.to_string();
+        if seen.insert(owned.clone()) {
+            out.push(owned);
+        }
+    }
+    out
 }

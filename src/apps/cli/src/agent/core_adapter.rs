@@ -160,6 +160,14 @@ impl CoreAgentAdapter {
 #[async_trait::async_trait]
 impl Agent for CoreAgentAdapter {
     async fn ensure_session(&self, agent_type: &str) -> Result<String> {
+        self.ensure_session_with_model(agent_type, None).await
+    }
+
+    async fn ensure_session_with_model(
+        &self,
+        agent_type: &str,
+        model_id: Option<&str>,
+    ) -> Result<String> {
         let mut session_id_guard = self.session_id.lock().await;
 
         if let Some(ref id) = *session_id_guard {
@@ -174,6 +182,10 @@ impl Agent for CoreAgentAdapter {
                 agent_type.to_string(),
                 SessionConfig {
                     workspace_path: Some(self.workspace_path_string()),
+                    model_id: model_id
+                        .map(str::trim)
+                        .filter(|id| !id.is_empty())
+                        .map(ToOwned::to_owned),
                     ..Default::default()
                 },
             )
@@ -188,7 +200,16 @@ impl Agent for CoreAgentAdapter {
     }
 
     async fn send_message(&self, message: String, agent_type: &str) -> Result<String> {
-        let session_id = self.ensure_session(agent_type).await?;
+        self.send_message_with_model(message, agent_type, None).await
+    }
+
+    async fn send_message_with_model(
+        &self,
+        message: String,
+        agent_type: &str,
+        model_id: Option<&str>,
+    ) -> Result<String> {
+        let session_id = self.ensure_session_with_model(agent_type, model_id).await?;
         tracing::info!("Sending message to session {}: {}", session_id, message);
 
         // Generate a turn_id

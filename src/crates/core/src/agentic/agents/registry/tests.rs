@@ -66,6 +66,12 @@ fn insert_project_subagent(registry: &AgentRegistry, workspace: &Path, id: &str,
         .insert(workspace.to_path_buf(), entries);
 }
 
+fn unique_temp_root() -> PathBuf {
+    let mut path = std::env::temp_dir();
+    path.push(format!("bitfun-harness-policy-test-{}", uuid::Uuid::new_v4()));
+    path
+}
+
 #[test]
 fn top_level_modes_default_to_auto() {
     for agent_type in [
@@ -105,6 +111,37 @@ async fn computer_use_is_builtin_subagent_not_mode() {
         computer_use.visibility.as_ref().map(|value| value.exposure),
         Some(BuiltinSubagentExposure::Restricted)
     );
+}
+
+#[tokio::test]
+async fn harness_tool_policy_filters_mode_tools() {
+    let root = unique_temp_root();
+    let policy_dir = root.join("tool_policy");
+    std::fs::create_dir_all(&policy_dir).expect("create tool policy dir");
+    std::fs::write(
+        policy_dir.join("agentic.json"),
+        r#"{
+            "schema_version": "bitfun-tool-policy-v1",
+            "mode": "agentic",
+            "enabled_tools": ["Read", "Grep", "Bash", "NotARealTool"],
+            "disabled_tools": ["Bash"]
+        }"#,
+    )
+    .expect("write tool policy");
+
+    let previous = std::env::var("BITFUN_HARNESS_DIR").ok();
+    std::env::set_var("BITFUN_HARNESS_DIR", &root);
+
+    let registry = AgentRegistry::new();
+    let tools = registry.get_agent_tools("agentic", None).await;
+
+    match previous {
+        Some(value) => std::env::set_var("BITFUN_HARNESS_DIR", value),
+        None => std::env::remove_var("BITFUN_HARNESS_DIR"),
+    }
+    std::fs::remove_dir_all(root).ok();
+
+    assert_eq!(tools, vec!["Read".to_string(), "Grep".to_string()]);
 }
 
 #[test]

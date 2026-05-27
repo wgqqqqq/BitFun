@@ -20,6 +20,7 @@ pub struct ExecMode {
     config: CliConfig,
     message: String,
     agent_type: String,
+    model_id: Option<String>,
     agent: Arc<CoreAgentAdapter>,
     workspace_path: Option<PathBuf>,
     /// None: no patch output, Some("-"): output to stdout, Some(path): save to file
@@ -31,6 +32,7 @@ impl ExecMode {
         config: CliConfig,
         message: String,
         agent_type: String,
+        model_id: Option<String>,
         agentic_system: &AgenticSystem,
         workspace_path: Option<PathBuf>,
         output_patch: Option<String>,
@@ -45,6 +47,7 @@ impl ExecMode {
             config,
             message,
             agent_type,
+            model_id,
             agent,
             workspace_path,
             output_patch,
@@ -101,7 +104,7 @@ impl ExecMode {
         // Ensure session and send message
         let session_id = self
             .agent
-            .ensure_session(&self.agent_type)
+            .ensure_session_with_model(&self.agent_type, self.model_id.as_deref())
             .await
             .map_err(|e| {
                 emit_exit_diagnostic(
@@ -118,7 +121,11 @@ impl ExecMode {
 
         let turn_id = self
             .agent
-            .send_message(self.message.clone(), &self.agent_type)
+            .send_message_with_model(
+                self.message.clone(),
+                &self.agent_type,
+                self.model_id.as_deref(),
+            )
             .await
             .map_err(|e| {
                 emit_exit_diagnostic(

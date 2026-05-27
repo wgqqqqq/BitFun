@@ -17,9 +17,24 @@ pub trait Agent: Send + Sync {
     /// Ensure a core session exists, return session_id
     async fn ensure_session(&self, agent_type: &str) -> Result<String>;
 
+    /// Ensure a core session exists with an explicit model override, return session_id.
+    async fn ensure_session_with_model(
+        &self,
+        agent_type: &str,
+        model_id: Option<&str>,
+    ) -> Result<String>;
+
     /// Send a message to start a new dialog turn.
     /// Returns the turn_id. Events are consumed externally via EventQueue.
     async fn send_message(&self, message: String, agent_type: &str) -> Result<String>;
+
+    /// Send a message to start a new dialog turn with an explicit model override.
+    async fn send_message_with_model(
+        &self,
+        message: String,
+        agent_type: &str,
+        model_id: Option<&str>,
+    ) -> Result<String>;
 
     /// Cancel the current dialog turn (if any)
     async fn cancel_current_turn(&self) -> Result<()>;

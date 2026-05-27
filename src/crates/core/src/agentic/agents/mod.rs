@@ -37,6 +37,7 @@ pub use registry::visibility::{
 };
 pub use registry::{get_agent_registry, AgentRegistry, CustomSubagentDetail};
 use std::any::Any;
+use std::path::Path;
 
 // Include embedded prompts generated at compile time
 include!(concat!(env!("OUT_DIR"), "/embedded_agents_prompt.rs"));
@@ -76,9 +77,19 @@ pub trait Agent: Send + Sync + 'static {
     async fn build_prompt(&self, context: &PromptBuilderContext) -> BitFunResult<String> {
         let prompt_components = PromptBuilder::new(context.clone());
         let template_name = self.prompt_template_name(context.model_name.as_deref());
-        let system_prompt_template = get_embedded_prompt(template_name).ok_or_else(|| {
-            BitFunError::Agent(format!("{} not found in embedded files", template_name))
-        })?;
+        let overlay_template = std::env::var("BITFUN_HARNESS_DIR")
+            .ok()
+            .and_then(|dir| load_harness_prompt_template(Path::new(&dir), template_name).ok())
+            .flatten();
+        let embedded_template = || {
+            get_embedded_prompt(template_name).ok_or_else(|| {
+                BitFunError::Agent(format!("{} not found in embedded files", template_name))
+            })
+        };
+        let system_prompt_template = overlay_template
+            .as_deref()
+            .map(Ok)
+            .unwrap_or_else(embedded_template)?;
 
         let prompt = prompt_components
             .build_prompt_from_template(system_prompt_template)
@@ -133,5 +144,105 @@ pub trait Agent: Send + Sync + 'static {
     /// Whether this agent is read-only (prevents file modifications)
     fn is_readonly(&self) -> bool {
         false
+    }
+}
+
+fn load_harness_prompt_template(
+    harness_dir: &Path,
+    template_name: &str,
+) -> std::io::Result<Option<String>> {
+    let prompt_path = harness_dir
+        .join("prompts")
+        .join(format!("{}.md", template_name));
+    if !prompt_path.is_file() {
+        return Ok(None);
+    }
+    std::fs::read_to_string(prompt_path).map(Some)
+}
+
+#[cfg(test)]
+mod harness_overlay_tests {
+    use super::{load_harness_prompt_template, Agent, PromptBuilderContext};
+    use async_trait::async_trait;
+    use std::path::PathBuf;
+
+    struct OverlayTestAgent;
+
+    #[async_trait]
+    impl Agent for OverlayTestAgent {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
+        fn id(&self) -> &str {
+            "overlay-test"
+        }
+
+        fn name(&self) -> &str {
+            "Overlay Test"
+        }
+
+        fn description(&self) -> &str {
+            "Test agent"
+        }
+
+        fn prompt_template_name(&self, _model_name: Option<&str>) -> &str {
+            "overlay_test"
+        }
+
+        fn default_tools(&self) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
+    #[test]
+    fn loads_harness_prompt_template_when_present() {
+        let root = unique_temp_root();
+        let prompts = root.join("prompts");
+        std::fs::create_dir_all(&prompts).expect("create prompts dir");
+        std::fs::write(prompts.join("overlay_test.md"), "overlay").expect("write prompt");
+
+        let loaded = load_harness_prompt_template(&root, "overlay_test")
+            .expect("load should succeed")
+            .expect("prompt should exist");
+
+        std::fs::remove_dir_all(root).ok();
+        assert_eq!(loaded, "overlay");
+    }
+
+    #[tokio::test]
+    async fn build_prompt_prefers_harness_overlay_template() {
+        let root = unique_temp_root();
+        let prompts = root.join("prompts");
+        std::fs::create_dir_all(&prompts).expect("create prompts dir");
+        std::fs::write(
+            prompts.join("overlay_test.md"),
+            "Harness prompt\n\n{ENV_INFO}",
+        )
+        .expect("write prompt");
+
+        let previous = std::env::var("BITFUN_HARNESS_DIR").ok();
+        std::env::set_var("BITFUN_HARNESS_DIR", &root);
+
+        let context = PromptBuilderContext::new("/workspace", None, None);
+        let prompt = OverlayTestAgent
+            .build_prompt(&context)
+            .await
+            .expect("prompt should build");
+
+        match previous {
+            Some(value) => std::env::set_var("BITFUN_HARNESS_DIR", value),
+            None => std::env::remove_var("BITFUN_HARNESS_DIR"),
+        }
+        std::fs::remove_dir_all(root).ok();
+
+        assert!(prompt.contains("Harness prompt"));
+        assert!(prompt.contains("Environment Information"));
+    }
+
+    fn unique_temp_root() -> PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("bitfun-harness-test-{}", uuid::Uuid::new_v4()));
+        path
     }
 }

@@ -85,6 +85,14 @@ enum Commands {
         #[arg(short, long, default_value = "agentic")]
         agent: String,
 
+        /// Model id or slot used for this non-interactive execution
+        #[arg(long)]
+        model: Option<String>,
+
+        /// Harness overlay directory for evaluation/self-evolution runs
+        #[arg(long)]
+        harness_dir: Option<std::path::PathBuf>,
+
         /// Output git diff patch after execution (for SWE-bench evaluation)
         /// Without path outputs to terminal, with path saves to file
         /// Example: --output-patch or --output-patch ./result.patch
@@ -416,6 +424,8 @@ async fn main() -> Result<()> {
         Some(Commands::Exec {
             message,
             agent,
+            model,
+            harness_dir,
             output_patch,
             confirm,
         }) => {
@@ -424,6 +434,10 @@ async fn main() -> Result<()> {
 
             if let Some(ref ws_path) = workspace_path_resolved {
                 tracing::info!("Workspace path set: {:?}", ws_path);
+            }
+            if let Some(ref harness_dir) = harness_dir {
+                std::env::set_var("BITFUN_HARNESS_DIR", harness_dir);
+                tracing::info!("Harness overlay path set: {:?}", harness_dir);
             }
 
             let skip_confirmation = !confirm;
@@ -447,6 +461,7 @@ async fn main() -> Result<()> {
                 config,
                 message,
                 agent,
+                model,
                 &agentic_system,
                 workspace_path_resolved,
                 output_patch,
