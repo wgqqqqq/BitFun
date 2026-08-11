@@ -130,7 +130,12 @@ test('Windows updater installs NSIS packages without showing its progress window
   const baseConfig = join(fixture, 'tauri.conf.json');
   const updaterEnv = {
     BITFUN_ENABLE_UPDATER_ARTIFACTS: process.env.BITFUN_ENABLE_UPDATER_ARTIFACTS,
+    BITFUN_RELEASE_CHANNEL: process.env.BITFUN_RELEASE_CHANNEL,
+    BITFUN_UPDATER_FALLBACK_ENDPOINT: process.env.BITFUN_UPDATER_FALLBACK_ENDPOINT,
+    BITFUN_UPDATER_PRIMARY_ENDPOINT: process.env.BITFUN_UPDATER_PRIMARY_ENDPOINT,
     TAURI_SIGNING_PRIVATE_KEY: process.env.TAURI_SIGNING_PRIVATE_KEY,
+    TAURI_UPDATER_ENDPOINT: process.env.TAURI_UPDATER_ENDPOINT,
+    TAURI_UPDATER_FALLBACK_ENDPOINT: process.env.TAURI_UPDATER_FALLBACK_ENDPOINT,
     TAURI_UPDATER_PUBKEY: process.env.TAURI_UPDATER_PUBKEY,
   };
   mkdirSync(fixture, { recursive: true });
@@ -146,6 +151,7 @@ test('Windows updater installs NSIS packages without showing its progress window
     });
     const config = JSON.parse(readFileSync(generated, 'utf8'));
     assert.equal(config.plugins.updater.windows.installMode, 'quiet');
+    assert.match(config.plugins.updater.endpoints[0], /releases\/latest\/download/);
   } finally {
     for (const [name, value] of Object.entries(updaterEnv)) {
       if (value === undefined) {
@@ -153,6 +159,60 @@ test('Windows updater installs NSIS packages without showing its progress window
       } else {
         process.env[name] = value;
       }
+    }
+    rmSync(fixture, { force: true, recursive: true });
+  }
+});
+
+test('beta Desktop artifacts compile and bundle only beta updater endpoints', () => {
+  const fixture = join(tmpdir(), `bitfun-tauri-beta-${process.pid}-${Date.now()}`);
+  const baseConfig = join(fixture, 'tauri.conf.json');
+  const names = [
+    'BITFUN_ENABLE_UPDATER_ARTIFACTS',
+    'BITFUN_RELEASE_CHANNEL',
+    'BITFUN_UPDATER_FALLBACK_ENDPOINT',
+    'BITFUN_UPDATER_PRIMARY_ENDPOINT',
+    'TAURI_SIGNING_PRIVATE_KEY',
+    'TAURI_UPDATER_ENDPOINT',
+    'TAURI_UPDATER_FALLBACK_ENDPOINT',
+    'TAURI_UPDATER_PUBKEY',
+  ];
+  const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  mkdirSync(fixture, { recursive: true });
+  writeFileSync(baseConfig, JSON.stringify({ bundle: { resources: {} } }));
+  process.env.BITFUN_ENABLE_UPDATER_ARTIFACTS = 'true';
+  process.env.BITFUN_RELEASE_CHANNEL = 'beta';
+  process.env.TAURI_SIGNING_PRIVATE_KEY = 'test-private-key';
+  process.env.TAURI_UPDATER_PUBKEY = 'test-public-key';
+  delete process.env.TAURI_UPDATER_ENDPOINT;
+  delete process.env.TAURI_UPDATER_FALLBACK_ENDPOINT;
+
+  try {
+    const generated = prepareTauriConfig(baseConfig, {
+      desktopDir: fixture,
+      flashgrepBinary: join(fixture, 'flashgrep'),
+    });
+    const config = JSON.parse(readFileSync(generated, 'utf8'));
+    assert.equal(
+      config.plugins.updater.endpoints[0],
+      'https://github.com/GCWing/BitFun/releases/download/channel-beta/latest.json',
+    );
+    assert.equal(
+      config.plugins.updater.endpoints[1],
+      'https://openbitfun.com/release/beta/latest.json',
+    );
+    assert.equal(
+      process.env.BITFUN_UPDATER_PRIMARY_ENDPOINT,
+      config.plugins.updater.endpoints[0],
+    );
+    assert.equal(
+      process.env.BITFUN_UPDATER_FALLBACK_ENDPOINT,
+      config.plugins.updater.endpoints[1],
+    );
+  } finally {
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
     }
     rmSync(fixture, { force: true, recursive: true });
   }

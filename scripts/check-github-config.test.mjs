@@ -355,3 +355,83 @@ test('stages unique release asset names before publishing', () => {
   );
   assert.equal(steps[uploadIndex].with.files, 'release-upload-assets/*');
 });
+
+test('Desktop packaging keeps beta identity explicit and stable-safe', () => {
+  const workflow = yaml.parse(
+    readFileSync(
+      path.join(repoRoot, '.github/workflows/desktop-package.yml'),
+      'utf8',
+    ),
+  );
+  const inputs = workflow.on.workflow_dispatch.inputs;
+  assert.deepEqual(inputs.release_channel.options, ['stable', 'beta']);
+  assert.equal(inputs.release_channel.default, 'stable');
+
+  const prepareStep = workflow.jobs.prepare.steps.find(
+    (step) => step.name === 'Resolve version metadata',
+  );
+  assert.match(prepareStep.run, /GITHUB_REPOSITORY.*GCWing\/BitFun/);
+  assert.match(prepareStep.run, /merge-base --is-ancestor/);
+  assert.match(prepareStep.run, /rev-parse --verify --quiet/);
+
+  const packageJob = workflow.jobs.package;
+  assert.equal(
+    packageJob.env.BITFUN_RELEASE_CHANNEL,
+    '${{ needs.prepare.outputs.release_channel }}',
+  );
+  assert.equal(packageJob.env.TAURI_UPDATER_ENDPOINT, undefined);
+  const patchIndex = packageJob.steps.findIndex(
+    (step) => step.name === 'Project beta build version',
+  );
+  const verifyIndex = packageJob.steps.findIndex(
+    (step) => step.name === 'Verify release version metadata',
+  );
+  assert.ok(patchIndex >= 0 && patchIndex < verifyIndex);
+  assert.equal(
+    packageJob.steps[patchIndex].if,
+    "needs.prepare.outputs.release_channel == 'beta'",
+  );
+
+  const uploadSteps = workflow.jobs['upload-release-assets'].steps;
+  const release = uploadSteps.find((step) => step.name === 'Upload to release');
+  assert.equal(
+    release.with.prerelease,
+    "${{ needs.prepare.outputs.release_channel == 'beta' }}",
+  );
+  const verifyIndexPublished = uploadSteps.findIndex(
+    (step) => step.name === 'Verify published updater manifest',
+  );
+  const promoteIndex = uploadSteps.findIndex(
+    (step) => step.name === 'Publish beta channel manifest',
+  );
+  assert.ok(verifyIndexPublished >= 0 && verifyIndexPublished < promoteIndex);
+});
+
+test('beta publishing cannot advance the Relay latest image tag', () => {
+  const workflow = yaml.parse(
+    readFileSync(
+      path.join(repoRoot, '.github/workflows/desktop-package.yml'),
+      'utf8',
+    ),
+  );
+  const imageTags = workflow.jobs['publish-relay-image'].steps.find(
+    (step) => step.name === 'Resolve image tags',
+  );
+  assert.equal(
+    imageTags.env.RELEASE_CHANNEL,
+    '${{ needs.prepare.outputs.release_channel }}',
+  );
+  assert.match(imageTags.run, /RELEASE_CHANNEL.*stable/);
+  assert.doesNotMatch(imageTags.run, /RELEASE_PRERELEASE/);
+});
+
+test('nightly and beta use the shared build-version projection', () => {
+  const nightly = yaml.parse(
+    readFileSync(path.join(repoRoot, '.github/workflows/nightly.yml'), 'utf8'),
+  );
+  const patch = nightly.jobs.package.steps.find(
+    (step) => step.name === 'Patch nightly version',
+  );
+  assert.match(patch.run, /node scripts\/set-build-version\.mjs/);
+  assert.equal(nightly.jobs.package.env.BITFUN_RELEASE_CHANNEL, 'nightly');
+});

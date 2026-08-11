@@ -1128,13 +1128,17 @@ fn is_newer_version(candidate: &str, current: &str) -> bool {
 
 fn automatic_update_is_eligible() -> bool {
     if std::env::var_os("BITFUN_CLI_DISABLE_AUTO_UPDATE").is_some()
-        || env!("CARGO_PKG_VERSION").contains("-nightly.")
+        || !release_version_allows_automatic_update(env!("CARGO_PKG_VERSION"))
     {
         return false;
     }
     std::env::current_exe()
         .ok()
         .is_some_and(|path| current_platform_key().is_some() && !is_development_binary(&path))
+}
+
+fn release_version_allows_automatic_update(version: &str) -> bool {
+    !version.contains("-nightly.") && !version.contains("-beta.")
 }
 
 /// Share the CLI's own config directory so a relocated profile (E2E storage
@@ -1444,6 +1448,15 @@ mod tests {
         assert!(is_newer_version("0.2.14", "0.2.13"));
         assert!(!is_newer_version("0.2.13", "0.2.13-nightly.1+abc"));
         assert!(!is_newer_version("0.2.12", "0.2.13"));
+    }
+
+    #[test]
+    fn prerelease_cli_builds_do_not_use_the_stable_auto_update_feed() {
+        assert!(release_version_allows_automatic_update("0.2.14"));
+        assert!(!release_version_allows_automatic_update("0.2.14-beta.1"));
+        assert!(!release_version_allows_automatic_update(
+            "0.2.14-nightly.20260811"
+        ));
     }
 
     /// Fixture produced with the real `minisign` CLI, then wrapped the way

@@ -15,6 +15,7 @@ import { ensureFlashgrepBinary } from './prepare-flashgrep-resource.mjs';
 import { extractProductConfigArg } from './product-customization/cli.mjs';
 import { productBuildEnvironment } from './product-customization/projections.mjs';
 import { resolveProductDefinition } from './product-customization/resolver.mjs';
+import { resolveReleaseChannel } from './release-channel.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -40,6 +41,8 @@ async function main() {
   const resolution = resolveProductDefinition({ rootDir: ROOT, productConfig, member: 'desktop' });
   Object.assign(process.env, productBuildEnvironment(resolution));
   console.log(`[product] ${resolution.assembly.member} ${resolution.assembly.assemblyDigest}`);
+  const releaseChannel = resolveReleaseChannel(process.env.BITFUN_RELEASE_CHANNEL);
+  console.log(`[release] channel=${releaseChannel.channel}`);
 
   const flashgrepBinary = ensureFlashgrepBinary();
   process.env.FLASHGREP_DAEMON_BIN = flashgrepBinary;
@@ -52,6 +55,7 @@ async function main() {
     desktopDir,
     flashgrepBinary,
     resolution,
+    releaseChannel,
   });
   const tauriBin = join(ROOT, 'node_modules', '.bin', 'tauri');
   const tauriArgs = ['build', '--config', tauriConfig, ...forward];
@@ -168,7 +172,7 @@ function optionValue(args, option) {
 
 export function prepareTauriConfig(
   baseConfigPath,
-  { desktopDir, flashgrepBinary, resolution }
+  { desktopDir, flashgrepBinary, resolution, releaseChannel }
 ) {
   const config = JSON.parse(readFileSync(baseConfigPath, 'utf8'));
   if (resolution) {
@@ -180,6 +184,16 @@ export function prepareTauriConfig(
     config.identifier = resolution.assembly.bundleId;
   }
   injectTargetFlashgrepResource(config, desktopDir, flashgrepBinary);
+
+  const release = releaseChannel
+    ?? resolveReleaseChannel(process.env.BITFUN_RELEASE_CHANNEL);
+  const primaryEndpoint =
+    process.env.TAURI_UPDATER_ENDPOINT || release.primaryUpdaterEndpoint;
+  const fallbackEndpoint =
+    process.env.TAURI_UPDATER_FALLBACK_ENDPOINT || release.fallbackUpdaterEndpoint;
+  process.env.BITFUN_RELEASE_CHANNEL = release.channel;
+  process.env.BITFUN_UPDATER_PRIMARY_ENDPOINT = primaryEndpoint;
+  process.env.BITFUN_UPDATER_FALLBACK_ENDPOINT = fallbackEndpoint;
 
   const enabled = ['1', 'true', 'yes'].includes(
     String(process.env.BITFUN_ENABLE_UPDATER_ARTIFACTS || '').toLowerCase()
@@ -196,16 +210,9 @@ export function prepareTauriConfig(
       process.exit(1);
     }
 
-    const primaryEndpoint =
-      process.env.TAURI_UPDATER_ENDPOINT ||
-      'https://github.com/GCWing/BitFun/releases/latest/download/latest.json';
     // Fallback endpoint used when GitHub is unreachable (not when no update is found).
     // Tauri updater iterates endpoints and only falls through on network/HTTP errors;
     // a 204 (no update) or a successfully parsed manifest stops the loop.
-    const fallbackEndpoint =
-      process.env.TAURI_UPDATER_FALLBACK_ENDPOINT ||
-      'https://openbitfun.com/release/latest.json';
-
     config.bundle = {
       ...(config.bundle || {}),
       createUpdaterArtifacts: true,
@@ -221,7 +228,7 @@ export function prepareTauriConfig(
       },
     };
     console.log(
-      `[tauri-build] Updater artifacts enabled: ${primaryEndpoint} (fallback: ${fallbackEndpoint})`
+      `[tauri-build] Updater artifacts enabled for ${release.channel}: ${primaryEndpoint} (fallback: ${fallbackEndpoint})`
     );
   }
 
