@@ -144,11 +144,13 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=6144
       BITFUN_ENABLE_UPDATER_ARTIFACTS: ${{ needs.prepare.outputs.upload_to_release }}
       BITFUN_RELEASE_CHANNEL: ${{ needs.prepare.outputs.release_channel }}
+      TAURI_UPDATER_ENDPOINT: ${{ github.repository != 'GCWing/BitFun' && needs.prepare.outputs.release_channel == 'beta' && format('https://github.com/{0}/releases/download/channel-beta/latest.json', github.repository) || '' }}
+      TAURI_UPDATER_FALLBACK_ENDPOINT: ${{ github.repository != 'GCWing/BitFun' && needs.prepare.outputs.release_channel == 'beta' && format('https://github.com/{0}/releases/download/channel-beta/latest.json', github.repository) || '' }}
       TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
       # Same trust root, compiled into the Desktop binary so one-click relay
       # deploy can verify the signed checksum locally and hand the remote host
       # a hash it does not have to trust the mirror for.
-      BITFUN_RELEASE_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+      BITFUN_RELEASE_PUBKEY: ${{ secrets.BITFUN_RELEASE_PUBKEY || secrets.TAURI_UPDATER_PUBKEY }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
@@ -307,7 +309,9 @@ jobs:
   linux-binaries:
     name: Linux CLI and Relay Server
     needs: prepare
-    if: needs.prepare.outputs.relay_image_only != 'true'
+    if: >-
+      needs.prepare.outputs.relay_image_only != 'true' &&
+      needs.prepare.outputs.release_channel == 'stable'
     uses: ./.github/workflows/linux-binaries.yml
     secrets:
       release_signing_key: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -325,7 +329,8 @@ jobs:
     needs: [prepare, linux-binaries]
     if: >-
       always() &&
-      (needs.prepare.outputs.upload_to_release == 'true' ||
+      ((needs.prepare.outputs.upload_to_release == 'true' &&
+        needs.prepare.outputs.release_channel == 'stable') ||
        needs.prepare.outputs.relay_image_only == 'true') &&
       (needs.prepare.outputs.relay_image_only == 'true' ||
        needs.linux-binaries.result == 'success')
@@ -518,8 +523,9 @@ jobs:
       always() &&
       needs.prepare.outputs.upload_to_release == 'true' &&
       needs.package.result == 'success' &&
-      needs.linux-binaries.result == 'success' &&
-      needs.publish-relay-image.result == 'success'
+      (needs.prepare.outputs.release_channel == 'beta' ||
+       (needs.linux-binaries.result == 'success' &&
+        needs.publish-relay-image.result == 'success'))
     runs-on: ubuntu-latest
     env:
       REQUIRED_UPDATER_PLATFORMS: windows-x86_64,darwin-x86_64,darwin-aarch64,linux-x86_64,linux-aarch64
@@ -536,6 +542,7 @@ jobs:
           merge-multiple: true
 
       - name: Download Linux binary artifacts
+        if: needs.prepare.outputs.release_channel == 'stable'
         uses: actions/download-artifact@v7
         with:
           pattern: bitfun-linux-${{ needs.prepare.outputs.release_tag }}-*
@@ -543,19 +550,24 @@ jobs:
           merge-multiple: true
 
       - name: Download Relay image descriptor
+        if: needs.prepare.outputs.release_channel == 'stable'
         uses: actions/download-artifact@v7
         with:
           name: bitfun-relay-image-${{ needs.prepare.outputs.release_tag }}
           path: relay-image-assets
 
       - name: List release assets
+        env:
+          RELEASE_CHANNEL: ${{ needs.prepare.outputs.release_channel }}
         run: |
           echo "Release assets:"
           find release-assets -type f | sort
-          echo "Linux CLI and Relay Server assets:"
-          find linux-release-assets -type f | sort
-          echo "Relay image descriptor:"
-          find relay-image-assets -type f | sort
+          if [[ "${RELEASE_CHANNEL}" == "stable" ]]; then
+            echo "Linux CLI and Relay Server assets:"
+            find linux-release-assets -type f | sort
+            echo "Relay image descriptor:"
+            find relay-image-assets -type f | sort
+          fi
 
       - name: Prepare versioned Windows installer
         run: |
@@ -587,7 +599,7 @@ jobs:
             --manual-assets-dir release-manual-assets \
             --version "${{ needs.prepare.outputs.version }}" \
             --tag "${{ needs.prepare.outputs.release_tag }}" \
-            --repo "GCWing/BitFun" \
+            --repo "${{ github.repository }}" \
             --out release-updater-assets/latest.json \
             --required-platforms "${REQUIRED_UPDATER_PLATFORMS}"
 
@@ -600,6 +612,7 @@ jobs:
             --required-manual-platforms "windows-x86_64"
 
       - name: Generate Linux binaries manifest
+        if: needs.prepare.outputs.release_channel == 'stable'
         run: |
           node scripts/generate-linux-binaries-manifest.mjs \
             --assets-dir linux-release-assets \
@@ -637,7 +650,8 @@ jobs:
           # can fetch a key for is not verifiable.
           printf '%s' "${BITFUN_SIGNING_PUBKEY}" | base64 -d >release-assets/minisign.pub
 
-      - name: Stage uniquely named release assets
+      - name: Stage stable release assets
+        if: needs.prepare.outputs.release_channel == 'stable'
         shell: bash
         run: |
           set -euo pipefail
@@ -666,6 +680,27 @@ jobs:
             relay-image-assets/relay-image.json \
             relay-image-assets/relay-image.json.sig
 
+      - name: Stage beta release assets
+        if: needs.prepare.outputs.release_channel == 'beta'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s globstar
+          node scripts/stage-github-release-assets.mjs \
+            --out-dir release-upload-assets \
+            release-updater-assets/* \
+            release-manual-assets/*.exe \
+            release-manual-assets/*.exe.sig \
+            release-assets/**/*.AppImage \
+            release-assets/**/*.AppImage.sig \
+            release-assets/**/*.deb \
+            release-assets/**/*.deb.sig \
+            release-assets/**/*.dmg \
+            release-assets/**/*.dmg.sig \
+            release-assets/**/*.rpm \
+            release-assets/**/*.rpm.sig \
+            release-assets/minisign.pub
+
       - name: Upload to release
         uses: softprops/action-gh-release@v3
         with:
@@ -680,7 +715,7 @@ jobs:
       - name: Verify published updater manifest
         run: |
           curl -fsSL --retry 5 --retry-delay 3 \
-            "https://github.com/GCWing/BitFun/releases/download/${{ needs.prepare.outputs.release_tag }}/latest.json" \
+            "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.release_tag }}/latest.json" \
             -o latest.published.json
           node scripts/verify-tauri-latest-json.mjs \
             --manifest latest.published.json \
@@ -690,6 +725,7 @@ jobs:
             --check-urls true
 
       - name: Verify published Linux binaries manifest
+        if: needs.prepare.outputs.release_channel == 'stable'
         run: |
           curl -fsSL --retry 5 --retry-delay 3 \
             "https://github.com/GCWing/BitFun/releases/download/${{ needs.prepare.outputs.release_tag }}/linux-binaries.json" \
@@ -701,6 +737,7 @@ jobs:
           done < <(jq -r '.platforms[].cli.url' linux-binaries.published.json)
 
       - name: Verify published Relay image descriptor
+        if: needs.prepare.outputs.release_channel == 'stable'
         run: |
           curl -fsSL --retry 5 --retry-delay 3 \
             "https://github.com/GCWing/BitFun/releases/download/${{ needs.prepare.outputs.release_tag }}/relay-image.json" \
@@ -720,7 +757,7 @@ jobs:
           RELEASE_CHANNEL: ${{ needs.prepare.outputs.release_channel }}
         run: |
           set -euo pipefail
-          if ! gh release view channel-beta --repo GCWing/BitFun >/dev/null 2>&1; then
+          if ! gh release view channel-beta --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             if [[ "${RELEASE_CHANNEL}" == "stable" ]]; then
               echo "promote=false" >>"$GITHUB_OUTPUT"
               echo "No beta channel exists; stable release does not need to create one."
@@ -728,7 +765,7 @@ jobs:
             fi
           else
             curl -fsSL --retry 5 --retry-delay 3 \
-              "https://github.com/GCWing/BitFun/releases/download/channel-beta/latest.json" \
+              "https://github.com/${GITHUB_REPOSITORY}/releases/download/channel-beta/latest.json" \
               -o current.beta.json || true
           fi
           args=(--candidate latest.published.json --github-output "$GITHUB_OUTPUT")
@@ -745,9 +782,9 @@ jobs:
           CHECKOUT_REF: ${{ needs.prepare.outputs.checkout_ref }}
         run: |
           set -euo pipefail
-          if ! gh release view channel-beta --repo GCWing/BitFun >/dev/null 2>&1; then
+          if ! gh release view channel-beta --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release create channel-beta \
-              --repo GCWing/BitFun \
+              --repo "${GITHUB_REPOSITORY}" \
               --target "${CHECKOUT_REF}" \
               --prerelease \
               --title "BitFun Beta Update Channel" \
@@ -756,10 +793,10 @@ jobs:
           mkdir -p beta-channel
           cp latest.published.json beta-channel/latest.json
           gh release upload channel-beta beta-channel/latest.json \
-            --repo GCWing/BitFun \
+            --repo "${GITHUB_REPOSITORY}" \
             --clobber
           curl -fsSL --retry 5 --retry-delay 3 \
-            "https://github.com/GCWing/BitFun/releases/download/channel-beta/latest.json" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/channel-beta/latest.json" \
             -o channel-beta.published.json
           test "$(jq -r '.version' channel-beta.published.json)" = \
             "${{ steps.beta-channel.outputs.candidate_version }}"
@@ -770,6 +807,7 @@ jobs:
       # still the source of truth, so a failed or unconfigured ping never fails
       # the release. Receiver setup: scripts/openbitfun-release-sync.sh.
       - name: Request openbitfun mirror sync
+        if: github.repository == 'GCWing/BitFun'
         continue-on-error: true
         env:
           SYNC_WEBHOOK_URL: ${{ secrets.OPENBITFUN_SYNC_WEBHOOK_URL }}

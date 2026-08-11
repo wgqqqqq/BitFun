@@ -28,13 +28,17 @@ Public beta assets are stored on the immutable version tag. After every asset
 and signature is verified, the workflow updates only the `latest.json` asset on
 the `channel-beta` pre-release. Beta Desktop builds read that pointer and fall
 back to `https://openbitfun.com/release/beta/latest.json`.
+The beta release contains Desktop and Installer assets only. CLI and Relay
+floating releases remain stable-only.
 
 The selected ref must resolve to a commit in the protected `main` history. The
 workflow pins that SHA before dispatching platform jobs and rejects an existing
 release tag if it points somewhere else. Configure the signing secrets and the
 public beta approval policy so untrusted pull-request code cannot access them.
 This protected-history requirement applies to the canonical `GCWing/BitFun`
-repository; forks may run artifact-only packaging from their own test branches.
+repository; forks may run packaging from their own test branches. A fork beta
+uses that fork's `channel-beta` release as both updater origins, so it cannot
+silently consume or mutate the canonical beta channel.
 
 A stable release promotes the beta pointer only when its version is not older
 than the current beta. This lets beta users move from `0.2.18-beta.N` to

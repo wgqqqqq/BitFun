@@ -336,23 +336,26 @@ test('stages unique release asset names before publishing', () => {
     ),
   );
   const steps = workflow.jobs['upload-release-assets'].steps;
-  const stagingIndex = steps.findIndex(
-    (step) => step.name === 'Stage uniquely named release assets',
-  );
+  const stagingIndexes = [
+    steps.findIndex((step) => step.name === 'Stage stable release assets'),
+    steps.findIndex((step) => step.name === 'Stage beta release assets'),
+  ];
   const uploadIndex = steps.findIndex((step) => step.name === 'Upload to release');
 
-  assert.notEqual(stagingIndex, -1);
+  assert.equal(stagingIndexes.every((index) => index >= 0), true);
   assert.notEqual(uploadIndex, -1);
-  assert.ok(stagingIndex < uploadIndex);
-  assert.match(
-    steps[stagingIndex].run,
-    /node scripts\/stage-github-release-assets\.mjs/,
-  );
-  assert.doesNotMatch(
-    steps[stagingIndex].run,
-    /release-assets\/\*\*\/\*\.sig(?:\s|\\)/,
-    'raw updater signatures have colliding names across macOS architectures',
-  );
+  for (const stagingIndex of stagingIndexes) {
+    assert.ok(stagingIndex < uploadIndex);
+    assert.match(
+      steps[stagingIndex].run,
+      /node scripts\/stage-github-release-assets\.mjs/,
+    );
+    assert.doesNotMatch(
+      steps[stagingIndex].run,
+      /release-assets\/\*\*\/\*\.sig(?:\s|\\)/,
+      'raw updater signatures have colliding names across macOS architectures',
+    );
+  }
   assert.equal(steps[uploadIndex].with.files, 'release-upload-assets/*');
 });
 
@@ -379,7 +382,9 @@ test('Desktop packaging keeps beta identity explicit and stable-safe', () => {
     packageJob.env.BITFUN_RELEASE_CHANNEL,
     '${{ needs.prepare.outputs.release_channel }}',
   );
-  assert.equal(packageJob.env.TAURI_UPDATER_ENDPOINT, undefined);
+  assert.match(packageJob.env.TAURI_UPDATER_ENDPOINT, /github\.repository/);
+  assert.match(packageJob.env.TAURI_UPDATER_ENDPOINT, /channel-beta/);
+  assert.match(packageJob.env.BITFUN_RELEASE_PUBKEY, /BITFUN_RELEASE_PUBKEY/);
   const patchIndex = packageJob.steps.findIndex(
     (step) => step.name === 'Project beta build version',
   );
@@ -405,6 +410,15 @@ test('Desktop packaging keeps beta identity explicit and stable-safe', () => {
     (step) => step.name === 'Publish beta channel manifest',
   );
   assert.ok(verifyIndexPublished >= 0 && verifyIndexPublished < promoteIndex);
+  assert.match(workflow.jobs['linux-binaries'].if, /release_channel == 'stable'/);
+  assert.equal(
+    uploadSteps.find((step) => step.name === 'Stage beta release assets').if,
+    "needs.prepare.outputs.release_channel == 'beta'",
+  );
+  assert.match(
+    uploadSteps.find((step) => step.name === 'Generate updater manifest').run,
+    /github\.repository/,
+  );
 });
 
 test('beta publishing cannot advance the Relay latest image tag', () => {
