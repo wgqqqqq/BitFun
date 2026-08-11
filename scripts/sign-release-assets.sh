@@ -6,7 +6,8 @@
 # Usage: sign-release-assets.sh <file> [<file>...]
 #
 # Environment:
-#   BITFUN_SIGNING_KEY       minisign secret key, base64 (Tauri's wrapper format)
+#   BITFUN_SIGNING_KEY       minisign secret key, either the raw key file or
+#                            base64 of that file (legacy wrapper format)
 #   BITFUN_SIGNING_PASSWORD  password for that key
 #   BITFUN_SIGNING_PUBKEY    minisign public key, base64; used to self-verify
 #
@@ -88,9 +89,17 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 umask 077
 
-# Tauri stores the minisign secret key base64-wrapped; unwrap it to the on-disk
-# format minisign expects.
-printf '%s' "$BITFUN_SIGNING_KEY" | base64 -d >"$WORK/release.key"
+# New Tauri CLIs accept the raw minisign key file as their environment value;
+# older repository secrets wrap that whole file in base64. Support both so the
+# Tauri bundler and direct minisign asset signing can share one secret.
+case "$BITFUN_SIGNING_KEY" in
+  "untrusted comment:"*)
+    printf '%s\n' "$BITFUN_SIGNING_KEY" >"$WORK/release.key"
+    ;;
+  *)
+    printf '%s' "$BITFUN_SIGNING_KEY" | base64 -d >"$WORK/release.key"
+    ;;
+esac
 printf '%s' "${BITFUN_SIGNING_PUBKEY:-}" | base64 -d >"$WORK/release.pub" 2>/dev/null || true
 
 signed=0
