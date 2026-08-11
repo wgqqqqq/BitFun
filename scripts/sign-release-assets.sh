@@ -9,7 +9,8 @@
 #   BITFUN_SIGNING_KEY       minisign secret key, either the raw key file or
 #                            base64 of that file (legacy wrapper format)
 #   BITFUN_SIGNING_PASSWORD  password for that key
-#   BITFUN_SIGNING_PUBKEY    minisign public key, base64; used to self-verify
+#   BITFUN_SIGNING_PUBKEY    minisign public key, either the raw key file or
+#                            base64 of that file; used to self-verify
 #
 # With no signing key configured this is a no-op, so forks keep building.
 #
@@ -100,7 +101,14 @@ case "$BITFUN_SIGNING_KEY" in
     printf '%s' "$BITFUN_SIGNING_KEY" | base64 -d >"$WORK/release.key"
     ;;
 esac
-printf '%s' "${BITFUN_SIGNING_PUBKEY:-}" | base64 -d >"$WORK/release.pub" 2>/dev/null || true
+case "${BITFUN_SIGNING_PUBKEY:-}" in
+  "untrusted comment:"*)
+    printf '%s\n' "$BITFUN_SIGNING_PUBKEY" >"$WORK/release.pub"
+    ;;
+  *)
+    printf '%s' "${BITFUN_SIGNING_PUBKEY:-}" | base64 -d >"$WORK/release.pub" 2>/dev/null || true
+    ;;
+esac
 
 signed=0
 skipped=0
