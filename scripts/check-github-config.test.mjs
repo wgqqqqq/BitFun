@@ -813,6 +813,15 @@ test('PR-capable release builds cannot save repository caches or upload CI packa
     }
   }
 
+  for (const workflow of [ci, artifacts, linux]) {
+    for (const job of Object.values(workflow.jobs)) {
+      for (const bun of (job.steps ?? []).filter((step) =>
+        step.uses?.startsWith('oven-sh/setup-bun@'))) {
+        assert.equal(bun.with?.['no-cache'], true);
+      }
+    }
+  }
+
   const packageCaller = ci.jobs['package-impact-contract'];
   assert.equal(packageCaller.with.cache_write, false);
   assert.equal(packageCaller.with.upload_artifacts, false);
