@@ -1674,6 +1674,14 @@ impl WorkspaceLock {
     }
 }
 
+impl Drop for WorkspaceLock {
+    fn drop(&mut self) {
+        if let Err(error) = fs2::FileExt::unlock(&self._file) {
+            tracing::warn!("Failed to release workspace dispatch lock: {error}");
+        }
+    }
+}
+
 pub(crate) struct DispatchLease {
     _file: File,
 }
@@ -1689,6 +1697,14 @@ impl DispatchLease {
             .with_context(|| format!("open dispatch lease {}", path.display()))?;
         set_private_file_permissions(path)?;
         try_lock_file_exclusive(&file).map(|acquired| acquired.then_some(Self { _file: file }))
+    }
+}
+
+impl Drop for DispatchLease {
+    fn drop(&mut self) {
+        if let Err(error) = fs2::FileExt::unlock(&self._file) {
+            tracing::warn!("Failed to release dispatch lease: {error}");
+        }
     }
 }
 
