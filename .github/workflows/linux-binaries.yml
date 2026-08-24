@@ -20,6 +20,16 @@ on:
         required: false
         default: 7
         type: number
+      upload_artifacts:
+        description: "Whether to upload archives for a publishing caller."
+        required: false
+        default: true
+        type: boolean
+      cache_write:
+        description: "Allow a trusted non-PR caller to refresh build caches."
+        required: false
+        default: false
+        type: boolean
     secrets:
       release_signing_key:
         description: "Tauri/minisign private key, base64. Absent on forks: archives ship unsigned."
@@ -102,8 +112,10 @@ jobs:
       - name: Cache Rust build
         uses: swatinem/rust-cache@v2
         with:
-          shared-key: "linux-binaries-v1-${{ matrix.platform.name }}"
+          shared-key: "linux-binaries-v2-${{ github.base_ref || github.ref_name }}-${{ matrix.platform.name }}"
           cache-bin: false
+          save-if: ${{ inputs.cache_write && github.event_name != 'pull_request' }}
+          cache-on-failure: ${{ inputs.cache_write && github.event_name != 'pull_request' }}
 
       - name: Verify committed Cargo metadata
         run: cargo metadata --locked --no-deps
@@ -192,6 +204,7 @@ jobs:
             "$RELAY_ARCHIVE" "${RELAY_ARCHIVE}.sha256"
 
       - name: Upload Linux binary artifacts
+        if: ${{ inputs.upload_artifacts }}
         uses: actions/upload-artifact@v6
         with:
           name: bitfun-linux-${{ inputs.artifact_prefix }}-${{ matrix.platform.name }}

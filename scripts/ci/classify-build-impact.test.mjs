@@ -1,0 +1,270 @@
+import assert from 'node:assert/strict';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { classifyBuildImpact } from './classify-build-impact.mjs';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const scriptPath = path.join(repoRoot, 'scripts/ci/classify-build-impact.mjs');
+const allPlatforms = [
+  'linux-x64',
+  'linux-arm64',
+  'macos-arm64',
+  'macos-x64',
+  'windows-x64',
+];
+
+function expected({
+  rustRequired,
+  frontendRequired = true,
+  desktopPlatforms = [],
+  linuxBinariesRequired = false,
+  dshProfileRequired = false,
+  reason,
+  changedCount = 1,
+}) {
+  return {
+    rustRequired,
+    frontendRequired,
+    desktopPackagesRequired: desktopPlatforms.length > 0,
+    desktopPlatforms,
+    linuxBinariesRequired,
+    dshProfileRequired,
+    packageRequired: desktopPlatforms.length > 0 || linuxBinariesRequired,
+    reason,
+    changedCount,
+  };
+}
+
+function git(root, args) {
+  const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
+function commit(root, message) {
+  git(root, ['add', '--all']);
+  git(root, [
+    '-c', 'user.name=CI Impact Test',
+    '-c', 'user.email=ci-impact@example.invalid',
+    'commit', '-m', message,
+  ]);
+  return git(root, ['rev-parse', 'HEAD']);
+}
+
+function parseOutputs(file) {
+  return Object.fromEntries(
+    readFileSync(file, 'utf8').trim().split(/\r?\n/).map((line) => line.split('=', 2)),
+  );
+}
+
+function runClassifier(root, base, head, rangeMode = 'direct') {
+  const output = path.join(root, `github-output-${Date.now()}-${Math.random()}.txt`);
+  const summary = path.join(root, `github-summary-${Date.now()}-${Math.random()}.md`);
+  const result = spawnSync(
+    process.execPath,
+    [scriptPath, '--base', base, '--head', head, '--range-mode', rangeMode],
+    {
+      cwd: root,
+      env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary },
+      encoding: 'utf8',
+    },
+  );
+  return {
+    ...result,
+    outputs: result.status === 0 ? parseOutputs(output) : undefined,
+    summary: existsSync(summary) ? readFileSync(summary, 'utf8') : undefined,
+  };
+}
+
+test('maps representative changes to the smallest predictive validation', () => {
+  const cases = [
+    {
+      paths: ['docs/review-notes.md', 'png/example.png'],
+      result: expected({
+        rustRequired: false,
+        frontendRequired: false,
+        reason: 'ci-ignored-only',
+        changedCount: 2,
+      }),
+    },
+    {
+      paths: ['src/web-ui/src/example.ts'],
+      result: expected({ rustRequired: false, reason: 'web-ui-only' }),
+    },
+    {
+      paths: ['src/crates/services/services-core/src/lib.rs'],
+      result: expected({ rustRequired: true, reason: 'rust-build-input' }),
+    },
+    {
+      paths: ['BitFun-Installer/scripts/build-installer.cjs'],
+      result: expected({
+        rustRequired: true,
+        desktopPlatforms: ['windows-x64'],
+        reason: 'platform-package-input',
+      }),
+    },
+    {
+      paths: ['scripts/ci/setup-macos-signing.sh'],
+      result: expected({
+        rustRequired: true,
+        desktopPlatforms: ['macos-arm64', 'macos-x64'],
+        reason: 'platform-package-input',
+      }),
+    },
+    {
+      paths: ['scripts/ci/verify-appimage-fcitx.sh'],
+      result: expected({
+        rustRequired: true,
+        desktopPlatforms: ['linux-x64', 'linux-arm64'],
+        reason: 'platform-package-input',
+      }),
+    },
+    {
+      paths: ['scripts/cli/package-unix.sh'],
+      result: expected({
+        rustRequired: true,
+        linuxBinariesRequired: true,
+        reason: 'platform-package-input',
+      }),
+    },
+    {
+      paths: ['packages/dsh-acp/src/index.ts'],
+      result: expected({
+        rustRequired: true,
+        dshProfileRequired: true,
+        reason: 'outside-web-ui',
+      }),
+    },
+    {
+      paths: ['Cargo.lock'],
+      result: expected({
+        rustRequired: true,
+        desktopPlatforms: allPlatforms,
+        linuxBinariesRequired: true,
+        dshProfileRequired: true,
+        reason: 'full-package-input',
+      }),
+    },
+    {
+      paths: ['.github/workflows/nightly.yml'],
+      result: expected({
+        rustRequired: true,
+        desktopPlatforms: allPlatforms,
+        linuxBinariesRequired: true,
+        dshProfileRequired: true,
+        reason: 'full-package-input',
+      }),
+    },
+  ];
+
+  for (const { paths, result } of cases) {
+    assert.deepEqual(classifyBuildImpact(paths), result, paths.join(', '));
+  }
+});
+
+test('keeps nested Markdown fail-closed because it may be a compile-time input', () => {
+  assert.deepEqual(
+    classifyBuildImpact([
+      'src/web-ui/src/example.ts',
+      'src/crates/assembly/agent-content/prompts/agents/example.md',
+    ]),
+    expected({
+      rustRequired: true,
+      reason: 'outside-web-ui',
+      changedCount: 2,
+    }),
+  );
+});
+
+test('uses a merge-base range for pull requests and emits every workflow output', (t) => {
+  const root = mkdtempSync(path.join(tmpdir(), 'bitfun-build-impact-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  git(root, ['init', '--initial-branch=main']);
+  writeFileSync(path.join(root, 'README.md'), 'baseline\n');
+  commit(root, 'baseline');
+
+  git(root, ['switch', '-c', 'feature']);
+  const installer = path.join(root, 'BitFun-Installer/scripts/build-installer.cjs');
+  mkdirSync(path.dirname(installer), { recursive: true });
+  writeFileSync(installer, 'export {};\n');
+  const head = commit(root, 'installer change');
+
+  git(root, ['switch', 'main']);
+  writeFileSync(path.join(root, 'Cargo.lock'), 'version = 4\n');
+  const currentBase = commit(root, 'base dependency change');
+
+  const pullRequest = runClassifier(root, currentBase, head, 'merge-base');
+  assert.equal(pullRequest.status, 0, pullRequest.stderr);
+  assert.deepEqual(pullRequest.outputs, {
+    rust_required: 'true',
+    frontend_required: 'true',
+    desktop_packages_required: 'true',
+    desktop_platforms: '["windows-x64"]',
+    linux_binaries_required: 'false',
+    dsh_profile_required: 'false',
+    package_required: 'true',
+    reason: 'platform-package-input',
+    changed_count: '1',
+  });
+  assert.match(pullRequest.summary, /Build impact classification/);
+  assert.match(pullRequest.summary, /Desktop packages:<\/strong> windows-x64/);
+
+  const push = runClassifier(root, currentBase, head, 'direct');
+  assert.deepEqual(JSON.parse(push.outputs.desktop_platforms), allPlatforms);
+  assert.equal(push.outputs.reason, 'full-package-input');
+});
+
+test('fails closed when paths or event ranges are invalid or unavailable', (t) => {
+  for (const paths of [[], ['src/web-ui/../apps/desktop/src/lib.rs'], ['src\\web-ui\\x.ts']]) {
+    const result = classifyBuildImpact(paths);
+    assert.equal(result.rustRequired, true);
+    assert.equal(result.frontendRequired, true);
+    assert.deepEqual(result.desktopPlatforms, allPlatforms);
+    assert.equal(result.linuxBinariesRequired, true);
+    assert.equal(result.dshProfileRequired, true);
+  }
+
+  const root = mkdtempSync(path.join(tmpdir(), 'bitfun-build-impact-range-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  git(root, ['init', '--initial-branch=main']);
+  writeFileSync(path.join(root, 'README.md'), 'baseline\n');
+  const head = commit(root, 'baseline');
+
+  for (const [base, reason] of [
+    ['0'.repeat(40), 'invalid-range'],
+    ['f'.repeat(40), 'unavailable-range'],
+  ]) {
+    const result = runClassifier(root, base, head);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.outputs.reason, reason);
+    assert.equal(result.outputs.package_required, 'true');
+    assert.deepEqual(JSON.parse(result.outputs.desktop_platforms), allPlatforms);
+  }
+});
+
+test('rejects tracked Rust sources that reference the Web UI source tree', (t) => {
+  const root = mkdtempSync(path.join(tmpdir(), 'bitfun-build-impact-boundary-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  git(root, ['init', '--initial-branch=main']);
+  writeFileSync(path.join(root, 'README.md'), 'baseline\n');
+  const base = commit(root, 'baseline');
+  const rustFile = path.join(root, 'src/lib.rs');
+  mkdirSync(path.dirname(rustFile), { recursive: true });
+  writeFileSync(rustFile, 'const WEB: &str = include_dir!("../web-ui/src");\n');
+  const head = commit(root, 'forbidden Rust input');
+
+  const result = runClassifier(root, base, head);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Rust source must not reference the Web UI source tree/);
+});
