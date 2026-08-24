@@ -19,13 +19,19 @@ permissions:
   contents: read
 
 jobs:
-  # ── Rust / CLI impact: conservative scheduling decision ────────────
-  rust-impact:
-    name: Rust / CLI Impact
+  # ── Build impact: fast checks plus the smallest useful package set ──
+  build-impact:
+    name: Build Impact
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       rust_required: ${{ steps.classify.outputs.rust_required }}
+      frontend_required: ${{ steps.classify.outputs.frontend_required }}
+      desktop_packages_required: ${{ steps.classify.outputs.desktop_packages_required }}
+      desktop_platforms: ${{ steps.classify.outputs.desktop_platforms }}
+      linux_binaries_required: ${{ steps.classify.outputs.linux_binaries_required }}
+      dsh_profile_required: ${{ steps.classify.outputs.dsh_profile_required }}
+      package_required: ${{ steps.classify.outputs.package_required }}
       reason: ${{ steps.classify.outputs.reason }}
       changed_count: ${{ steps.classify.outputs.changed_count }}
     steps:
@@ -41,13 +47,13 @@ jobs:
           node-version-file: package.json
           package-manager-cache: false
 
-      - name: Classify Rust and CLI impact
+      - name: Classify build impact
         id: classify
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           RANGE_MODE: ${{ github.event_name == 'pull_request' && 'merge-base' || 'direct' }}
-        run: node scripts/ci/classify-rust-impact.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --range-mode "$RANGE_MODE"
+        run: node scripts/ci/classify-build-impact.mjs --base "$BASE_SHA" --head "$HEAD_SHA" --range-mode "$RANGE_MODE"
 
   # ── Shell deploy assets: LF endings + syntax ───────────────────────
   # Relay one-click deploy embeds these scripts into the Desktop binary and
@@ -109,8 +115,8 @@ jobs:
   # ── CLI: independent tests ─────────────────────────────────────────
   cli-test:
     name: CLI Tests (${{ matrix.os }})
-    needs: rust-impact
-    if: ${{ !cancelled() && needs.rust-impact.outputs.rust_required != 'false' }}
+    needs: build-impact
+    if: ${{ !cancelled() && needs.build-impact.outputs.rust_required != 'false' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -143,11 +149,11 @@ jobs:
 
       - uses: swatinem/rust-cache@v2
         with:
-          shared-key: "cli-ci-v2-${{ matrix.cache_key }}"
+          shared-key: "cli-ci-v3-${{ github.base_ref || github.ref_name }}-${{ matrix.cache_key }}"
           cache-bin: false
           # PRs restore trusted caches but never publish merge-ref artifacts.
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          cache-on-failure: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/1.0.0-explore') }}
+          cache-on-failure: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/1.0.0-explore') }}
 
       - name: Run CLI and ACP tests on macOS
         if: runner.os == 'macOS'
@@ -178,8 +184,8 @@ jobs:
   # ── Rust: build check ─────────────────────────────────────────────
   rust-build-check:
     name: Rust Build Check (${{ matrix.os }})
-    needs: rust-impact
-    if: ${{ !cancelled() && needs.rust-impact.outputs.rust_required != 'false' }}
+    needs: build-impact
+    if: ${{ !cancelled() && needs.build-impact.outputs.rust_required != 'false' }}
     runs-on: ${{ matrix.os }}
     env:
       # Keep the workspace check plus desktop test profiles within hosted-runner disk limits.
@@ -243,12 +249,12 @@ jobs:
 
       - uses: swatinem/rust-cache@v2
         with:
-          shared-key: "ci-check-v5-${{ runner.os }}-no-cargo-bin-v1"
+          shared-key: "ci-check-v6-${{ github.base_ref || github.ref_name }}-${{ runner.os }}-no-cargo-bin"
           cache-bin: false
           # PR caches are scoped to merge refs; trusted main pushes own shared
           # refreshes and retain completed dependency builds after late test failures.
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          cache-on-failure: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/1.0.0-explore') }}
+          cache-on-failure: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/1.0.0-explore') }}
 
       # Validate the committed manifests and lockfile before any release
       # projection is allowed to rewrite workspace package entries.
@@ -262,7 +268,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: target/sherpa-onnx-prebuilt
-          key: sherpa-onnx-v1-${{ runner.os }}-${{ runner.arch }}-1.13.4-static
+          key: sherpa-onnx-v2-${{ github.base_ref || github.ref_name }}-${{ runner.os }}-${{ runner.arch }}-1.13.4-static
 
       - name: Repair missing Sherpa native state
         shell: bash
@@ -280,12 +286,12 @@ jobs:
       - name: Save Sherpa native libraries
         if: >-
           github.event_name == 'push' &&
-          github.ref == 'refs/heads/main' &&
+          (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/1.0.0-explore') &&
           steps.sherpa-native-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: target/sherpa-onnx-prebuilt
-          key: sherpa-onnx-v1-${{ runner.os }}-${{ runner.arch }}-1.13.4-static
+          key: sherpa-onnx-v2-${{ github.base_ref || github.ref_name }}-${{ runner.os }}-${{ runner.arch }}-1.13.4-static
 
       # The installer is intentionally excluded from the root Cargo workspace,
       # so the workspace check above cannot catch drift in its shared Rust APIs.
@@ -323,14 +329,17 @@ jobs:
       - name: Run search tool tests
         run: "cargo test --locked -p tool-runtime --lib search::"
 
-  # Execute the exact five-platform Nightly artifact producers with publishing
-  # disabled. This is the build contract: a required CI result cannot be green
-  # unless the same release linking, Tauri bundling, Installer, Extension Host,
-  # macOS CLI, and Linux CLI/Relay paths used by Nightly all succeed.
-  nightly-build-contract:
-    name: Nightly Build Contract
-    needs: rust-impact
-    if: ${{ !cancelled() && needs.rust-impact.result == 'success' }}
+  # Package only paths whose delivery contract changed. Ordinary Rust and Web
+  # changes stay on fast compile/test/build gates; complete seven-producer
+  # coverage remains the weekday/manual Nightly owner.
+  package-impact-contract:
+    name: Impact-selected Package Contract
+    needs: build-impact
+    if: >-
+      !cancelled() &&
+      github.event_name == 'pull_request' &&
+      needs.build-impact.result == 'success' &&
+      needs.build-impact.outputs.package_required == 'true'
     uses: ./.github/workflows/nightly-artifacts.yml
     permissions:
       contents: read
@@ -339,45 +348,59 @@ jobs:
       version: 0.0.0-nightly.ci.${{ github.run_id }}
       artifact_prefix: ci-${{ github.run_id }}
       artifact_retention_days: 1
+      build_desktop_packages: ${{ needs.build-impact.outputs.desktop_packages_required == 'true' }}
+      desktop_platforms: ${{ needs.build-impact.outputs.desktop_platforms }}
+      build_linux_binaries: ${{ needs.build-impact.outputs.linux_binaries_required == 'true' }}
+      upload_artifacts: false
+      cache_write: false
 
-  # Stable Rust/CLI result for CI runs: matrix jobs may be skipped for a proven
-  # Web-only change, but this result verifies why they ran or skipped and makes
-  # the exact Nightly artifact graph part of the required result.
+  # Stable required result: verify both fast Rust scheduling and whether the
+  # impact-selected PR package contract ran or intentionally skipped.
   rust-validation-result:
     name: Rust / CLI Validation
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: ${{ always() }}
-    needs: [rust-impact, cli-test, rust-build-check, nightly-build-contract]
+    needs: [build-impact, cli-test, rust-build-check, package-impact-contract]
     steps:
       - name: Verify Rust and CLI result
         shell: pwsh
         env:
-          RUST_REQUIRED: ${{ needs.rust-impact.outputs.rust_required }}
-          IMPACT_RESULT: ${{ needs.rust-impact.result }}
+          RUST_REQUIRED: ${{ needs.build-impact.outputs.rust_required }}
+          PACKAGE_REQUIRED: ${{ needs.build-impact.outputs.package_required }}
+          EVENT_NAME: ${{ github.event_name }}
+          IMPACT_RESULT: ${{ needs.build-impact.result }}
           CLI_RESULT: ${{ needs.cli-test.result }}
           RUST_RESULT: ${{ needs.rust-build-check.result }}
-          BUILD_RESULT: ${{ needs.nightly-build-contract.result }}
+          BUILD_RESULT: ${{ needs.package-impact-contract.result }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:IMPACT_RESULT -ne 'success') {
-            throw "Rust impact classification did not succeed: $env:IMPACT_RESULT"
+            throw "Build impact classification did not succeed: $env:IMPACT_RESULT"
           }
 
           switch ($env:RUST_REQUIRED) {
             'false' {
-              if ($env:CLI_RESULT -ne 'skipped' -or $env:RUST_RESULT -ne 'skipped' -or $env:BUILD_RESULT -ne 'success') {
-                throw "Expected skipped Rust/CLI jobs and a successful Nightly build contract for a Web-only change; CLI=$env:CLI_RESULT Rust=$env:RUST_RESULT Build=$env:BUILD_RESULT"
+              if ($env:CLI_RESULT -ne 'skipped' -or $env:RUST_RESULT -ne 'skipped') {
+                throw "Expected skipped Rust/CLI jobs; CLI=$env:CLI_RESULT Rust=$env:RUST_RESULT"
               }
             }
             'true' {
-              if ($env:CLI_RESULT -ne 'success' -or $env:RUST_RESULT -ne 'success' -or $env:BUILD_RESULT -ne 'success') {
-                throw "Expected successful Rust, CLI, and Nightly build jobs; CLI=$env:CLI_RESULT Rust=$env:RUST_RESULT Build=$env:BUILD_RESULT"
+              if ($env:CLI_RESULT -ne 'success' -or $env:RUST_RESULT -ne 'success') {
+                throw "Expected successful Rust and CLI jobs; CLI=$env:CLI_RESULT Rust=$env:RUST_RESULT"
               }
             }
             default {
               throw "Unexpected rust_required value: '$env:RUST_REQUIRED'"
             }
+          }
+
+          $packageExpected = $env:EVENT_NAME -eq 'pull_request' -and $env:PACKAGE_REQUIRED -eq 'true'
+          if ($packageExpected -and $env:BUILD_RESULT -ne 'success') {
+            throw "Expected successful impact-selected package jobs; Build=$env:BUILD_RESULT"
+          }
+          if (-not $packageExpected -and $env:BUILD_RESULT -ne 'skipped') {
+            throw "Expected package jobs to be skipped; Build=$env:BUILD_RESULT"
           }
 
   # ── DeepSeek Harness bridge: profile packaging on Windows ──────────
@@ -390,6 +413,8 @@ jobs:
   # platform whose path and process rules differ.
   dsh-profile-windows:
     name: DSH Profile Packaging (windows-latest)
+    needs: build-impact
+    if: ${{ !cancelled() && needs.build-impact.outputs.dsh_profile_required == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -441,6 +466,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_OPTIONS: --max-old-space-size=6144
+    needs: build-impact
     steps:
       - uses: actions/checkout@v5
         with:
@@ -452,7 +478,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: pnpm
+          package-manager-cache: false
 
       - name: Check repository hygiene
         run: pnpm run check:repo-hygiene
@@ -466,13 +492,56 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Setup Bun for package resource preflight
+        if: needs.build-impact.outputs.frontend_required != 'false'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Setup Rust for release projection preflight
+        if: needs.build-impact.outputs.frontend_required != 'false'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify committed release metadata
+        if: needs.build-impact.outputs.frontend_required != 'false'
+        run: |
+          cargo metadata --locked --no-deps
+          cargo metadata --locked --no-deps --manifest-path BitFun-Installer/src-tauri/Cargo.toml
+
+      - name: Verify Installer i18n projection
+        if: needs.build-impact.outputs.frontend_required != 'false'
+        run: pnpm --dir BitFun-Installer run sync:i18n
+
+      - name: Verify Installer Tauri package alignment
+        if: needs.build-impact.outputs.frontend_required != 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          info="$(pnpm --dir BitFun-Installer exec tauri info 2>&1)"
+          printf '%s\n' "$info"
+          if grep -Fq 'Error: Found version mismatched Tauri packages.' <<<"$info"; then
+            exit 1
+          fi
+
+      - name: Build plugin Host resources
+        if: needs.build-impact.outputs.frontend_required != 'false'
+        run: |
+          bun install --cwd src/apps/extension-host --frozen-lockfile
+          bun run --cwd src/apps/extension-host build
+
+      - name: Generate web API bindings
+        if: needs.build-impact.outputs.frontend_required != 'false'
+        run: pnpm --dir src/web-ui run gen:types
+
       - name: Validate PPT Live generated-file contract
+        if: needs.build-impact.outputs.frontend_required != 'false'
         run: pnpm run test:ppt-live
 
       - name: Validate GitHub config
         run: pnpm run check:github-config
 
       - name: Select i18n contract profile
+        if: needs.build-impact.outputs.frontend_required != 'false'
         shell: bash
         run: |
           if git rev-parse HEAD^1 >/dev/null 2>&1 &&
@@ -481,34 +550,55 @@ jobs:
           fi
 
       - name: Validate i18n contract
+        if: needs.build-impact.outputs.frontend_required != 'false'
         run: pnpm run i18n:contract:test:ci
 
       - name: Audit i18n resources
+        if: needs.build-impact.outputs.frontend_required != 'false'
         run: pnpm run i18n:audit
 
       - name: Validate theme color audit contract
+        if: needs.build-impact.outputs.frontend_required != 'false'
         run: pnpm run theme:color-audit:test
 
       - name: Audit theme color governance
+        if: needs.build-impact.outputs.frontend_required != 'false'
         run: pnpm run theme:color-audit:all
 
       - name: Validate theme visual governance contract
+        if: needs.build-impact.outputs.frontend_required != 'false'
         run: pnpm run theme:visual-contract
 
       - name: Validate WebKit compatibility gate
+        if: needs.build-impact.outputs.frontend_required != 'false'
         run: pnpm run verify:webkit-compatibility:test
 
       - name: Lint web UI
+        if: needs.build-impact.outputs.frontend_required != 'false'
         run: pnpm run lint:web
 
       - name: Run web UI tests
+        if: needs.build-impact.outputs.frontend_required != 'false'
         run: pnpm --dir src/web-ui run test:run
 
       - name: Build web UI
+        if: needs.build-impact.outputs.frontend_required != 'false'
         run: pnpm run build:web
 
       - name: Type-check mobile web
+        if: needs.build-impact.outputs.frontend_required != 'false'
         run: pnpm --dir src/mobile-web run type-check
 
       - name: Build mobile web
+        if: needs.build-impact.outputs.frontend_required != 'false'
         run: pnpm run build:mobile-web
+
+      - name: Project a Nightly version
+        if: needs.build-impact.outputs.frontend_required != 'false'
+        run: node scripts/set-build-version.mjs --version "0.0.0-nightly.ci.${{ github.run_id }}"
+
+      - name: Verify projected release metadata
+        if: needs.build-impact.outputs.frontend_required != 'false'
+        run: |
+          cargo metadata --locked --no-deps
+          cargo metadata --locked --no-deps --manifest-path BitFun-Installer/src-tauri/Cargo.toml

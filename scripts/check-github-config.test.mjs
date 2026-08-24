@@ -209,12 +209,12 @@ test('keeps Rust CI independent, restore-only on PRs, and target-focused', () =>
   );
   const rustJob = workflow.jobs['rust-build-check'];
   const frontendJob = workflow.jobs['frontend-build'];
-  const trustedMain =
-    "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}";
+  const trustedBase =
+    "${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/1.0.0-explore') }}";
 
   assert.equal(
     rustJob.needs,
-    'rust-impact',
+    'build-impact',
     'Rust validation must not wait for the frontend build',
   );
   assert.equal(
@@ -247,8 +247,13 @@ test('keeps Rust CI independent, restore-only on PRs, and target-focused', () =>
       false,
       `${jobName} must consume the committed Cargo.lock`,
     );
-    assert.equal(cache?.with?.['save-if'], trustedMain);
-    assert.equal(cache?.with?.['cache-on-failure'], trustedMain);
+    assert.equal(cache?.with?.['save-if'], trustedBase);
+    assert.equal(cache?.with?.['cache-on-failure'], trustedBase);
+    assert.match(
+      cache?.with?.['shared-key'] ?? '',
+      /github\.base_ref \|\| github\.ref_name/,
+      `${jobName} must not mix main and explore build outputs`,
+    );
   }
 
   const cliJob = workflow.jobs['cli-test'];
@@ -284,7 +289,7 @@ test('keeps Rust CI independent, restore-only on PRs, and target-focused', () =>
     (step) => step.name === 'Save Sherpa native libraries',
   );
   const sherpaCacheKey =
-    'sherpa-onnx-v1-${{ runner.os }}-${{ runner.arch }}-1.13.4-static';
+    'sherpa-onnx-v2-${{ github.base_ref || github.ref_name }}-${{ runner.os }}-${{ runner.arch }}-1.13.4-static';
 
   assert.equal(restoreSherpaCache?.uses, 'actions/cache/restore@v5');
   assert.equal(restoreSherpaCache?.with?.path, 'target/sherpa-onnx-prebuilt');
@@ -299,7 +304,7 @@ test('keeps Rust CI independent, restore-only on PRs, and target-focused', () =>
   assert.equal(saveSherpaCache?.with?.key, sherpaCacheKey);
   assert.equal(
     saveSherpaCache?.if,
-    "github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.sherpa-native-cache.outputs.cache-hit != 'true'",
+    "github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/1.0.0-explore') && steps.sherpa-native-cache.outputs.cache-hit != 'true'",
   );
   assert.ok(
     rustJob.steps.indexOf(restoreSherpaCache) <
@@ -353,7 +358,7 @@ test('keeps Rust CI independent, restore-only on PRs, and target-focused', () =>
   );
 });
 
-test('gates Rust and CLI validation behind one fail-closed impact decision', (t) => {
+test('gates fast checks and PR packaging behind one fail-closed build decision', (t) => {
   const workflow = yaml.parse(
     readFileSync(path.join(repoRoot, '.github/workflows/ci.yml'), 'utf8'),
   );
@@ -364,10 +369,10 @@ test('gates Rust and CLI validation behind one fail-closed impact decision', (t)
       'nested Markdown may be a Rust compile-time input and must trigger classification',
     );
   }
-  const impactJob = workflow.jobs['rust-impact'];
+  const impactJob = workflow.jobs['build-impact'];
   const cliJob = workflow.jobs['cli-test'];
   const rustJob = workflow.jobs['rust-build-check'];
-  const buildJob = workflow.jobs['nightly-build-contract'];
+  const buildJob = workflow.jobs['package-impact-contract'];
   const resultJob = workflow.jobs['rust-validation-result'];
   const frontendJob = workflow.jobs['frontend-build'];
 
@@ -379,17 +384,63 @@ test('gates Rust and CLI validation behind one fail-closed impact decision', (t)
     frontendJob.steps.find((step) => step.name === 'Check core boundaries')?.run,
     'pnpm run check:core-boundaries',
   );
+  assert.equal(frontendJob.needs, 'build-impact');
+  const frontendNode = frontendJob.steps.find((step) =>
+    step.uses?.startsWith('actions/setup-node@'));
+  assert.equal(frontendNode?.with?.cache, undefined);
+  assert.equal(frontendNode?.with?.['package-manager-cache'], false);
+  const frontendGate = "needs.build-impact.outputs.frontend_required != 'false'";
+  for (const stepName of [
+    'Verify committed release metadata',
+    'Verify Installer i18n projection',
+    'Verify Installer Tauri package alignment',
+    'Build plugin Host resources',
+    'Generate web API bindings',
+    'Build web UI',
+    'Build mobile web',
+    'Project a Nightly version',
+    'Verify projected release metadata',
+  ]) {
+    assert.equal(
+      frontendJob.steps.find((step) => step.name === stepName)?.if,
+      frontendGate,
+      `${stepName} must run for code changes and skip documentation-only changes`,
+    );
+  }
+  const releaseMetadata =
+    'cargo metadata --locked --no-deps\n'
+    + 'cargo metadata --locked --no-deps --manifest-path BitFun-Installer/src-tauri/Cargo.toml\n';
+  assert.equal(
+    frontendJob.steps.find((step) => step.name === 'Verify committed release metadata')?.run,
+    releaseMetadata,
+  );
+  assert.equal(
+    frontendJob.steps.find((step) => step.name === 'Verify projected release metadata')?.run,
+    releaseMetadata,
+  );
 
-  assert.equal(impactJob.name, 'Rust / CLI Impact');
+  assert.equal(impactJob.name, 'Build Impact');
   assert.equal(impactJob['timeout-minutes'], 5);
   assert.equal(
     impactJob.outputs.rust_required,
     '${{ steps.classify.outputs.rust_required }}',
   );
+  assert.equal(
+    impactJob.outputs.desktop_platforms,
+    '${{ steps.classify.outputs.desktop_platforms }}',
+  );
+  assert.equal(
+    impactJob.outputs.package_required,
+    '${{ steps.classify.outputs.package_required }}',
+  );
+  assert.equal(
+    impactJob.outputs.dsh_profile_required,
+    '${{ steps.classify.outputs.dsh_profile_required }}',
+  );
   const checkout = impactJob.steps.find((step) => step.uses?.startsWith('actions/checkout@'));
   assert.equal(checkout?.with?.['fetch-depth'], 0);
   const classify = impactJob.steps.find((step) => step.id === 'classify');
-  assert.match(classify?.run ?? '', /scripts\/ci\/classify-rust-impact\.mjs/);
+  assert.match(classify?.run ?? '', /scripts\/ci\/classify-build-impact\.mjs/);
   assert.equal(
     classify?.env?.BASE_SHA,
     '${{ github.event.pull_request.base.sha || github.event.before }}',
@@ -405,49 +456,64 @@ test('gates Rust and CLI validation behind one fail-closed impact decision', (t)
   assert.match(classify?.run ?? '', /--range-mode "\$RANGE_MODE"/);
 
   for (const job of [cliJob, rustJob]) {
-    assert.equal(job.needs, 'rust-impact');
+    assert.equal(job.needs, 'build-impact');
     assert.match(job.if, /!cancelled\(\)/);
     assert.doesNotMatch(job.if, /always\(\)/);
     assert.match(job.if, /rust_required != 'false'/);
   }
 
-  assert.equal(buildJob.name, 'Nightly Build Contract');
-  assert.equal(buildJob.needs, 'rust-impact');
+  assert.equal(buildJob.name, 'Impact-selected Package Contract');
+  assert.equal(buildJob.needs, 'build-impact');
   assert.equal(buildJob.uses, './.github/workflows/nightly-artifacts.yml');
-  assert.match(buildJob.if, /rust-impact\.result == 'success'/);
-  assert.doesNotMatch(buildJob.if, /rust_required/);
+  assert.match(buildJob.if, /github\.event_name == 'pull_request'/);
+  assert.match(buildJob.if, /package_required == 'true'/);
   assert.deepEqual(buildJob.permissions, { contents: 'read' });
   assert.deepEqual(buildJob.with, {
     checkout_ref: '${{ github.sha }}',
     version: '0.0.0-nightly.ci.${{ github.run_id }}',
     artifact_prefix: 'ci-${{ github.run_id }}',
     artifact_retention_days: 1,
+    build_desktop_packages:
+      "${{ needs.build-impact.outputs.desktop_packages_required == 'true' }}",
+    desktop_platforms: '${{ needs.build-impact.outputs.desktop_platforms }}',
+    build_linux_binaries:
+      "${{ needs.build-impact.outputs.linux_binaries_required == 'true' }}",
+    upload_artifacts: false,
+    cache_write: false,
   });
 
   assert.equal(resultJob.name, 'Rust / CLI Validation');
   assert.equal(resultJob.if, '${{ always() }}');
   assert.deepEqual(
     [...resultJob.needs].sort(),
-    ['cli-test', 'nightly-build-contract', 'rust-build-check', 'rust-impact'],
+    ['build-impact', 'cli-test', 'package-impact-contract', 'rust-build-check'],
   );
   const verify = resultJob.steps.find((step) => step.name === 'Verify Rust and CLI result');
-  assert.equal(verify?.env?.RUST_REQUIRED, '${{ needs.rust-impact.outputs.rust_required }}');
-  assert.equal(verify?.env?.IMPACT_RESULT, '${{ needs.rust-impact.result }}');
+  assert.equal(verify?.env?.RUST_REQUIRED, '${{ needs.build-impact.outputs.rust_required }}');
+  assert.equal(verify?.env?.PACKAGE_REQUIRED, '${{ needs.build-impact.outputs.package_required }}');
+  assert.equal(verify?.env?.EVENT_NAME, '${{ github.event_name }}');
+  assert.equal(verify?.env?.IMPACT_RESULT, '${{ needs.build-impact.result }}');
   assert.equal(verify?.env?.CLI_RESULT, '${{ needs.cli-test.result }}');
   assert.equal(verify?.env?.RUST_RESULT, '${{ needs.rust-build-check.result }}');
   assert.equal(
     verify?.env?.BUILD_RESULT,
-    '${{ needs.nightly-build-contract.result }}',
+    '${{ needs.package-impact-contract.result }}',
   );
   assert.equal(verify?.shell, 'pwsh');
-  assert.match(verify?.run ?? '', /successful Nightly build contract/i);
-  assert.match(verify?.run ?? '', /successful Rust, CLI, and Nightly build jobs/i);
+  assert.match(verify?.run ?? '', /successful impact-selected package jobs/i);
+  assert.match(verify?.run ?? '', /successful Rust and CLI jobs/i);
+
+  const dshJob = workflow.jobs['dsh-profile-windows'];
+  assert.equal(dshJob.needs, 'build-impact');
+  assert.match(dshJob.if, /dsh_profile_required == 'true'/);
 
   const statuses = ['success', 'skipped', 'failure', 'cancelled'];
   const cases = [];
   for (const impactResult of statuses.filter((status) => status !== 'success')) {
     cases.push({
       rustRequired: 'true',
+      packageRequired: 'true',
+      eventName: 'pull_request',
       impactResult,
       cliResult: 'success',
       rustResult: 'success',
@@ -456,25 +522,37 @@ test('gates Rust and CLI validation behind one fail-closed impact decision', (t)
     });
   }
   for (const rustRequired of ['false', 'true']) {
-    for (const cliResult of statuses) {
-      for (const rustResult of statuses) {
-        for (const buildResult of statuses) {
-          cases.push({
-            rustRequired,
-            impactResult: 'success',
-            cliResult,
-            rustResult,
-            buildResult,
-            expectedSuccess: buildResult === 'success' && (rustRequired === 'false'
-              ? cliResult === 'skipped' && rustResult === 'skipped'
-              : cliResult === 'success' && rustResult === 'success'),
-          });
+    for (const packageRequired of ['false', 'true']) {
+      for (const eventName of ['pull_request', 'push']) {
+        for (const cliResult of statuses) {
+          for (const rustResult of statuses) {
+            for (const buildResult of statuses) {
+              const packageExpected = eventName === 'pull_request'
+                && packageRequired === 'true';
+              cases.push({
+                rustRequired,
+                packageRequired,
+                eventName,
+                impactResult: 'success',
+                cliResult,
+                rustResult,
+                buildResult,
+                expectedSuccess: (packageExpected
+                  ? buildResult === 'success'
+                  : buildResult === 'skipped') && (rustRequired === 'false'
+                  ? cliResult === 'skipped' && rustResult === 'skipped'
+                  : cliResult === 'success' && rustResult === 'success'),
+              });
+            }
+          }
         }
       }
     }
   }
   cases.push({
     rustRequired: '',
+    packageRequired: 'false',
+    eventName: 'push',
     impactResult: 'success',
     cliResult: 'skipped',
     rustResult: 'skipped',
@@ -495,6 +573,8 @@ ${verify.run}
 }
 foreach ($case in $cases) {
   $env:RUST_REQUIRED = [string]$case.rustRequired
+  $env:PACKAGE_REQUIRED = [string]$case.packageRequired
+  $env:EVENT_NAME = [string]$case.eventName
   $env:IMPACT_RESULT = [string]$case.impactResult
   $env:CLI_RESULT = [string]$case.cliResult
   $env:RUST_RESULT = [string]$case.rustResult
@@ -558,7 +638,27 @@ test('nightly validates generated inputs and projected lockfiles before packagin
   assert.equal(callInputs.version.required, true);
   assert.equal(callInputs.artifact_prefix.required, true);
   assert.equal(callInputs.artifact_retention_days.default, 1);
+  assert.equal(callInputs.build_desktop_packages.default, true);
+  assert.equal(callInputs.build_linux_binaries.default, true);
+  assert.equal(callInputs.upload_artifacts.default, true);
+  assert.equal(callInputs.cache_write.default, false);
+  assert.equal(
+    callInputs.desktop_platforms.default,
+    '["linux-x64","linux-arm64","macos-arm64","macos-x64","windows-x64"]',
+  );
   assert.equal(workflow.permissions.contents, 'read');
+
+  const node = steps.find((step) => step.name === 'Setup Node.js');
+  assert.equal(node?.with?.cache, undefined);
+  assert.equal(node?.with?.['package-manager-cache'], false);
+  const rustCache = steps.find((step) =>
+    step.uses?.startsWith('swatinem/rust-cache@'));
+  const restoreOnlyOnPr =
+    "${{ inputs.cache_write && github.event_name != 'pull_request' }}";
+  assert.equal(rustCache?.with?.['save-if'], restoreOnlyOnPr);
+  assert.equal(rustCache?.with?.['cache-on-failure'], restoreOnlyOnPr);
+  const upload = steps.find((step) => step.uses?.startsWith('actions/upload-artifact@'));
+  assert.equal(upload?.if, '${{ inputs.upload_artifacts }}');
 
   assert.notEqual(committedMetadataIndex, -1);
   assert.notEqual(installerI18nIndex, -1);
@@ -624,6 +724,12 @@ test('nightly orchestrates the shared build before the separately privileged pub
     artifact_prefix: 'nightly',
     artifact_retention_days:
       "${{ fromJSON(inputs.artifact_retention_days || '7') }}",
+    build_desktop_packages: true,
+    desktop_platforms:
+      '["linux-x64","linux-arm64","macos-arm64","macos-x64","windows-x64"]',
+    build_linux_binaries: true,
+    upload_artifacts: true,
+    cache_write: "${{ github.repository_owner == 'GCWing' }}",
   });
   assert.deepEqual(publish.needs, ['check-changes', 'build-artifacts']);
   assert.match(publish.if, /inputs\.build_only != true/);
@@ -656,6 +762,8 @@ test('Linux binary packaging uses the shared locked version projection contract'
   );
 
   assert.equal(inputs.artifact_retention_days.default, 7);
+  assert.equal(inputs.upload_artifacts.default, true);
+  assert.equal(inputs.cache_write.default, false);
   assert.equal(steps[nodeIndex].uses, 'actions/setup-node@v5');
   assert.equal(steps[nodeIndex].with['node-version-file'], 'package.json');
   assert.ok(
@@ -669,11 +777,50 @@ test('Linux binary packaging uses the shared locked version projection contract'
   assert.equal(steps[committedIndex].run, 'cargo metadata --locked --no-deps');
   assert.equal(steps[projectedIndex].run, 'cargo metadata --locked --no-deps');
   assert.match(steps[buildIndex].run, /cargo build --locked --release/);
+  const rustCache = steps.find((step) =>
+    step.uses?.startsWith('swatinem/rust-cache@'));
+  const restoreOnlyOnPr =
+    "${{ inputs.cache_write && github.event_name != 'pull_request' }}";
+  assert.equal(rustCache?.with?.['save-if'], restoreOnlyOnPr);
+  assert.equal(rustCache?.with?.['cache-on-failure'], restoreOnlyOnPr);
   const upload = steps.find((step) => step.uses?.startsWith('actions/upload-artifact@'));
+  assert.equal(upload?.if, '${{ inputs.upload_artifacts }}');
   assert.equal(
     upload?.with?.['retention-days'],
     '${{ inputs.artifact_retention_days }}',
   );
+});
+
+test('PR-capable release builds cannot save repository caches or upload CI packages', () => {
+  const ci = yaml.parse(
+    readFileSync(path.join(repoRoot, '.github/workflows/ci.yml'), 'utf8'),
+  );
+  const artifacts = yaml.parse(
+    readFileSync(path.join(repoRoot, '.github/workflows/nightly-artifacts.yml'), 'utf8'),
+  );
+  const linux = yaml.parse(
+    readFileSync(path.join(repoRoot, '.github/workflows/linux-binaries.yml'), 'utf8'),
+  );
+
+  for (const workflow of [artifacts, linux]) {
+    for (const job of Object.values(workflow.jobs)) {
+      for (const cache of (job.steps ?? []).filter((step) =>
+        step.uses?.startsWith('swatinem/rust-cache@'))) {
+        assert.match(cache.with['save-if'], /github\.event_name != 'pull_request'/);
+        assert.match(cache.with['cache-on-failure'], /github\.event_name != 'pull_request'/);
+        assert.match(cache.with['shared-key'], /github\.base_ref \|\| github\.ref_name/);
+      }
+    }
+  }
+
+  const packageCaller = ci.jobs['package-impact-contract'];
+  assert.equal(packageCaller.with.cache_write, false);
+  assert.equal(packageCaller.with.upload_artifacts, false);
+  const node = artifacts.jobs.package.steps.find(
+    (step) => step.name === 'Setup Node.js',
+  );
+  assert.equal(node.with.cache, undefined);
+  assert.equal(node.with['package-manager-cache'], false);
 });
 
 test('nightly publishes and verifies the Relay image in the current repository owner scope', () => {
