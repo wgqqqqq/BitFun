@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, 1.0.0-explore]
+    branches: [main, 1.0.0-explore, codex/ci-lease-base-explore-v2]
     paths-ignore:
       - 'png/**'
   push:
