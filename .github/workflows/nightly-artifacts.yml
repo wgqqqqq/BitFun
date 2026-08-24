@@ -20,6 +20,31 @@ on:
         required: false
         default: 1
         type: number
+      build_desktop_packages:
+        description: "Whether to run Desktop/Installer package producers."
+        required: false
+        default: true
+        type: boolean
+      desktop_platforms:
+        description: "JSON array of Desktop/Installer platform names to package."
+        required: false
+        default: '["linux-x64","linux-arm64","macos-arm64","macos-x64","windows-x64"]'
+        type: string
+      build_linux_binaries:
+        description: "Whether to build Linux CLI and Relay archives."
+        required: false
+        default: true
+        type: boolean
+      upload_artifacts:
+        description: "Whether to upload package outputs for a publishing caller."
+        required: false
+        default: true
+        type: boolean
+      cache_write:
+        description: "Allow a trusted non-PR caller to refresh build caches."
+        required: false
+        default: false
+        type: boolean
     secrets:
       TAURI_SIGNING_PRIVATE_KEY:
         required: false
@@ -34,8 +59,9 @@ permissions:
 jobs:
   # ── Patch version for nightly ──────────────────────────────────────
   package:
-    name: Package (${{ matrix.platform.name }})
-    runs-on: ${{ matrix.platform.os }}
+    name: Package (${{ matrix.platform }})
+    if: ${{ inputs.build_desktop_packages }}
+    runs-on: ${{ fromJSON('{"linux-x64":"ubuntu-latest","linux-arm64":"ubuntu-24.04-arm","macos-arm64":"macos-15","macos-x64":"macos-15-intel","windows-x64":"windows-latest"}')[matrix.platform] }}
     env:
       NODE_OPTIONS: --max-old-space-size=6144
       BITFUN_RELEASE_CHANNEL: nightly
@@ -46,32 +72,12 @@ jobs:
       # Nightly relay archives are signed too (linux-binaries.yml receives the
       # key), so nightly Desktop needs the same trust root to verify them.
       BITFUN_RELEASE_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+      PACKAGE_TARGET: ${{ fromJSON('{"linux-x64":"x86_64-unknown-linux-gnu","linux-arm64":"aarch64-unknown-linux-gnu","macos-arm64":"aarch64-apple-darwin","macos-x64":"x86_64-apple-darwin","windows-x64":"x86_64-pc-windows-msvc"}')[matrix.platform] }}
 
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - os: ubuntu-latest
-            name: linux-x64
-            target: x86_64-unknown-linux-gnu
-            build_command: pnpm run desktop:build:linux -- --target x86_64-unknown-linux-gnu --bundles deb,rpm,appimage
-          - os: ubuntu-24.04-arm
-            name: linux-arm64
-            target: aarch64-unknown-linux-gnu
-            # Fat LTO exhausts the hosted ARM runner while linking bitfun-desktop.
-            build_command: CARGO_PROFILE_RELEASE_LTO=thin pnpm run desktop:build:linux -- --target aarch64-unknown-linux-gnu --bundles deb,rpm,appimage
-          - os: macos-15
-            name: macos-arm64
-            target: aarch64-apple-darwin
-            build_command: pnpm run desktop:build:arm64
-          - os: macos-15-intel
-            name: macos-x64
-            target: x86_64-apple-darwin
-            build_command: pnpm run desktop:build:x86_64
-          - os: windows-latest
-            name: windows-x64
-            target: x86_64-pc-windows-msvc
-            build_command: pnpm run installer:build
+        platform: ${{ fromJSON(inputs.desktop_platforms) }}
 
     steps:
       - uses: actions/checkout@v5
@@ -128,18 +134,22 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: pnpm
+          package-manager-cache: false
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform.target }}
+          targets: ${{ env.PACKAGE_TARGET }}
 
       - name: Cache Rust build
         uses: swatinem/rust-cache@v2
         with:
-          shared-key: "nightly-v2-${{ matrix.platform.name }}"
+          shared-key: "nightly-v3-${{ github.base_ref || github.ref_name }}-${{ matrix.platform }}"
           cache-bin: false
+          # A PR merge ref can never become a reusable base cache. Even a
+          # trusted caller cannot override this guard.
+          save-if: ${{ inputs.cache_write && github.event_name != 'pull_request' }}
+          cache-on-failure: ${{ inputs.cache_write && github.event_name != 'pull_request' }}
 
       - name: Verify committed Cargo metadata
         run: |
@@ -203,7 +213,29 @@ jobs:
         run: cargo test --locked -p bitfun-cli --test terminal_process_contracts -- --test-threads=1
 
       - name: Build desktop app
-        run: ${{ matrix.platform.build_command }}
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            linux-x64)
+              pnpm run desktop:build:linux -- --target x86_64-unknown-linux-gnu --bundles deb,rpm,appimage
+              ;;
+            linux-arm64)
+              CARGO_PROFILE_RELEASE_LTO=thin pnpm run desktop:build:linux -- --target aarch64-unknown-linux-gnu --bundles deb,rpm,appimage
+              ;;
+            macos-arm64)
+              pnpm run desktop:build:arm64
+              ;;
+            macos-x64)
+              pnpm run desktop:build:x86_64
+              ;;
+            windows-x64)
+              pnpm run installer:build
+              ;;
+            *)
+              echo "Unsupported package platform: ${{ matrix.platform }}" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Package macOS CLI for SSH dispatch
         if: runner.os == 'macOS'
@@ -211,7 +243,7 @@ jobs:
         shell: bash
         env:
           NIGHTLY_VERSION: ${{ inputs.version }}
-          TARGET: ${{ matrix.platform.target }}
+          TARGET: ${{ env.PACKAGE_TARGET }}
         run: |
           set -euo pipefail
           ASSET_VERSION="${NIGHTLY_VERSION%%+*}"
@@ -234,12 +266,13 @@ jobs:
       - name: Verify AppImage fcitx5 GTK module
         if: runner.os == 'Linux'
         shell: bash
-        run: bash scripts/ci/verify-appimage-fcitx.sh "${{ matrix.platform.target }}"
+        run: bash scripts/ci/verify-appimage-fcitx.sh "${{ env.PACKAGE_TARGET }}"
 
       - name: Upload bundles
+        if: ${{ inputs.upload_artifacts }}
         uses: actions/upload-artifact@v6
         with:
-          name: bitfun-${{ inputs.artifact_prefix }}-${{ matrix.platform.name }}-bundle
+          name: bitfun-${{ inputs.artifact_prefix }}-${{ matrix.platform }}-bundle
           if-no-files-found: error
           retention-days: ${{ inputs.artifact_retention_days }}
           path: |
@@ -254,6 +287,7 @@ jobs:
 
   linux-binaries:
     name: Linux CLI and Relay Server
+    if: ${{ inputs.build_linux_binaries }}
     uses: ./.github/workflows/linux-binaries.yml
     secrets:
       release_signing_key: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -264,3 +298,5 @@ jobs:
       version: ${{ inputs.version }}
       artifact_prefix: ${{ inputs.artifact_prefix }}
       artifact_retention_days: ${{ inputs.artifact_retention_days }}
+      upload_artifacts: ${{ inputs.upload_artifacts }}
+      cache_write: ${{ inputs.cache_write }}
