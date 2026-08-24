@@ -86,6 +86,13 @@ jobs:
       version: ${{ needs.check-changes.outputs.nightly_version }}
       artifact_prefix: nightly
       artifact_retention_days: ${{ fromJSON(inputs.artifact_retention_days || '7') }}
+      build_desktop_packages: true
+      desktop_platforms: '["linux-x64","linux-arm64","macos-arm64","macos-x64","windows-x64"]'
+      build_linux_binaries: true
+      upload_artifacts: true
+      # Fork validation is intentionally cache-read-only. Only the upstream
+      # repository may seed long-lived Nightly caches.
+      cache_write: ${{ github.repository_owner == 'GCWing' }}
 
   # ── Publish nightly pre-release ────────────────────────────────────
   publish-nightly:
