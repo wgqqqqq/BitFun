@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, codex/ci-base-main]
     paths-ignore:
       - 'png/**'
   push:
