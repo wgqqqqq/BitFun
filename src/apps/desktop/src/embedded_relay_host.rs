@@ -217,17 +217,16 @@ mod tests {
     /// milliseconds.
     async fn assert_port_released(port: u16, what: &str) {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        let mut last_err = None;
         loop {
             match tokio::net::TcpListener::bind(("0.0.0.0", port)).await {
                 Ok(l) => {
                     drop(l);
                     return;
                 }
-                Err(e) => last_err = Some(e),
-            }
-            if std::time::Instant::now() >= deadline {
-                panic!("{what}: port {port} never became bindable again: {last_err:?}");
+                Err(error) if std::time::Instant::now() >= deadline => {
+                    panic!("{what}: port {port} never became bindable again: {error}");
+                }
+                Err(_) => {}
             }
             tokio::time::sleep(std::time::Duration::from_millis(25)).await;
         }
@@ -254,6 +253,30 @@ mod tests {
             }
         }
         panic!("could not find a free port for the embedded relay: {last_err}");
+    }
+
+    /// Restart on the requested port once it is observably bindable. A stopped
+    /// Tokio listener releases synchronously, but the port was allocated from
+    /// the OS ephemeral range and another concurrent test/process may claim it
+    /// between `stop` and the next bind.
+    async fn restart_on_same_port(host: &DesktopEmbeddedRelayHost, port: u16, static_dir: String) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            match host.start(port, Some(static_dir.clone())).await {
+                Ok(()) => return,
+                Err(error)
+                    if error
+                        .to_string()
+                        .starts_with(&format!("failed to bind embedded relay on port {port}:")) =>
+                {
+                    if std::time::Instant::now() >= deadline {
+                        panic!("embedded relay could not reclaim port {port} after stop: {error}");
+                    }
+                }
+                Err(error) => panic!("embedded relay restart failed: {error}"),
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
     }
 
     #[tokio::test]
@@ -332,9 +355,7 @@ mod tests {
         drop(client);
         host.stop().await;
 
-        host.start(port, Some(static_dir.to_string_lossy().into_owned()))
-            .await
-            .expect("embedded relay should restart immediately on the same port");
+        restart_on_same_port(&host, port, static_dir.to_string_lossy().into_owned()).await;
         host.stop().await;
 
         assert_port_released(port, "stop must release the listener before returning").await;
