@@ -77,6 +77,14 @@ const DESKTOP_PACKAGE_PREFIXES = [
   'src/apps/desktop/scripts/',
 ];
 
+// These product surfaces are validated by the frontend gate and do not need
+// the Rust/CLI matrices on their own. Native mobile is intentionally filtered
+// as neutral below because it has no supported CI toolchain or producer here.
+const FRONTEND_ONLY_PREFIXES = [
+  'src/web-ui/',
+  'src/mobile-web/',
+];
+
 function collectLocalModuleInputs(entryPaths) {
   const inputs = new Set();
   const pending = entryPaths.map((entry) => resolve(REPO_ROOT, entry));
@@ -168,7 +176,7 @@ export function classifyBuildImpact(paths) {
   }
 
   const rustRequired = activePaths.some(isRustBuildInput)
-    || !activePaths.every((file) => file.startsWith('src/web-ui/'));
+    || !activePaths.every(isFrontendOnlyInput);
   if (activePaths.some(isFullPackageInput)) {
     return result({
       rustRequired,
@@ -222,7 +230,7 @@ export function classifyBuildImpact(paths) {
     ? 'platform-package-input'
     : rustRequired
       ? (activePaths.some(isRustBuildInput) ? 'rust-build-input' : 'outside-web-ui')
-      : 'web-ui-only';
+      : 'frontend-only';
   return result({
     rustRequired,
     frontendRequired: true,
@@ -288,7 +296,13 @@ function isDesktopPackageInput(file) {
     || DESKTOP_PACKAGE_PREFIXES.some((prefix) => file.startsWith(prefix))
     || file === 'src/apps/desktop/build.rs'
     || file.startsWith('src/apps/desktop/tauri.')
-    || file === 'src/web-ui/package.json';
+    || file === 'src/web-ui/package.json'
+    || file === 'src/mobile-web/package.json'
+    || file === 'scripts/mobile-web-build.cjs';
+}
+
+function isFrontendOnlyInput(file) {
+  return FRONTEND_ONLY_PREFIXES.some((prefix) => file.startsWith(prefix));
 }
 
 function isWindowsPackageInput(file) {
@@ -335,7 +349,9 @@ function isDshProfileInput(file) {
 function isKnownNeutralPath(file) {
   const isKnownDocumentation = file.endsWith('.md')
     && (!file.includes('/') || file.startsWith('docs/'));
-  return isKnownDocumentation || file.startsWith('png/');
+  return isKnownDocumentation
+    || file.startsWith('png/')
+    || file.startsWith('src/apps/mobile/');
 }
 
 export function run(args = process.argv.slice(2), env = process.env) {

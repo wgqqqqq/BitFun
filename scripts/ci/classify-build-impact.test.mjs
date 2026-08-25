@@ -103,7 +103,25 @@ test('maps representative changes to the smallest predictive validation', () => 
     },
     {
       paths: ['src/web-ui/src/example.ts'],
-      result: expected({ rustRequired: false, reason: 'web-ui-only' }),
+      result: expected({ rustRequired: false, reason: 'frontend-only' }),
+    },
+    {
+      paths: ['src/mobile-web/src/App.tsx'],
+      result: expected({ rustRequired: false, reason: 'frontend-only' }),
+    },
+    {
+      paths: [
+        'src/apps/mobile/android/app/src/main/kotlin/com/bitfun/MainActivity.kt',
+        'src/apps/mobile/shared/core-feature/src/commonMain/kotlin/Feature.kt',
+        'src/apps/mobile/ios/BitFun/App.swift',
+        'src/apps/mobile/harmonyos/entry/src/main/ets/pages/Index.ets',
+      ],
+      result: expected({
+        rustRequired: false,
+        frontendRequired: false,
+        reason: 'ci-ignored-only',
+        changedCount: 4,
+      }),
     },
     {
       paths: ['src/crates/services/services-core/src/lib.rs'],
@@ -140,6 +158,7 @@ test('maps representative changes to the smallest predictive validation', () => 
       'src/apps/desktop/dmg/background.png',
       'scripts/product-customization/projections.mjs',
       'products/bitfun/product.jsonc',
+      'scripts/mobile-web-build.cjs',
     ].map((desktopInput) => ({
       paths: [desktopInput],
       result: expected({
@@ -148,6 +167,14 @@ test('maps representative changes to the smallest predictive validation', () => 
         reason: 'platform-package-input',
       }),
     })),
+    {
+      paths: ['src/mobile-web/package.json'],
+      result: expected({
+        rustRequired: false,
+        desktopPlatforms: allPlatforms,
+        reason: 'platform-package-input',
+      }),
+    },
     {
       paths: ['src/apps/relay-server/Dockerfile.release'],
       result: expected({
@@ -231,6 +258,47 @@ test('maps representative changes to the smallest predictive validation', () => 
   for (const { paths, result } of cases) {
     assert.deepEqual(classifyBuildImpact(paths), result, paths.join(', '));
   }
+});
+
+test('combines mobile-web with other surfaces without native-mobile noise', () => {
+  assert.deepEqual(
+    classifyBuildImpact([
+      'src/mobile-web/src/App.tsx',
+      'src/apps/mobile/android/app/src/main/kotlin/com/bitfun/MainActivity.kt',
+    ]),
+    expected({
+      rustRequired: false,
+      reason: 'frontend-only',
+      changedCount: 2,
+    }),
+  );
+
+  assert.deepEqual(
+    classifyBuildImpact([
+      'src/mobile-web/src/App.tsx',
+      'src/crates/services/services-core/src/lib.rs',
+    ]),
+    expected({
+      rustRequired: true,
+      reason: 'rust-build-input',
+      changedCount: 2,
+    }),
+  );
+
+  assert.deepEqual(
+    classifyBuildImpact([
+      'src/mobile-web/src/App.tsx',
+      'src/apps/mobile/shared/core-feature/src/commonMain/kotlin/Feature.kt',
+      'src/apps/relay-server/Dockerfile.release',
+    ]),
+    expected({
+      rustRequired: true,
+      linuxBinariesRequired: true,
+      relayImageRequired: true,
+      reason: 'platform-package-input',
+      changedCount: 3,
+    }),
+  );
 });
 
 test('keeps nested Markdown fail-closed because it may be a compile-time input', () => {
