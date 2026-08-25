@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, codex/ci-validation-mobile-base-2466]
     paths-ignore:
       - 'png/**'
   push:
