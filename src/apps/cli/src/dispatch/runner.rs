@@ -443,23 +443,15 @@ mod tests {
         let job_id = "leader-exits-after-term";
         let ready_dir = tempfile::tempdir().expect("ready directory");
         let ready_path = ready_dir.path().join("term-resistant-child-ready");
-        let mut command = Command::new("python3");
+        let mut command = Command::new("/bin/sh");
         command
-            .args([
-                "-c",
-                r#"import os, signal
-signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
-signal.signal(signal.SIGHUP, signal.SIG_IGN)
-if os.fork() == 0:
-    signal.signal(signal.SIGTERM, signal.SIG_IGN)
-    with open(os.environ["BITFUN_DISPATCH_TERM_TEST_READY"], "w") as ready:
-        ready.write("ready")
-    while True:
-        signal.pause()
-while True:
-    signal.pause()
-"#,
-            ])
+            .arg("-c")
+            .arg(
+                "trap 'exit 0' TERM; trap '' HUP; \
+                 sh -c 'trap \"\" TERM HUP; printf ready > \
+                 \"$BITFUN_DISPATCH_TERM_TEST_READY\"; while :; do :; done' & \
+                 while :; do :; done",
+            )
             // These trailing arguments make the real process identity match
             // the hidden worker contract without launching BitFun Runtime.
             .args(["dispatch", "__run", "--job", job_id])

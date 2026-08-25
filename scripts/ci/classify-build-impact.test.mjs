@@ -134,8 +134,10 @@ test('maps representative changes to the smallest predictive validation', () => 
       paths: ['scripts/cli/package-unix.sh'],
       result: expected({
         rustRequired: true,
+        desktopPlatforms: allPlatforms,
         linuxBinariesRequired: true,
-        reason: 'platform-package-input',
+        dshProfileRequired: true,
+        reason: 'full-package-input',
       }),
     },
     {
@@ -158,6 +160,36 @@ test('maps representative changes to the smallest predictive validation', () => 
     },
     {
       paths: ['.github/workflows/nightly.yml'],
+      result: expected({
+        rustRequired: true,
+        desktopPlatforms: allPlatforms,
+        linuxBinariesRequired: true,
+        dshProfileRequired: true,
+        reason: 'full-package-input',
+      }),
+    },
+    {
+      paths: ['scripts/sign-release-assets.sh'],
+      result: expected({
+        rustRequired: true,
+        desktopPlatforms: allPlatforms,
+        linuxBinariesRequired: true,
+        dshProfileRequired: true,
+        reason: 'full-package-input',
+      }),
+    },
+    {
+      paths: ['scripts/ci/classify-build-impact.mjs'],
+      result: expected({
+        rustRequired: true,
+        desktopPlatforms: allPlatforms,
+        linuxBinariesRequired: true,
+        dshProfileRequired: true,
+        reason: 'full-package-input',
+      }),
+    },
+    {
+      paths: ['scripts/cli/package-windows.ps1'],
       result: expected({
         rustRequired: true,
         desktopPlatforms: allPlatforms,

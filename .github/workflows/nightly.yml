@@ -20,7 +20,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: nightly-${{ github.ref }}
+  # The release, tag, and GHCR image tags are repository-wide resources. Keep
+  # manual runs from other refs serialized with the scheduled main run.
+  group: nightly-${{ github.repository }}
   cancel-in-progress: true
 
 env:

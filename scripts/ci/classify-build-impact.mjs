@@ -32,6 +32,31 @@ const ALL_DESKTOP_PLATFORMS = [
   'windows-x64',
 ];
 
+// These inputs define repository-level release metadata, signing, staging, or
+// scheduling contracts shared by more than one artifact producer. A focused
+// platform match is not sufficient for them: validate the complete producer
+// set so a release-contract change cannot merge on compile-only evidence.
+const FULL_PACKAGE_INPUTS = new Set([
+  'scripts/ci/classify-build-impact.mjs',
+  'scripts/cli/package-unix.sh',
+  'scripts/cli/package-windows.ps1',
+  'scripts/collect-tauri-updater-assets.mjs',
+  'scripts/desktop-tauri-build.mjs',
+  'scripts/frontend-build-all.mjs',
+  'scripts/generate-linux-binaries-manifest.mjs',
+  'scripts/generate-tauri-latest-json.mjs',
+  'scripts/generate-version.cjs',
+  'scripts/openbitfun-release-sync.sh',
+  'scripts/prepare-windows-installer-asset.mjs',
+  'scripts/release-channel.mjs',
+  'scripts/set-build-version.mjs',
+  'scripts/sign-release-assets.sh',
+  'scripts/stage-github-release-assets.mjs',
+  'scripts/verify-release-version-sync.mjs',
+  'scripts/verify-tauri-latest-json.mjs',
+  'scripts/write-minisign-public-key.mjs',
+]);
+
 export function classifyBuildImpact(paths) {
   const result = ({
     rustRequired,
@@ -168,10 +193,7 @@ function isFullPackageInput(file) {
   }
   if (
     file.startsWith('.github/workflows/')
-    || file === 'scripts/set-build-version.mjs'
-    || file === 'scripts/generate-version.cjs'
-    || file === 'scripts/frontend-build-all.mjs'
-    || file === 'scripts/desktop-tauri-build.mjs'
+    || FULL_PACKAGE_INPUTS.has(file)
     || file === 'src/apps/desktop/build.rs'
     || file.startsWith('src/apps/desktop/tauri.')
     || file.startsWith('src/apps/desktop/capabilities/')

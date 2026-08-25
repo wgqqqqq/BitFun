@@ -716,6 +716,10 @@ test('nightly orchestrates the shared build before the separately privileged pub
   const publish = workflow.jobs['publish-nightly'];
 
   assert.equal(workflow.on.workflow_call, undefined);
+  assert.deepEqual(workflow.concurrency, {
+    group: 'nightly-${{ github.repository }}',
+    'cancel-in-progress': true,
+  });
   assert.equal(build.uses, './.github/workflows/nightly-artifacts.yml');
   assert.deepEqual(build.permissions, { contents: 'read' });
   assert.deepEqual(build.with, {
