@@ -35,6 +35,11 @@ on:
         required: false
         default: true
         type: boolean
+      build_relay_image:
+        description: "Whether to validate the Relay runtime image without publishing it."
+        required: false
+        default: true
+        type: boolean
       upload_artifacts:
         description: "Whether to upload package outputs for a publishing caller."
         required: false
@@ -269,6 +274,70 @@ jobs:
         shell: bash
         run: bash scripts/ci/verify-appimage-fcitx.sh "${{ env.PACKAGE_TARGET }}"
 
+      # Keep output validation independent from artifact upload. PR callers do
+      # not upload packages, but still need evidence that every selected
+      # producer emitted the files its publishing caller will collect.
+      - name: Verify package outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          find_bundle_file() {
+            local pattern="$1"
+            local root
+            for root in \
+              "target/${PACKAGE_TARGET}/release/bundle" \
+              "target/release/bundle" \
+              "src/apps/desktop/target/${PACKAGE_TARGET}/release/bundle" \
+              "src/apps/desktop/target/release/bundle"; do
+              if [[ -d "$root" ]] && find "$root" -type f -name "$pattern" -size +0c -print -quit | grep -q .; then
+                return 0
+              fi
+            done
+            echo "Missing non-empty package output matching $pattern for ${{ matrix.platform }}" >&2
+            return 1
+          }
+
+          find_bundle_dir() {
+            local pattern="$1"
+            local root
+            for root in \
+              "target/${PACKAGE_TARGET}/release/bundle" \
+              "target/release/bundle" \
+              "src/apps/desktop/target/${PACKAGE_TARGET}/release/bundle" \
+              "src/apps/desktop/target/release/bundle"; do
+              if [[ -d "$root" ]] && find "$root" -type d -name "$pattern" -print -quit | grep -q .; then
+                return 0
+              fi
+            done
+            echo "Missing package directory matching $pattern for ${{ matrix.platform }}" >&2
+            return 1
+          }
+
+          case "${{ matrix.platform }}" in
+            linux-*)
+              find_bundle_file '*.deb'
+              find_bundle_file '*.rpm'
+              find_bundle_file '*.AppImage'
+              ;;
+            macos-*)
+              find_bundle_dir '*.app'
+              find_bundle_file '*.dmg'
+              shopt -s nullglob
+              cli_archives=(bitfun-cli-*-"${PACKAGE_TARGET}".tar.gz)
+              [[ ${#cli_archives[@]} -eq 1 ]]
+              test -s "${cli_archives[0]}"
+              test -s "${cli_archives[0]}.sha256"
+              ;;
+            windows-x64)
+              test -s BitFun-Installer/src-tauri/target/release/bitfun-installer.exe
+              ;;
+            *)
+              echo "Unsupported package platform: ${{ matrix.platform }}" >&2
+              exit 1
+              ;;
+          esac
+
       - name: Upload bundles
         if: ${{ inputs.upload_artifacts }}
         uses: actions/upload-artifact@v6
@@ -288,7 +357,7 @@ jobs:
 
   linux-binaries:
     name: Linux CLI and Relay Server
-    if: ${{ inputs.build_linux_binaries }}
+    if: ${{ inputs.build_linux_binaries || inputs.build_relay_image }}
     uses: ./.github/workflows/linux-binaries.yml
     secrets:
       release_signing_key: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -301,3 +370,4 @@ jobs:
       artifact_retention_days: ${{ inputs.artifact_retention_days }}
       upload_artifacts: ${{ inputs.upload_artifacts }}
       cache_write: ${{ inputs.cache_write }}
+      validate_relay_image: ${{ inputs.build_relay_image }}

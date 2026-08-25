@@ -1,6 +1,7 @@
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { dirname, relative, resolve, sep } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { rustWebUiSourceBoundaryRule } from '../core-boundaries/rules/source-rules.mjs';
 import { scanForbiddenContentUnder } from '../core-boundaries/source-content-checks.mjs';
 
@@ -32,17 +33,15 @@ const ALL_DESKTOP_PLATFORMS = [
   'windows-x64',
 ];
 
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
 // These inputs define repository-level release metadata, signing, staging, or
 // scheduling contracts shared by more than one artifact producer. A focused
 // platform match is not sufficient for them: validate the complete producer
 // set so a release-contract change cannot merge on compile-only evidence.
-const FULL_PACKAGE_INPUTS = new Set([
+const ALL_PACKAGE_INPUTS = new Set([
   'scripts/ci/classify-build-impact.mjs',
-  'scripts/cli/package-unix.sh',
-  'scripts/cli/package-windows.ps1',
   'scripts/collect-tauri-updater-assets.mjs',
-  'scripts/desktop-tauri-build.mjs',
-  'scripts/frontend-build-all.mjs',
   'scripts/generate-linux-binaries-manifest.mjs',
   'scripts/generate-tauri-latest-json.mjs',
   'scripts/generate-version.cjs',
@@ -57,12 +56,77 @@ const FULL_PACKAGE_INPUTS = new Set([
   'scripts/write-minisign-public-key.mjs',
 ]);
 
+// Inputs consumed by the Desktop/Tauri package producer itself. Keep this
+// separate from ALL_PACKAGE_INPUTS: these paths do not affect the standalone
+// Linux CLI/Relay archives, so selecting those producers would add cost
+// without validating the changed input.
+const DESKTOP_PACKAGE_INPUTS = collectLocalModuleInputs([
+  'scripts/desktop-tauri-build.mjs',
+  // Tauri runs this entrypoint through beforeBuildCommand rather than an
+  // import from desktop-tauri-build.mjs.
+  'scripts/frontend-build-all.mjs',
+]);
+
+const DESKTOP_PACKAGE_PREFIXES = [
+  'products/',
+  'resources/flashgrep/',
+  'src/apps/desktop/capabilities/',
+  'src/apps/desktop/dmg/',
+  'src/apps/desktop/icons/',
+  'src/apps/desktop/resources/',
+  'src/apps/desktop/scripts/',
+];
+
+function collectLocalModuleInputs(entryPaths) {
+  const inputs = new Set();
+  const pending = entryPaths.map((entry) => resolve(REPO_ROOT, entry));
+
+  while (pending.length > 0) {
+    const absolutePath = pending.pop();
+    const repoPath = relative(REPO_ROOT, absolutePath).split(sep).join('/');
+    if (repoPath === '..' || repoPath.startsWith('../') || inputs.has(repoPath)) {
+      continue;
+    }
+    if (!existsSync(absolutePath)) {
+      throw new Error(`Missing package producer module: ${repoPath}`);
+    }
+    inputs.add(repoPath);
+
+    const source = readFileSync(absolutePath, 'utf8');
+    const localImport = /(?:\b(?:import|export)\s+(?:[^'"\n]*?\s+from\s*)?|\bimport\s*\(\s*)['"](\.[^'"]+)['"]/g;
+    for (const match of source.matchAll(localImport)) {
+      const importedPath = resolveLocalModule(dirname(absolutePath), match[1]);
+      if (importedPath) {
+        pending.push(importedPath);
+      }
+    }
+  }
+
+  return inputs;
+}
+
+function resolveLocalModule(parentDirectory, specifier) {
+  const base = resolve(parentDirectory, specifier);
+  const candidates = [
+    base,
+    `${base}.mjs`,
+    `${base}.js`,
+    `${base}.cjs`,
+    resolve(base, 'index.mjs'),
+    resolve(base, 'index.js'),
+    resolve(base, 'index.cjs'),
+  ];
+  return candidates.find((candidate) =>
+    existsSync(candidate) && statSync(candidate).isFile());
+}
+
 export function classifyBuildImpact(paths) {
   const result = ({
     rustRequired,
     frontendRequired,
     desktopPlatforms = [],
     linuxBinariesRequired = false,
+    relayImageRequired = false,
     dshProfileRequired = false,
     reason,
   }) => ({
@@ -71,8 +135,10 @@ export function classifyBuildImpact(paths) {
     desktopPackagesRequired: desktopPlatforms.length > 0,
     desktopPlatforms,
     linuxBinariesRequired,
+    relayImageRequired,
     dshProfileRequired,
-    packageRequired: desktopPlatforms.length > 0 || linuxBinariesRequired,
+    packageRequired:
+      desktopPlatforms.length > 0 || linuxBinariesRequired || relayImageRequired,
     reason,
     changedCount: paths.length,
   });
@@ -81,6 +147,7 @@ export function classifyBuildImpact(paths) {
     frontendRequired: true,
     desktopPlatforms: ALL_DESKTOP_PLATFORMS,
     linuxBinariesRequired: true,
+    relayImageRequired: true,
     dshProfileRequired: true,
     reason,
   });
@@ -108,6 +175,7 @@ export function classifyBuildImpact(paths) {
       frontendRequired: true,
       desktopPlatforms: ALL_DESKTOP_PLATFORMS,
       linuxBinariesRequired: true,
+      relayImageRequired: true,
       dshProfileRequired: true,
       reason: 'full-package-input',
     });
@@ -115,7 +183,13 @@ export function classifyBuildImpact(paths) {
 
   const desktopPlatforms = new Set();
   let linuxBinariesRequired = false;
+  let relayImageRequired = false;
   for (const file of activePaths) {
+    if (isDesktopPackageInput(file)) {
+      for (const platform of ALL_DESKTOP_PLATFORMS) {
+        desktopPlatforms.add(platform);
+      }
+    }
     if (isWindowsPackageInput(file)) {
       desktopPlatforms.add('windows-x64');
     }
@@ -130,12 +204,20 @@ export function classifyBuildImpact(paths) {
     if (isLinuxBinaryPackageInput(file)) {
       linuxBinariesRequired = true;
     }
+    if (isRelayImageInput(file)) {
+      // The image validation consumes the archive produced in the same matrix
+      // job, so selecting it necessarily selects Linux binary packaging too.
+      linuxBinariesRequired = true;
+      relayImageRequired = true;
+    }
   }
 
   const selectedPlatforms = ALL_DESKTOP_PLATFORMS.filter((platform) =>
     desktopPlatforms.has(platform));
   const dshProfileRequired = activePaths.some(isDshProfileInput);
-  const hasPackageImpact = selectedPlatforms.length > 0 || linuxBinariesRequired;
+  const hasPackageImpact = selectedPlatforms.length > 0
+    || linuxBinariesRequired
+    || relayImageRequired;
   const reason = hasPackageImpact
     ? 'platform-package-input'
     : rustRequired
@@ -146,6 +228,7 @@ export function classifyBuildImpact(paths) {
     frontendRequired: true,
     desktopPlatforms: selectedPlatforms,
     linuxBinariesRequired,
+    relayImageRequired,
     dshProfileRequired,
     reason,
   });
@@ -193,27 +276,32 @@ function isFullPackageInput(file) {
   }
   if (
     file.startsWith('.github/workflows/')
-    || FULL_PACKAGE_INPUTS.has(file)
-    || file === 'src/apps/desktop/build.rs'
-    || file.startsWith('src/apps/desktop/tauri.')
-    || file.startsWith('src/apps/desktop/capabilities/')
-    || file.startsWith('src/apps/desktop/icons/')
-    || file === 'src/web-ui/package.json'
+    || ALL_PACKAGE_INPUTS.has(file)
   ) {
     return true;
   }
   return false;
 }
 
+function isDesktopPackageInput(file) {
+  return DESKTOP_PACKAGE_INPUTS.has(file)
+    || DESKTOP_PACKAGE_PREFIXES.some((prefix) => file.startsWith(prefix))
+    || file === 'src/apps/desktop/build.rs'
+    || file.startsWith('src/apps/desktop/tauri.')
+    || file === 'src/web-ui/package.json';
+}
+
 function isWindowsPackageInput(file) {
   return file.startsWith('BitFun-Installer/')
+    || file === 'scripts/cli/package-windows.ps1'
     || file.startsWith('scripts/windows/')
     || file.includes('/windows/')
     || /(?:^|\/)(?:nsis|wix)(?:\/|\.|$)/i.test(file);
 }
 
 function isMacPackageInput(file) {
-  return file.startsWith('scripts/ci/setup-macos-signing.')
+  return file === 'scripts/cli/package-unix.sh'
+    || file.startsWith('scripts/ci/setup-macos-signing.')
     || file.startsWith('scripts/ci/verify-macos-signing.')
     || file.startsWith('scripts/macos/')
     || file.includes('/macos/')
@@ -231,8 +319,12 @@ function isLinuxBinaryPackageInput(file) {
   return file === 'scripts/ci/check-glibc-floor.sh'
     || file.startsWith('scripts/cli/package-unix.')
     || file.startsWith('scripts/relay/package-unix.')
-    || file.startsWith('scripts/cli/test-install-unix.')
-    || file === 'src/apps/relay-server/Dockerfile.release';
+    || file.startsWith('scripts/cli/test-install-unix.');
+}
+
+function isRelayImageInput(file) {
+  return file === 'src/apps/relay-server/Dockerfile.release'
+    || file.startsWith('scripts/relay/package-unix.');
 }
 
 function isDshProfileInput(file) {
@@ -296,6 +388,7 @@ export function run(args = process.argv.slice(2), env = process.env) {
     `desktop_packages_required=${result.desktopPackagesRequired}`,
     `desktop_platforms=${JSON.stringify(result.desktopPlatforms)}`,
     `linux_binaries_required=${result.linuxBinariesRequired}`,
+    `relay_image_required=${result.relayImageRequired}`,
     `dsh_profile_required=${result.dshProfileRequired}`,
     `package_required=${result.packageRequired}`,
     `reason=${result.reason}`,
@@ -325,6 +418,7 @@ function renderSummary(result, paths) {
     `- <strong>Frontend:</strong> ${result.frontendRequired}`,
     `- <strong>Desktop packages:</strong> ${result.desktopPlatforms.join(', ') || 'none'}`,
     `- <strong>Linux binaries:</strong> ${result.linuxBinariesRequired}`,
+    `- <strong>Relay image:</strong> ${result.relayImageRequired}`,
     `- <strong>DSH profile:</strong> ${result.dshProfileRequired}`,
     `- <strong>Reason:</strong> ${result.reason}`,
     `- <strong>Changed files:</strong> ${result.changedCount}`,

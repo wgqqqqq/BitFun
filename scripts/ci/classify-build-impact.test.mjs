@@ -29,6 +29,7 @@ function expected({
   frontendRequired = true,
   desktopPlatforms = [],
   linuxBinariesRequired = false,
+  relayImageRequired = false,
   dshProfileRequired = false,
   reason,
   changedCount = 1,
@@ -39,8 +40,10 @@ function expected({
     desktopPackagesRequired: desktopPlatforms.length > 0,
     desktopPlatforms,
     linuxBinariesRequired,
+    relayImageRequired,
     dshProfileRequired,
-    packageRequired: desktopPlatforms.length > 0 || linuxBinariesRequired,
+    packageRequired:
+      desktopPlatforms.length > 0 || linuxBinariesRequired || relayImageRequired,
     reason,
     changedCount,
   };
@@ -130,14 +133,37 @@ test('maps representative changes to the smallest predictive validation', () => 
         reason: 'platform-package-input',
       }),
     },
+    ...[
+      'scripts/prepare-flashgrep-resource.mjs',
+      'resources/flashgrep/VERSION.json',
+      'src/apps/desktop/scripts/post-install-icons.sh',
+      'src/apps/desktop/dmg/background.png',
+      'scripts/product-customization/projections.mjs',
+      'products/bitfun/product.jsonc',
+    ].map((desktopInput) => ({
+      paths: [desktopInput],
+      result: expected({
+        rustRequired: true,
+        desktopPlatforms: allPlatforms,
+        reason: 'platform-package-input',
+      }),
+    })),
+    {
+      paths: ['src/apps/relay-server/Dockerfile.release'],
+      result: expected({
+        rustRequired: true,
+        linuxBinariesRequired: true,
+        relayImageRequired: true,
+        reason: 'platform-package-input',
+      }),
+    },
     {
       paths: ['scripts/cli/package-unix.sh'],
       result: expected({
         rustRequired: true,
-        desktopPlatforms: allPlatforms,
+        desktopPlatforms: ['macos-arm64', 'macos-x64'],
         linuxBinariesRequired: true,
-        dshProfileRequired: true,
-        reason: 'full-package-input',
+        reason: 'platform-package-input',
       }),
     },
     {
@@ -154,6 +180,7 @@ test('maps representative changes to the smallest predictive validation', () => 
         rustRequired: true,
         desktopPlatforms: allPlatforms,
         linuxBinariesRequired: true,
+        relayImageRequired: true,
         dshProfileRequired: true,
         reason: 'full-package-input',
       }),
@@ -164,6 +191,7 @@ test('maps representative changes to the smallest predictive validation', () => 
         rustRequired: true,
         desktopPlatforms: allPlatforms,
         linuxBinariesRequired: true,
+        relayImageRequired: true,
         dshProfileRequired: true,
         reason: 'full-package-input',
       }),
@@ -174,6 +202,7 @@ test('maps representative changes to the smallest predictive validation', () => 
         rustRequired: true,
         desktopPlatforms: allPlatforms,
         linuxBinariesRequired: true,
+        relayImageRequired: true,
         dshProfileRequired: true,
         reason: 'full-package-input',
       }),
@@ -184,6 +213,7 @@ test('maps representative changes to the smallest predictive validation', () => 
         rustRequired: true,
         desktopPlatforms: allPlatforms,
         linuxBinariesRequired: true,
+        relayImageRequired: true,
         dshProfileRequired: true,
         reason: 'full-package-input',
       }),
@@ -192,10 +222,8 @@ test('maps representative changes to the smallest predictive validation', () => 
       paths: ['scripts/cli/package-windows.ps1'],
       result: expected({
         rustRequired: true,
-        desktopPlatforms: allPlatforms,
-        linuxBinariesRequired: true,
-        dshProfileRequired: true,
-        reason: 'full-package-input',
+        desktopPlatforms: ['windows-x64'],
+        reason: 'platform-package-input',
       }),
     },
   ];
@@ -244,6 +272,7 @@ test('uses a merge-base range for pull requests and emits every workflow output'
     desktop_packages_required: 'true',
     desktop_platforms: '["windows-x64"]',
     linux_binaries_required: 'false',
+    relay_image_required: 'false',
     dsh_profile_required: 'false',
     package_required: 'true',
     reason: 'platform-package-input',
@@ -264,6 +293,7 @@ test('fails closed when paths or event ranges are invalid or unavailable', (t) =
     assert.equal(result.frontendRequired, true);
     assert.deepEqual(result.desktopPlatforms, allPlatforms);
     assert.equal(result.linuxBinariesRequired, true);
+    assert.equal(result.relayImageRequired, true);
     assert.equal(result.dshProfileRequired, true);
   }
 

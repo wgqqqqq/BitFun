@@ -434,6 +434,10 @@ test('gates fast checks and PR packaging behind one fail-closed build decision',
     '${{ steps.classify.outputs.package_required }}',
   );
   assert.equal(
+    impactJob.outputs.relay_image_required,
+    '${{ steps.classify.outputs.relay_image_required }}',
+  );
+  assert.equal(
     impactJob.outputs.dsh_profile_required,
     '${{ steps.classify.outputs.dsh_profile_required }}',
   );
@@ -478,6 +482,8 @@ test('gates fast checks and PR packaging behind one fail-closed build decision',
     desktop_platforms: '${{ needs.build-impact.outputs.desktop_platforms }}',
     build_linux_binaries:
       "${{ needs.build-impact.outputs.linux_binaries_required == 'true' }}",
+    build_relay_image:
+      "${{ needs.build-impact.outputs.relay_image_required == 'true' }}",
     upload_artifacts: false,
     cache_write: false,
   });
@@ -608,6 +614,7 @@ test('nightly validates generated inputs and projected lockfiles before packagin
   );
   const callInputs = workflow.on.workflow_call.inputs;
   const packageJob = workflow.jobs.package;
+  const linuxJob = workflow.jobs['linux-binaries'];
   const steps = packageJob.steps;
   const committedMetadataIndex = steps.findIndex(
     (step) => step.name === 'Verify committed Cargo metadata',
@@ -640,6 +647,7 @@ test('nightly validates generated inputs and projected lockfiles before packagin
   assert.equal(callInputs.artifact_retention_days.default, 1);
   assert.equal(callInputs.build_desktop_packages.default, true);
   assert.equal(callInputs.build_linux_binaries.default, true);
+  assert.equal(callInputs.build_relay_image.default, true);
   assert.equal(callInputs.upload_artifacts.default, true);
   assert.equal(callInputs.cache_write.default, false);
   assert.equal(
@@ -647,6 +655,14 @@ test('nightly validates generated inputs and projected lockfiles before packagin
     '["linux-x64","linux-arm64","macos-arm64","macos-x64","windows-x64"]',
   );
   assert.equal(workflow.permissions.contents, 'read');
+  assert.equal(
+    linuxJob.if,
+    '${{ inputs.build_linux_binaries || inputs.build_relay_image }}',
+  );
+  assert.equal(
+    linuxJob.with.validate_relay_image,
+    '${{ inputs.build_relay_image }}',
+  );
 
   const node = steps.find((step) => step.name === 'Setup Node.js');
   assert.equal(node?.with?.cache, undefined);
@@ -658,6 +674,10 @@ test('nightly validates generated inputs and projected lockfiles before packagin
   assert.equal(rustCache?.with?.['save-if'], restoreOnlyOnPr);
   assert.equal(rustCache?.with?.['cache-on-failure'], restoreOnlyOnPr);
   const upload = steps.find((step) => step.uses?.startsWith('actions/upload-artifact@'));
+  const verifyOutputs = steps.find((step) => step.name === 'Verify package outputs');
+  assert.match(verifyOutputs?.run ?? '', /bitfun-installer\.exe/);
+  assert.match(verifyOutputs?.run ?? '', /\*\.AppImage/);
+  assert.ok(steps.indexOf(verifyOutputs) < steps.indexOf(upload));
   assert.equal(upload?.if, '${{ inputs.upload_artifacts }}');
 
   assert.notEqual(committedMetadataIndex, -1);
@@ -732,6 +752,7 @@ test('nightly orchestrates the shared build before the separately privileged pub
     desktop_platforms:
       '["linux-x64","linux-arm64","macos-arm64","macos-x64","windows-x64"]',
     build_linux_binaries: true,
+    build_relay_image: true,
     upload_artifacts: true,
     cache_write: "${{ github.repository_owner == 'GCWing' }}",
   });
@@ -768,6 +789,7 @@ test('Linux binary packaging uses the shared locked version projection contract'
   assert.equal(inputs.artifact_retention_days.default, 7);
   assert.equal(inputs.upload_artifacts.default, true);
   assert.equal(inputs.cache_write.default, false);
+  assert.equal(inputs.validate_relay_image.default, true);
   assert.equal(steps[nodeIndex].uses, 'actions/setup-node@v5');
   assert.equal(steps[nodeIndex].with['node-version-file'], 'package.json');
   assert.ok(
@@ -788,6 +810,13 @@ test('Linux binary packaging uses the shared locked version projection contract'
   assert.equal(rustCache?.with?.['save-if'], restoreOnlyOnPr);
   assert.equal(rustCache?.with?.['cache-on-failure'], restoreOnlyOnPr);
   const upload = steps.find((step) => step.uses?.startsWith('actions/upload-artifact@'));
+  const verifyOutputs = steps.find((step) => step.name === 'Verify Linux binary outputs');
+  const validateImage = steps.find((step) => step.name === 'Validate Relay runtime image');
+  assert.match(verifyOutputs?.run ?? '', /sha256sum --check/);
+  assert.ok(steps.indexOf(verifyOutputs) < steps.indexOf(upload));
+  assert.equal(validateImage?.if, '${{ inputs.validate_relay_image }}');
+  assert.equal(validateImage?.with?.push, false);
+  assert.equal(validateImage?.with?.platforms, 'linux/${{ matrix.platform.docker_arch }}');
   assert.equal(upload?.if, '${{ inputs.upload_artifacts }}');
   assert.equal(
     upload?.with?.['retention-days'],

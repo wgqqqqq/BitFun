@@ -91,6 +91,7 @@ jobs:
       build_desktop_packages: true
       desktop_platforms: '["linux-x64","linux-arm64","macos-arm64","macos-x64","windows-x64"]'
       build_linux_binaries: true
+      build_relay_image: true
       upload_artifacts: true
       # Fork validation is intentionally cache-read-only. Only the upstream
       # repository may seed long-lived Nightly caches.

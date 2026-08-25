@@ -30,6 +30,7 @@ jobs:
       desktop_packages_required: ${{ steps.classify.outputs.desktop_packages_required }}
       desktop_platforms: ${{ steps.classify.outputs.desktop_platforms }}
       linux_binaries_required: ${{ steps.classify.outputs.linux_binaries_required }}
+      relay_image_required: ${{ steps.classify.outputs.relay_image_required }}
       dsh_profile_required: ${{ steps.classify.outputs.dsh_profile_required }}
       package_required: ${{ steps.classify.outputs.package_required }}
       reason: ${{ steps.classify.outputs.reason }}
@@ -351,6 +352,7 @@ jobs:
       build_desktop_packages: ${{ needs.build-impact.outputs.desktop_packages_required == 'true' }}
       desktop_platforms: ${{ needs.build-impact.outputs.desktop_platforms }}
       build_linux_binaries: ${{ needs.build-impact.outputs.linux_binaries_required == 'true' }}
+      build_relay_image: ${{ needs.build-impact.outputs.relay_image_required == 'true' }}
       upload_artifacts: false
       cache_write: false
 

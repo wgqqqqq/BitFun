@@ -30,6 +30,11 @@ on:
         required: false
         default: false
         type: boolean
+      validate_relay_image:
+        description: "Build the Relay runtime image for each native architecture without pushing it."
+        required: false
+        default: true
+        type: boolean
     secrets:
       release_signing_key:
         description: "Tauri/minisign private key, base64. Absent on forks: archives ship unsigned."
@@ -62,9 +67,11 @@ jobs:
           - os: ubuntu-22.04
             name: linux-x64
             target: x86_64-unknown-linux-gnu
+            docker_arch: amd64
           - os: ubuntu-22.04-arm
             name: linux-arm64
             target: aarch64-unknown-linux-gnu
+            docker_arch: arm64
 
     steps:
       - name: Checkout
@@ -203,6 +210,51 @@ jobs:
           bash scripts/sign-release-assets.sh \
             "$CLI_ARCHIVE" "${CLI_ARCHIVE}.sha256" \
             "$RELAY_ARCHIVE" "${RELAY_ARCHIVE}.sha256"
+
+      - name: Verify Linux binary outputs
+        shell: bash
+        env:
+          CLI_ARCHIVE: ${{ steps.cli-stage.outputs.archive }}
+          CLI_CHECKSUM: ${{ steps.cli-stage.outputs.checksum }}
+          RELAY_ARCHIVE: ${{ steps.relay-stage.outputs.archive }}
+          RELAY_CHECKSUM: ${{ steps.relay-stage.outputs.checksum }}
+        run: |
+          set -euo pipefail
+          test -s "$CLI_ARCHIVE"
+          test -s "$CLI_CHECKSUM"
+          test -s "$RELAY_ARCHIVE"
+          test -s "$RELAY_CHECKSUM"
+          sha256sum --check "$CLI_CHECKSUM"
+          sha256sum --check "$RELAY_CHECKSUM"
+
+      - name: Stage Relay image validation context
+        if: ${{ inputs.validate_relay_image }}
+        shell: bash
+        env:
+          RELAY_ARCHIVE: ${{ steps.relay-stage.outputs.archive }}
+        run: |
+          set -euo pipefail
+          mkdir -p relay-image-context
+          cp "$RELAY_ARCHIVE" relay-image-context/
+          cp src/apps/relay-server/Dockerfile.release relay-image-context/
+
+      - name: Set up Docker Buildx
+        if: ${{ inputs.validate_relay_image }}
+        uses: docker/setup-buildx-action@v4
+
+      - name: Validate Relay runtime image
+        if: ${{ inputs.validate_relay_image }}
+        uses: docker/build-push-action@v7
+        with:
+          context: relay-image-context
+          file: relay-image-context/Dockerfile.release
+          platforms: linux/${{ matrix.platform.docker_arch }}
+          push: false
+          provenance: false
+          sbom: false
+          build-args: |
+            VERSION=${{ inputs.version }}
+            REVISION=${{ inputs.checkout_ref }}
 
       - name: Upload Linux binary artifacts
         if: ${{ inputs.upload_artifacts }}
