@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
 
+# Temporary mixed mobile-web and Relay CI classification validation.
+
 # Build one multi-platform runtime image from the two signed Relay archives
 # produced by linux-binaries.yml.  The archives are built on Ubuntu 22.04 and
 # carry an asserted glibc <= 2.35 floor; trixie is intentionally kept as the
