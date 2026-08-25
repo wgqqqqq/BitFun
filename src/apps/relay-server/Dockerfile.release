@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
 
+# Temporary Relay image fixture for PR #2466 acceptance testing.
 # Build one multi-platform runtime image from the two signed Relay archives
 # produced by linux-binaries.yml.  The archives are built on Ubuntu 22.04 and
 # carry an asserted glibc <= 2.35 floor; trixie is intentionally kept as the
