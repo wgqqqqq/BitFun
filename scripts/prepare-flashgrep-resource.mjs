@@ -2,6 +2,7 @@ import { chmodSync, existsSync, statSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
+// Temporary Desktop producer fixture for PR #2466 acceptance testing.
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const RESOURCE_DIR = join(ROOT, 'resources', 'flashgrep');
