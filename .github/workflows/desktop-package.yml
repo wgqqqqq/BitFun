@@ -285,6 +285,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build design-system packages
+        run: pnpm --dir design-system run build:packages
+
       - name: Configure Apple Developer ID signing and notarization
         if: runner.os == 'macOS'
         shell: bash
