@@ -1,9 +1,6 @@
-name: Desktop Package
-
+# Fork-only packaging validation; never publishes a release.
+name: Windows Certum Packaging Test
 on:
-  release:
-    types:
-      - published
   workflow_dispatch:
     inputs:
       tag_name:
@@ -11,11 +8,11 @@ on:
         required: false
         type: string
       checkout_ref:
-        description: "Commit, branch, or tag to build. Defaults to tag_name, then HEAD."
+        description: Commit, branch, or tag to build. Defaults to tag_name, then HEAD.
         required: false
         type: string
       release_channel:
-        description: "Immutable update channel compiled into the Desktop artifact."
+        description: Immutable update channel compiled into the Desktop artifact.
         required: false
         default: stable
         type: choice
@@ -23,26 +20,21 @@ on:
           - stable
           - beta
       upload_to_release:
-        description: "Upload built artifacts to the release specified by tag_name."
+        description: Upload built artifacts to the release specified by tag_name.
         required: false
         default: false
         type: boolean
       relay_image_only:
-        description: "Publish only the Relay Server image and signed descriptor (no Desktop packages)."
+        description: Publish only the Relay Server image and signed descriptor (no Desktop packages).
         required: false
         default: false
         type: boolean
-
 permissions:
-  contents: write
-  packages: write
-
+  contents: read
 concurrency:
   group: desktop-package-${{ (github.event.release.prerelease || inputs.release_channel == 'beta') && 'beta' || github.event.release.tag_name || inputs.tag_name || github.sha }}
   cancel-in-progress: false
-
 jobs:
-  # ── Resolve version info ───────────────────────────────────────────
   prepare:
     if: github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'data-migrator-v')
     name: Prepare
@@ -58,7 +50,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-
       - name: Resolve version metadata
         id: meta
         shell: bash
@@ -137,8 +128,6 @@ jobs:
           echo "checkout_ref=$CHECKOUT_REF" >> "$GITHUB_OUTPUT"
           echo "release_channel=$CHANNEL"  >> "$GITHUB_OUTPUT"
           echo "relay_image_only=${INPUT_RELAY_IMAGE_ONLY:-false}" >> "$GITHUB_OUTPUT"
-
-  # ── Build per platform ─────────────────────────────────────────────
   package:
     name: Package (${{ matrix.platform.name }})
     runs-on: ${{ matrix.platform.os }}
@@ -146,52 +135,27 @@ jobs:
     if: needs.prepare.outputs.relay_image_only != 'true'
     env:
       NODE_OPTIONS: --max-old-space-size=6144
-      OPENBITFUN_ENABLE_UPDATER_ARTIFACTS: ${{ needs.prepare.outputs.upload_to_release }}
+      OPENBITFUN_ENABLE_UPDATER_ARTIFACTS: "true"
       OPENBITFUN_RELEASE_CHANNEL: ${{ needs.prepare.outputs.release_channel }}
       TAURI_UPDATER_ENDPOINT: ${{ github.repository != 'GCWing/OpenBitFun' && (needs.prepare.outputs.release_channel == 'beta' && format('https://github.com/{0}/releases/download/channel-v1-beta/latest-v1.json', github.repository) || format('https://github.com/{0}/releases/latest/download/latest-v1.json', github.repository)) || '' }}
       TAURI_UPDATER_FALLBACK_ENDPOINT: ${{ github.repository != 'GCWing/OpenBitFun' && (needs.prepare.outputs.release_channel == 'beta' && format('https://github.com/{0}/releases/download/channel-v1-beta/latest-v1.json', github.repository) || format('https://github.com/{0}/releases/latest/download/latest-v1.json', github.repository)) || '' }}
       TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
-      # Same trust root, compiled into the Desktop binary so one-click relay
-      # deploy can verify the signed checksum locally and hand the remote host
-      # a hash it does not have to trust the mirror for.
       OPENBITFUN_RELEASE_PUBKEY: ${{ secrets.OPENBITFUN_RELEASE_PUBKEY || secrets.TAURI_UPDATER_PUBKEY }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
     strategy:
       fail-fast: false
       matrix:
         platform:
-          - os: ubuntu-latest
-            name: linux-x64
-            target: x86_64-unknown-linux-gnu
-            build_command: pnpm run desktop:build:linux -- --target x86_64-unknown-linux-gnu --bundles deb,rpm,appimage
-          - os: ubuntu-24.04-arm
-            name: linux-arm64
-            target: aarch64-unknown-linux-gnu
-            # Thin LTO is now the workspace-wide [profile.release] default, so
-            # the previous CARGO_PROFILE_RELEASE_LTO=thin override is gone.
-            build_command: pnpm run desktop:build:linux -- --target aarch64-unknown-linux-gnu --bundles deb,rpm,appimage
-          - os: macos-15
-            name: macos-arm64
-            target: aarch64-apple-darwin
-            build_command: pnpm run desktop:build:arm64
-          - os: macos-15-intel
-            name: macos-x64
-            target: x86_64-apple-darwin
-            build_command: pnpm run desktop:build:x86_64
           - os: windows-latest
             name: windows-x64
             target: x86_64-pc-windows-msvc
-            # Compile before opening the short-lived SimplySign session.
             build_command: node scripts/desktop-tauri-build.mjs --no-bundle --target x86_64-pc-windows-msvc --verbose
-
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           ref: ${{ needs.prepare.outputs.checkout_ref }}
-
       - name: Check Windows signing configuration
         if: runner.os == 'Windows'
         id: windows-signing
@@ -217,7 +181,6 @@ jobs:
             'enabled=true' >> $env:GITHUB_OUTPUT
             "WINDOWS_CERTIFICATE_THUMBPRINT=$thumbprint" >> $env:GITHUB_ENV
           }
-
       - name: Install NSIS (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -232,7 +195,6 @@ jobs:
           if (Test-Path $nsisBin) {
             Add-Content $env:GITHUB_PATH $nsisBin
           }
-
       - name: Verify NSIS (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -240,7 +202,6 @@ jobs:
           $ErrorActionPreference = 'Stop'
           where.exe makensis
           makensis /VERSION
-
       - name: Install Linux system dependencies (Tauri bundler)
         if: runner.os == 'Linux'
         shell: bash
@@ -278,36 +239,29 @@ jobs:
             libtesseract-dev \
             tesseract-ocr \
             tesseract-ocr-eng
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
-
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
-
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.14"
+          bun-version: 1.3.14
           no-cache: true
-
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform.target }}
-
       - name: Cache Rust build
         uses: swatinem/rust-cache@v2
         with:
-          shared-key: "package-v2-${{ matrix.platform.name }}"
+          shared-key: package-v2-${{ matrix.platform.name }}
           cache-bin: false
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
       - name: Configure Apple Developer ID signing and notarization
         if: runner.os == 'macOS'
         shell: bash
@@ -321,31 +275,24 @@ jobs:
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
           OPENBITFUN_REQUIRE_APPLE_SIGNING: ${{ needs.prepare.outputs.upload_to_release }}
         run: bash scripts/ci/setup-macos-signing.sh
-
       - name: Project beta build version
         if: needs.prepare.outputs.release_channel == 'beta'
         run: node scripts/set-build-version.mjs --version "${{ needs.prepare.outputs.version }}"
-
       - name: Verify release version metadata
         run: node scripts/verify-release-version-sync.mjs --version "${{ needs.prepare.outputs.version }}"
-
       - name: Download and verify target Flashgrep binary
         run: node scripts/prepare-flashgrep-resource.mjs --target "${{ matrix.platform.target }}"
-
       - name: Build desktop app
         run: ${{ matrix.platform.build_command }}
-
       - name: Connect Certum SimplySign
         if: runner.os == 'Windows' && steps.windows-signing.outputs.enabled == 'true'
         timeout-minutes: 10
-        # Pinned immutable revision; this community action automates the Desktop login.
         uses: dismine/windows-app-signing-setup-action@89ae3b032d4bc7a5b98d1a42a34e61ecb6faad64
         with:
           certum-username: ${{ secrets.CERTUM_USERNAME }}
           certum-otp-uri: ${{ secrets.CERTUM_OTP_URI }}
           certum-key-id: ${{ env.WINDOWS_CERTIFICATE_THUMBPRINT }}
-          capture-diagnostics: 'false'
-
+          capture-diagnostics: "false"
       - name: Bundle Windows updater and verify Authenticode
         if: runner.os == 'Windows'
         timeout-minutes: 20
@@ -364,7 +311,6 @@ jobs:
               & ./scripts/ci/sign-windows.ps1 -Path $installer.FullName -VerifyOnly
             }
           }
-
       - name: Build and sign custom Windows installer
         if: runner.os == 'Windows'
         timeout-minutes: 60
@@ -378,17 +324,14 @@ jobs:
           if ($env:WINDOWS_CERTIFICATE_THUMBPRINT) {
             & ./scripts/ci/sign-windows.ps1 -Path 'OpenBitFun-Installer/src-tauri/target/release/openbitfun-installer.exe'
           }
-
       - name: Verify Apple signature and notarization
         if: runner.os == 'macOS'
         shell: bash
         run: bash scripts/ci/verify-macos-signing.sh "${{ matrix.platform.target }}"
-
       - name: Verify AppImage fcitx5 GTK module
         if: runner.os == 'Linux'
         shell: bash
         run: bash scripts/ci/verify-appimage-fcitx.sh "${{ matrix.platform.target }}"
-
       - name: Upload bundles
         uses: actions/upload-artifact@v6
         with:
@@ -399,584 +342,16 @@ jobs:
             target/release/bundle
             src/apps/desktop/target/release/bundle
             OpenBitFun-Installer/src-tauri/target/release/openbitfun-installer.exe
-
-  linux-binaries:
-    name: Linux CLI and Relay Server
-    needs: prepare
-    if: >-
-      needs.prepare.outputs.relay_image_only != 'true'
-    uses: ./.github/workflows/linux-binaries.yml
-    secrets:
-      release_signing_key: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      release_signing_password: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      release_pubkey: ${{ secrets.TAURI_UPDATER_PUBKEY }}
-    with:
-      checkout_ref: ${{ needs.prepare.outputs.checkout_ref }}
-      version: ${{ needs.prepare.outputs.version }}
-      artifact_prefix: ${{ needs.prepare.outputs.release_tag }}
-
-  # Publish the Relay once, as a multi-platform image. User servers only pull
-  # this image; they no longer download an archive and build a runtime image.
-  publish-relay-image:
-    name: Publish Relay Server Image
-    needs: [prepare, linux-binaries]
-    if: >-
-      always() &&
-      (needs.prepare.outputs.upload_to_release == 'true' ||
-       needs.prepare.outputs.relay_image_only == 'true') &&
-      (needs.prepare.outputs.relay_image_only == 'true' ||
-       needs.linux-binaries.result == 'success')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
-    steps:
-      - name: Resolve image repository
-        shell: bash
-        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/openbitfun-relay-server" >> "$GITHUB_ENV"
-
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.prepare.outputs.checkout_ref }}
-
-      - name: Download Relay archives from this release run
-        if: needs.prepare.outputs.relay_image_only != 'true'
-        uses: actions/download-artifact@v7
-        with:
-          pattern: openbitfun-linux-${{ needs.prepare.outputs.release_tag }}-*
-          path: linux-release-assets
-          merge-multiple: true
-
-      - name: Download Relay archives from the existing release (image-only backfill)
-        if: needs.prepare.outputs.relay_image_only == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
-        run: |
-          set -euo pipefail
-          mkdir -p linux-release-assets
-          gh release download "${RELEASE_TAG}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --dir linux-release-assets \
-            --pattern 'openbitfun-relay-server-*.tar.gz' \
-            --pattern 'openbitfun-relay-server-*.tar.gz.sha256'
-
-      - name: Verify image inputs
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f linux-release-assets/openbitfun-relay-server-x86_64-unknown-linux-gnu.tar.gz
-          test -f linux-release-assets/openbitfun-relay-server-aarch64-unknown-linux-gnu.tar.gz
-          for archive in linux-release-assets/openbitfun-relay-server-*.tar.gz; do
-            (cd linux-release-assets && sha256sum --check "$(basename "${archive}").sha256")
-          done
-          cp src/apps/relay-server/Dockerfile.release linux-release-assets/Dockerfile.release
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Resolve image tags
-        id: image-tags
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
-          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
-          IMAGE_ONLY: ${{ needs.prepare.outputs.relay_image_only }}
-          RELEASE_CHANNEL: ${{ needs.prepare.outputs.release_channel }}
-        run: |
-          set -euo pipefail
-          asset_version="${RELEASE_VERSION%%+*}"
-          {
-            echo 'value<<EOF'
-            echo "${IMAGE}:${RELEASE_TAG}"
-            echo "${IMAGE}:${asset_version}"
-            if [[ "${IMAGE_ONLY}" == "true" && "${RELEASE_CHANNEL}" == "stable" ]]; then
-              # Backfilling an older release must not roll the floating tag
-              # backwards. GitHub's latest endpoint excludes prereleases.
-              latest_release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)"
-              if [[ "${RELEASE_TAG}" == "${latest_release}" ]]; then
-                echo "${IMAGE}:latest"
-              fi
-            elif [[ "${RELEASE_CHANNEL}" == "stable" ]]; then
-              # The normal release workflow can create the GitHub Release only
-              # after packaging, so it cannot rely on /releases/latest yet.
-              echo "${IMAGE}:latest"
-            fi
-            echo EOF
-          } >>"$GITHUB_OUTPUT"
-
-      - name: Build and push multi-platform image
-        id: image
-        uses: docker/build-push-action@v7
-        with:
-          context: linux-release-assets
-          file: linux-release-assets/Dockerfile.release
-          platforms: linux/amd64,linux/arm64
-          push: true
-          provenance: false
-          sbom: false
-          build-args: |
-            VERSION=${{ needs.prepare.outputs.version }}
-            REVISION=${{ needs.prepare.outputs.release_tag }}
-          tags: ${{ steps.image-tags.outputs.value }}
-
-      - name: Smoke-test published image on both platforms
-        shell: bash
-        env:
-          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
-        run: bash scripts/relay/smoke-image.sh "${IMAGE}@${IMAGE_DIGEST}"
-
-      - name: Verify manifest and generate signed descriptor
-        shell: bash
-        env:
-          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
-          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
-          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
-          OPENBITFUN_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          OPENBITFUN_SIGNING_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          OPENBITFUN_SIGNING_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
-        run: |
-          set -euo pipefail
-          [[ "${IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
-          docker buildx imagetools inspect "${IMAGE}@${IMAGE_DIGEST}" --raw >relay-image-manifest.json
-          jq -e '
-            [.manifests[].platform | .os + "/" + .architecture] as $platforms
-            | ($platforms | index("linux/amd64")) != null
-            and ($platforms | index("linux/arm64")) != null
-          ' relay-image-manifest.json >/dev/null
-          jq -n \
-            --arg image "${IMAGE}" \
-            --arg tag "${RELEASE_TAG}" \
-            --arg version "${RELEASE_VERSION}" \
-            --arg digest "${IMAGE_DIGEST}" \
-            '{
-              schema_version: 1,
-              image: $image,
-              tag: $tag,
-              version: $version,
-              digest: $digest,
-              platforms: ["linux/amd64", "linux/arm64"]
-            }' >relay-image.json
-          bash scripts/sign-release-assets.sh relay-image.json
-          test -s relay-image.json.sig
-
-      - name: Upload signed image descriptor
-        uses: actions/upload-artifact@v6
-        with:
-          name: openbitfun-relay-image-${{ needs.prepare.outputs.release_tag }}
-          if-no-files-found: error
-          retention-days: 7
-          path: |
-            relay-image.json
-            relay-image.json.sig
-
-      # The package is private on first creation. This deliberately fails until
-      # its visibility is changed to public, preventing an apparently green
-      # release that anonymous customer servers cannot pull.
-      - name: Verify anonymous pull access
-        shell: bash
-        env:
-          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
-        run: |
-          set -euo pipefail
-          docker logout ghcr.io >/dev/null 2>&1 || true
-          clean_config="$(mktemp -d)"
-          trap 'rm -rf "$clean_config"' EXIT
-          DOCKER_CONFIG="$clean_config" docker buildx imagetools inspect \
-            "${IMAGE}@${IMAGE_DIGEST}" >/dev/null
-
-      - name: Attach descriptor to an existing release (image-only backfill)
-        if: needs.prepare.outputs.relay_image_only == 'true'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ needs.prepare.outputs.release_tag }}
-          prerelease: ${{ needs.prepare.outputs.release_channel == 'beta' }}
-          make_latest: "false"
-          files: |
-            relay-image.json
-            relay-image.json.sig
-          fail_on_unmatched_files: true
-
-  # ── Upload assets to GitHub Release ────────────────────────────────
-  upload-release-assets:
-    name: Upload Release Assets
-    needs: [prepare, package, linux-binaries, publish-relay-image]
-    if: >-
-      always() &&
-      needs.prepare.outputs.upload_to_release == 'true' &&
-      needs.package.result == 'success' &&
-      needs.linux-binaries.result == 'success' &&
-      needs.publish-relay-image.result == 'success'
-    runs-on: ubuntu-latest
-    env:
-      REQUIRED_UPDATER_PLATFORMS: windows-x86_64,darwin-x86_64,darwin-aarch64,linux-x86_64,linux-aarch64
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Download bundled artifacts
-        uses: actions/download-artifact@v7
-        with:
-          pattern: openbitfun-${{ needs.prepare.outputs.release_tag }}-*-bundle
-          path: release-assets
-          merge-multiple: true
-
-      - name: Download Linux binary artifacts
-        uses: actions/download-artifact@v7
-        with:
-          pattern: openbitfun-linux-${{ needs.prepare.outputs.release_tag }}-*
-          path: linux-release-assets
-          merge-multiple: true
-
-      - name: Download Relay image descriptor
-        uses: actions/download-artifact@v7
-        with:
-          name: openbitfun-relay-image-${{ needs.prepare.outputs.release_tag }}
-          path: relay-image-assets
-
-      - name: List release assets
-        run: |
-          echo "Release assets:"
-          find release-assets -type f | sort
-          echo "Linux CLI and Relay Server assets:"
-          find linux-release-assets -type f | sort
-          echo "Relay image descriptor:"
-          find relay-image-assets -type f | sort
-
-      - name: Prepare versioned Windows installer
-        run: |
-          node scripts/prepare-windows-installer-asset.mjs \
-            --assets-dir release-assets \
-            --version "${{ needs.prepare.outputs.version }}" \
-            --out-dir release-manual-assets
-
-      - name: Sign versioned Windows installer
-        shell: bash
-        env:
-          OPENBITFUN_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          OPENBITFUN_SIGNING_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          OPENBITFUN_SIGNING_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
-        run: bash scripts/sign-release-assets.sh release-manual-assets/*.exe
-
-      - name: Collect updater assets
-        run: |
-          node scripts/collect-tauri-updater-assets.mjs \
-            --assets-dir release-assets \
-            --version "${{ needs.prepare.outputs.version }}" \
-            --out-dir release-updater-assets \
-            --required-platforms "${REQUIRED_UPDATER_PLATFORMS}"
-
-      - name: Generate updater manifest
-        run: |
-          node scripts/generate-tauri-latest-json.mjs \
-            --assets-dir release-updater-assets \
-            --manual-assets-dir release-manual-assets \
-            --version "${{ needs.prepare.outputs.version }}" \
-            --tag "${{ needs.prepare.outputs.release_tag }}" \
-            --repo "${{ github.repository }}" \
-            --out release-updater-assets/latest-v1.json \
-            --required-platforms "${REQUIRED_UPDATER_PLATFORMS}"
-
-      - name: Verify updater manifest
-        run: |
-          node scripts/verify-tauri-latest-json.mjs \
-            --manifest release-updater-assets/latest-v1.json \
-            --version "${{ needs.prepare.outputs.version }}" \
-            --required-platforms "${REQUIRED_UPDATER_PLATFORMS}" \
-            --required-manual-platforms "windows-x86_64"
-
-      - name: Generate Linux binaries manifest
-        run: |
-          node scripts/generate-linux-binaries-manifest.mjs \
-            --assets-dir linux-release-assets \
-            --version "${{ needs.prepare.outputs.version }}" \
-            --tag "${{ needs.prepare.outputs.release_tag }}" \
-            --repo "${{ github.repository }}" \
-            --out linux-release-assets/linux-binaries-v1.json
-
-      # The Tauri bundler signs the five updater artifacts during `tauri build`,
-      # but the installers people download by hand from the release page — dmg,
-      # deb, rpm, the Windows installer and the direct AppImages — shipped with
-      # no signature at all. Sign them with the same key so every published
-      # artifact is verifiable. (This is not OS-level code signing: Gatekeeper
-      # and SmartScreen still need Apple/Authenticode certificates.)
-      - name: Sign installer packages
-        shell: bash
-        env:
-          OPENBITFUN_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          OPENBITFUN_SIGNING_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          OPENBITFUN_SIGNING_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
-        run: |
-          set -euo pipefail
-          mapfile -t assets < <(
-            find release-assets -type f \
-              \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \
-                 -o -name '*.dmg' \) | sort
-          )
-          if [[ "${#assets[@]}" -eq 0 ]]; then
-            echo "No installer packages found to sign."
-            exit 0
-          fi
-          bash scripts/sign-release-assets.sh "${assets[@]}"
-
-          # Publish the public key alongside the signatures: a signature nobody
-          # can fetch a key for is not verifiable.
-          node scripts/write-minisign-public-key.mjs \
-            --out release-assets/minisign.pub
-
-      - name: Stage release assets
-        shell: bash
-        run: |
-          set -euo pipefail
-          shopt -s globstar
-          node scripts/stage-github-release-assets.mjs \
-            --out-dir release-upload-assets \
-            release-updater-assets/* \
-            release-manual-assets/*.exe \
-            release-manual-assets/*.exe.sig \
-            release-assets/**/*.AppImage \
-            release-assets/**/*.AppImage.sig \
-            release-assets/**/*.deb \
-            release-assets/**/*.deb.sig \
-            release-assets/**/*.dmg \
-            release-assets/**/*.dmg.sig \
-            release-assets/**/*.rpm \
-            release-assets/**/*.rpm.sig \
-            release-assets/minisign.pub \
-            linux-release-assets/openbitfun-cli-*.tar.gz \
-            linux-release-assets/openbitfun-cli-*.tar.gz.sha256 \
-            linux-release-assets/openbitfun-relay-server-*.tar.gz \
-            linux-release-assets/openbitfun-relay-server-*.tar.gz.sha256 \
-            linux-release-assets/*.tar.gz.sig \
-            linux-release-assets/*.tar.gz.sha256.sig \
-            linux-release-assets/linux-binaries-v1.json \
-            relay-image-assets/relay-image.json \
-            relay-image-assets/relay-image.json.sig
-
-      # Old Desktop and CLI clients follow GitHub Latest. Keep their feeds on
-      # the final 0.2 release; only versioned manifests may advertise 1.x.
-      - name: Preserve legacy update feeds
-        if: needs.prepare.outputs.release_channel == 'stable'
-        shell: bash
-        run: |
-          set -euo pipefail
-          for manifest in latest.json linux-binaries.json; do
-            curl -fsSL --retry 5 --retry-delay 3 \
-              "https://github.com/GCWing/OpenBitFun/releases/download/v0.2.19/${manifest}" \
-              -o "release-upload-assets/${manifest}"
-            jq -e '.version == "0.2.19"' "release-upload-assets/${manifest}" >/dev/null
-          done
-
-      - name: Upload to release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
-          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
-          RELEASE_PRERELEASE: ${{ needs.prepare.outputs.release_channel == 'beta' }}
-          RELEASE_LATEST: ${{ needs.prepare.outputs.release_channel == 'stable' }}
-        run: |
-          set -euo pipefail
-          # The immutable tag was checked before building. Do not send
-          # target_commitish: GitHub can require workflows:write even when the
-          # tag already exists. action-gh-release also resends the stored value.
-          status="$(curl -sS --retry 5 --retry-delay 3 \
-            --output release-state.json --write-out '%{http_code}' \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H 'Accept: application/vnd.github+json' \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")"
-          case "${status}" in
-            200) ;;
-            404)
-              gh release create "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
-                --verify-tag --draft --title "OpenBitFun ${RELEASE_VERSION}" \
-                --generate-notes
-              ;;
-            *)
-              echo "Could not inspect release (GitHub API returned ${status})." >&2
-              exit 1
-              ;;
-          esac
-          gh release upload "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
-            --clobber release-upload-assets/*
-          gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
-            --title "OpenBitFun ${RELEASE_VERSION}" --draft=false \
-            --prerelease="${RELEASE_PRERELEASE}" --latest="${RELEASE_LATEST}"
-
-      - name: Verify published legacy update feeds
-        if: needs.prepare.outputs.release_channel == 'stable'
-        shell: bash
-        run: |
-          set -euo pipefail
-          for manifest in latest.json linux-binaries.json; do
-            curl -fsSL --retry 5 --retry-delay 3 \
-              "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.release_tag }}/${manifest}" \
-              -o "legacy-${manifest}"
-            cmp "release-upload-assets/${manifest}" "legacy-${manifest}"
-          done
-
-      - name: Verify published updater manifest
-        run: |
-          curl -fsSL --retry 5 --retry-delay 3 \
-            "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.release_tag }}/latest-v1.json" \
-            -o latest.published.json
-          node scripts/verify-tauri-latest-json.mjs \
-            --manifest latest.published.json \
-            --version "${{ needs.prepare.outputs.version }}" \
-            --required-platforms "${REQUIRED_UPDATER_PLATFORMS}" \
-            --required-manual-platforms "windows-x86_64" \
-            --check-urls true
-
-      - name: Verify published Linux binaries manifest
-        run: |
-          curl -fsSL --retry 5 --retry-delay 3 \
-            "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.release_tag }}/linux-binaries-v1.json" \
-            -o linux-binaries.published.json
-          test "$(jq -r '.version' linux-binaries.published.json)" = "${{ needs.prepare.outputs.version }}"
-          jq -e '.platforms | has("linux-x86_64") and has("linux-aarch64")' linux-binaries.published.json >/dev/null
-          while IFS= read -r archive_url; do
-            test -n "${archive_url}"
-            curl -fsSLI --retry 5 --retry-delay 3 "${archive_url}" -o /dev/null
-            curl -fsSL --retry 5 --retry-delay 3 "${archive_url}.sha256" -o /dev/null
-            curl -fsSL --retry 5 --retry-delay 3 "${archive_url}.sig" -o /dev/null
-            curl -fsSL --retry 5 --retry-delay 3 "${archive_url}.sha256.sig" -o /dev/null
-          done < <(jq -r '.platforms[] | .cli.url, .relay.url' linux-binaries.published.json)
-
-      - name: Verify published Relay image descriptor
-        shell: bash
-        run: |
-          curl -fsSL --retry 5 --retry-delay 3 \
-            "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.release_tag }}/relay-image.json" \
-            -o relay-image.published.json
-          test "$(jq -r '.tag' relay-image.published.json)" = "${{ needs.prepare.outputs.release_tag }}"
-          test "$(jq -r '.version' relay-image.published.json)" = "${{ needs.prepare.outputs.version }}"
-          test "$(jq -r '.image' relay-image.published.json)" = "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/openbitfun-relay-server"
-          jq -e '.platforms | sort == ["linux/amd64", "linux/arm64"]' relay-image.published.json >/dev/null
-          jq -e '.digest | test("^sha256:[0-9a-f]{64}$")' relay-image.published.json >/dev/null
-          curl -fsSL --retry 5 --retry-delay 3 \
-            "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.release_tag }}/relay-image.json.sig" \
-            -o relay-image.published.json.sig
-          # These exact bytes were signed in the image job. Detect a stale or
-          # crossed upload pair before advertising a release as ready.
-          cmp relay-image-assets/relay-image.json relay-image.published.json
-          cmp relay-image-assets/relay-image.json.sig relay-image.published.json.sig
-
-      - name: Resolve beta channel promotion
-        id: beta-channel
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_CHANNEL: ${{ needs.prepare.outputs.release_channel }}
-        run: |
-          set -euo pipefail
-          channel_status="$(curl -sS --retry 5 --retry-delay 3 \
-            --output channel.release.json \
-            --write-out '%{http_code}' \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/channel-v1-beta")"
-          case "${channel_status}" in
-            200)
-              echo "channel_exists=true" >>"$GITHUB_OUTPUT"
-              curl -fsSL --retry 5 --retry-delay 3 \
-                "https://github.com/${GITHUB_REPOSITORY}/releases/download/channel-v1-beta/latest-v1.json" \
-                -o current.beta.json
-              ;;
-            404)
-              echo "channel_exists=false" >>"$GITHUB_OUTPUT"
-              if [[ "${RELEASE_CHANNEL}" == "stable" ]]; then
-                echo "promote=false" >>"$GITHUB_OUTPUT"
-                echo "No beta channel exists; stable release does not need to create one."
-                exit 0
-              fi
-              ;;
-            *)
-              echo "Could not inspect channel-v1-beta release (GitHub API returned ${channel_status})." >&2
-              exit 1
-              ;;
-          esac
-          args=(--candidate latest.published.json --github-output "$GITHUB_OUTPUT")
-          if [[ -s current.beta.json ]]; then
-            args+=(--current current.beta.json)
-          fi
-          node scripts/plan-channel-promotion.mjs "${args[@]}"
-
-      - name: Publish beta channel manifest
-        if: steps.beta-channel.outputs.promote == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CHECKOUT_REF: ${{ needs.prepare.outputs.checkout_ref }}
-          CHANNEL_EXISTS: ${{ steps.beta-channel.outputs.channel_exists }}
-          CANDIDATE_VERSION: ${{ steps.beta-channel.outputs.candidate_version }}
-        run: |
-          set -euo pipefail
-          if [[ "${CHANNEL_EXISTS}" != "true" ]]; then
-            gh release create channel-v1-beta \
-              --repo "${GITHUB_REPOSITORY}" \
-              --target "${CHECKOUT_REF}" \
-              --prerelease \
-              --title "OpenBitFun Beta Update Channel" \
-              --notes "Mutable updater pointer. Installable beta releases use immutable version tags."
-          fi
-          mkdir -p beta-channel
-          cp latest.published.json beta-channel/latest-v1.json
-          gh release upload channel-v1-beta beta-channel/latest-v1.json \
-            --repo "${GITHUB_REPOSITORY}" \
-            --clobber
-          # A successful HTTP response can still contain the previous CDN object.
-          # Retry content validation as well as transport failures after replacement.
-          for attempt in {1..12}; do
-            if curl -fsSL --max-time 30 \
-              "https://github.com/${GITHUB_REPOSITORY}/releases/download/channel-v1-beta/latest-v1.json" \
-              -o channel-v1-beta.published.json && \
-              jq -e --arg version "${CANDIDATE_VERSION}" \
-                '.version == $version' channel-v1-beta.published.json >/dev/null; then
-              echo "Beta channel manifest verified: ${CANDIDATE_VERSION}"
-              exit 0
-            fi
-            echo "Beta channel manifest is not ready (attempt ${attempt}/12)."
-            if [[ "${attempt}" -lt 12 ]]; then sleep 5; fi
-          done
-          echo "Beta channel manifest did not converge to ${CANDIDATE_VERSION}." >&2
-          exit 1
-
-      # Nudge the openbitfun.com mirror to sync now instead of on its next
-      # 10-minute cron tick. Until the mirror has these bytes, CN clients have
-      # only the GitHub origin to fall back to. Best effort: the cron run is
-      # still the source of truth, so a failed or unconfigured ping never fails
-      # the release. Receiver: scripts/openbitfun-release-sync.sh.
-      # Host restore: deploy/openbitfun-host/README.md.
-      - name: Request openbitfun mirror sync
-        if: github.repository == 'GCWing/OpenBitFun'
-        continue-on-error: true
-        env:
-          SYNC_WEBHOOK_URL: ${{ secrets.OPENBITFUN_SYNC_WEBHOOK_URL }}
-          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
-          RELEASE_CHANNEL: ${{ needs.prepare.outputs.release_channel }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${SYNC_WEBHOOK_URL:-}" ]]; then
-            echo "OPENBITFUN_SYNC_WEBHOOK_URL is not configured; the mirror will pick this up on its next cron run."
-            exit 0
-          fi
-          curl -fsSL -X POST --retry 3 --retry-delay 5 --max-time 30 \
-            -H 'Content-Type: application/json' \
-            -d "{\"tag\":\"${RELEASE_TAG}\",\"channel\":\"${RELEASE_CHANNEL}\"}" \
-            "${SYNC_WEBHOOK_URL}" >/dev/null
-          echo "Mirror sync requested for ${RELEASE_TAG}."
+      - name: Verify updater signature artifacts
+        shell: pwsh
+        run: |-
+          $ErrorActionPreference = 'Stop'
+          $installers = @(Get-ChildItem 'target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe' -File)
+          if ($installers.Count -eq 0) { throw 'NSIS installer missing.' }
+          foreach ($installer in $installers) {
+            $sig = "$($installer.FullName).sig"
+            if (-not (Test-Path $sig)) { throw "Missing updater signature: $sig" }
+            if ((Get-Item $sig).Length -eq 0) { throw "Empty updater signature: $sig" }
+          }
+          Write-Host 'Windows packages and Tauri updater signatures were produced. Authenticode requires Certum credentials.'
+    timeout-minutes: 180
