@@ -113,3 +113,45 @@ bar, an offline header, and square preview tiles in two columns (three from
 600pt). The `miniapp-*.imageset` previews are PNG projections of HarmonyOS
 `miniapp_*_preview.webp` assets; retain their original artwork and center-crop
 them in the native view. App pages display their own name in the same header.
+
+## TestFlight distribution
+
+Use an App Store Connect distribution for public external testing. Do not choose
+TestFlight Internal Only: Apple prevents those builds from reaching external
+testers. The Xcode project's Release configuration links the Release shared
+framework; Debug continues to link the Debug framework.
+
+Set `DEVELOPER_DIR` to the installed compatible Xcode, `JAVA_HOME` to a JDK 17+
+runtime, and `ANDROID_HOME` to the local Android SDK needed by the shared Gradle
+build. Keep those machine-specific paths and Apple credentials out of Git.
+From the repository root, build the shared framework and archive:
+
+```bash
+(cd src/apps/mobile/shared && ./gradlew :core-feature:assembleOpenBitFunMobileCoreReleaseXCFramework)
+xcodebuild -project src/apps/mobile/ios/OpenBitFun.xcodeproj -scheme OpenBitFun \
+  -configuration Release -destination 'generic/platform=iOS' \
+  -archivePath /tmp/OpenBitFun-TestFlight.xcarchive \
+  DEVELOPMENT_TEAM="$OPENBITFUN_APPLE_TEAM_ID" \
+  MARKETING_VERSION=1.0.0 CURRENT_PROJECT_VERSION=1 \
+  -allowProvisioningUpdates archive
+```
+
+`MARKETING_VERSION` must be a numeric version accepted by Apple. The build number
+must be newer than previously uploaded builds for that version. Override both
+build settings when preparing a release; `Info.plist` resolves their values.
+The signed archive can be distributed from Xcode Organizer with App Store
+Connect, or uploaded using `xcodebuild -exportArchive` and a local export-options
+plist containing `method=app-store-connect`, `destination=upload`,
+`signingStyle=automatic`, `manageAppVersionAndBuildNumber=true`, and
+`testFlightInternalTestingOnly=false`. Xcode can manage the final uploaded build
+number. A development archive is re-signed for distribution during export.
+
+After Apple processes the upload, add the build to an external TestFlight group
+in App Store Connect, fill in beta test and review information, and submit it
+for Beta App Review when required. Enable the group's public invitation link
+and set the tester limit. Verify that the approved build is available through
+the link before publishing the link on the website. Upload success alone does
+not mean external testing is available. A build remains testable for up to
+90 days after upload; deliver a replacement before it expires.
+
+See Apple's [external tester guide](https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers).
