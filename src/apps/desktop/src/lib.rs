@@ -23,16 +23,23 @@
 pub mod api;
 pub mod appearance;
 mod builtin_browser_host;
+#[cfg(not(target_env = "ohos"))]
 pub mod computer_use;
 pub mod crash_diagnostics;
 mod embedded_relay_host;
 pub mod frontend_workbench;
 pub mod logging;
 pub mod macos_menubar;
+#[cfg(target_env = "ohos")]
+mod ohos;
 mod openbitfun_control_host;
 pub mod runtime;
 pub mod sleep_prevention;
 pub mod startup_trace;
+#[cfg(not(target_env = "ohos"))]
+pub mod tray;
+#[cfg(target_env = "ohos")]
+#[path = "ohos/tray.rs"]
 pub mod tray;
 mod webview_recovery;
 mod window_state_support;
@@ -271,7 +278,10 @@ async fn hide_main_window_after_close_request(app: tauri::AppHandle) -> Result<(
     Ok(())
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(all(
+    not(target_env = "ohos"),
+    any(target_os = "linux", target_os = "macos", target_os = "windows")
+))]
 fn show_main_window_for_secondary_launch(
     app: &tauri::AppHandle,
     attempt: &str,
@@ -309,7 +319,10 @@ fn show_main_window_for_secondary_launch(
     Ok(())
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(all(
+    not(target_env = "ohos"),
+    any(target_os = "linux", target_os = "macos", target_os = "windows")
+))]
 fn handle_secondary_launch(app: &tauri::AppHandle) {
     if let Err(error) = show_main_window_for_secondary_launch(app, "immediate") {
         log::warn!(
@@ -406,7 +419,7 @@ fn get_startup_native_trace(
 }
 
 /// Tauri application entry point
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[cfg_attr(all(mobile, not(target_env = "ohos")), tauri::mobile_entry_point)]
 pub async fn run() {
     let startup_started = Instant::now();
     let startup_trace_id = SystemTime::now()
@@ -678,7 +691,10 @@ pub async fn run() {
         move |_context, request| frontend_protocol_manager.protocol_response(request),
     );
 
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(all(
+        not(target_env = "ohos"),
+        any(target_os = "linux", target_os = "macos", target_os = "windows")
+    ))]
     {
         // The isolated embedded-WebDriver app must be able to run alongside a
         // developer's normal OpenBitFun instance. Its storage root and automation
@@ -696,19 +712,31 @@ pub async fn run() {
         }
     }
 
-    let app = builder
+    let builder = builder
         .plugin(logging::build_log_command_plugin())
-        .plugin(logging::build_log_handoff_plugin(log_targets))
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
+        .plugin(logging::build_log_handoff_plugin(log_targets));
+    #[cfg(not(target_env = "ohos"))]
+    let builder = builder.plugin(tauri_plugin_opener::init());
+    #[cfg(target_env = "ohos")]
+    let builder = builder
+        .plugin(crate::ohos::opener::init())
+        .plugin(crate::ohos::companion::init());
+    #[cfg(not(target_env = "ohos"))]
+    let builder = builder.plugin(tauri_plugin_dialog::init());
+    #[cfg(target_env = "ohos")]
+    let builder = builder.plugin(crate::ohos::dialog::init());
+    let builder = builder.plugin(tauri_plugin_fs::init());
+    #[cfg(not(target_env = "ohos"))]
+    let builder = builder
         .plugin(
             tauri_plugin_autostart::Builder::new()
                 .app_name("OpenBitFun")
                 .build(),
         )
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build());
+
+    let app = builder
         // The desktop owns validated snapshots and atomic writes. Do not install
         // window-state: its exit hook can overwrite repairs with stale cached data.
         .manage(window_state_support::MainWindowState::default())
@@ -751,6 +779,13 @@ pub async fn run() {
             }
         })
         .setup(move |app| {
+            // HarmonyOS dispatches setup from ArkUI's render callback, after the
+            // initial Rust entry has returned. Restore the product runtime context
+            // for synchronous bootstrap code that uses Tokio's current handle.
+            #[cfg(target_env = "ohos")]
+            let setup_runtime = tauri::async_runtime::handle();
+            #[cfg(target_env = "ohos")]
+            let _setup_runtime_guard = setup_runtime.inner().enter();
             let setup_started = Instant::now();
             startup_trace.record_phase("tauri_setup_start", "native_setup");
             #[cfg(target_os = "macos")]
@@ -775,6 +810,9 @@ pub async fn run() {
             );
             startup_trace.record_logging_ready_and_stop_persistence();
 
+            #[cfg(target_env = "ohos")]
+            let bundled_frontend = ohos::bundled_frontend_directory();
+            #[cfg(not(target_env = "ohos"))]
             let bundled_frontend = if cfg!(debug_assertions) {
                 let development_dist = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                     .join("../../..")
@@ -928,6 +966,16 @@ pub async fn run() {
             // tauri.conf.json maps "../../mobile-web/dist" -> "mobile-web/dist",
             // so the primary candidate is "mobile-web/dist". Additional fallbacks
             // handle legacy or non-standard bundle layouts.
+            #[cfg(target_env = "ohos")]
+            {
+                if let Some(path) = ohos::bundled_mobile_web_directory() {
+                    log::info!("Found bundled mobile-web at: {}", path.display());
+                    api::remote_connect_api::set_mobile_web_resource_path(path);
+                } else {
+                    log::error!("HarmonyOS bundled mobile-web resources are missing");
+                }
+            }
+            #[cfg(not(target_env = "ohos"))]
             {
                 let step_started = Instant::now();
                 let candidates = ["mobile-web/dist", "mobile-web", "dist"];
@@ -971,6 +1019,11 @@ pub async fn run() {
                     step_started,
                 );
             }
+
+            #[cfg(all(target_env = "ohos", debug_assertions))]
+            ohos::terminal_diagnostics::run_if_requested();
+            #[cfg(all(target_env = "ohos", debug_assertions))]
+            ohos::workspace_access_diagnostics::run_if_requested();
 
             let app_handle = app.handle().clone();
             let workspace_startup_bootstrap_snapshot = {
@@ -2006,17 +2059,16 @@ async fn init_agentic_system() -> anyhow::Result<(
         openbitfun_core::product_runtime::core_permission_request_manager()
             .map_err(anyhow::Error::msg)?;
 
-    let computer_use_host: ComputerUseHostRef =
-        Arc::new(computer_use::DesktopComputerUseHost::new());
-    set_computer_use_desktop_available(true);
+    #[cfg(not(target_env = "ohos"))]
+    let computer_use_host: Option<ComputerUseHostRef> =
+        Some(Arc::new(computer_use::DesktopComputerUseHost::new()));
+    #[cfg(target_env = "ohos")]
+    let computer_use_host: Option<ComputerUseHostRef> = None;
+    set_computer_use_desktop_available(computer_use_host.is_some());
 
     let tool_pipeline = Arc::new(
-        tools::pipeline::ToolPipeline::new(
-            tool_registry,
-            tool_state_manager,
-            Some(computer_use_host),
-        )
-        .with_permission_request_manager(permission_request_manager),
+        tools::pipeline::ToolPipeline::new(tool_registry, tool_state_manager, computer_use_host)
+            .with_permission_request_manager(permission_request_manager),
     );
 
     let stream_processor = Arc::new(execution::StreamProcessor::new(event_queue.clone()));

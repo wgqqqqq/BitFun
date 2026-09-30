@@ -510,6 +510,9 @@
       "interrupted": "已中断"
     },
     "menu": {
+      "enlarge": "放大",
+      "shrink": "缩小",
+      "resetSize": "恢复默认大小",
       "switchPet": "切换宠物",
       "closePet": "关闭宠物",
       "closeBubble": "关闭该气泡"

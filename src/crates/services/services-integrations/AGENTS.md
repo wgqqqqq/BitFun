@@ -187,3 +187,12 @@ cargo test --locked -p openbitfun-services-integrations --no-default-features --
 
 These loopback protocol fixtures exercise the serving host's HTTP and filesystem
 behavior; they do not establish real SSH, relay, peer or dispatch support.
+
+For LAN address selection and relay URL compatibility:
+
+```bash
+cargo test --locked -p openbitfun-services-integrations --no-default-features --features remote-connect --lib remote_connect::lan::tests::
+```
+
+OHOS NetworkKit enumeration additionally requires a signed HAP with
+`ohos.permission.GET_NETWORK_INFO`; host tests do not verify that system boundary.

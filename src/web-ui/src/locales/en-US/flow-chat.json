@@ -510,6 +510,9 @@
       "interrupted": "Interrupted"
     },
     "menu": {
+      "enlarge": "Enlarge",
+      "shrink": "Shrink",
+      "resetSize": "Reset size",
       "switchPet": "Switch pet",
       "closePet": "Close pet",
       "closeBubble": "Close this bubble"

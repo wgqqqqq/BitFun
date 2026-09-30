@@ -1,0 +1,2223 @@
+diff --git a/crates/tauri-build/Cargo.toml b/crates/tauri-build/Cargo.toml
+index b73a7f0..8e2aa56 100644
+--- a/crates/tauri-build/Cargo.toml
++++ b/crates/tauri-build/Cargo.toml
+@@ -44,6 +44,9 @@ glob = "0.3"
+ # Our code requires at least 0.8.21 so don't simplify this to 0.8
+ schemars = { version = "0.8.21", features = ["preserve_order"] }
+ 
++[target.'cfg(target_env = "ohos")'.dependencies]
++napi-build-ohos = { version = "1.1" }
++
+ [features]
+ default = ["config-json"]
+ codegen = ["tauri-codegen", "quote"]
+diff --git a/crates/tauri-build/src/lib.rs b/crates/tauri-build/src/lib.rs
+index 9c3a8d2..d3fadd3 100644
+--- a/crates/tauri-build/src/lib.rs
++++ b/crates/tauri-build/src/lib.rs
+@@ -497,10 +497,14 @@ pub fn build() {
+ pub fn try_build(attributes: Attributes) -> Result<()> {
+   use anyhow::anyhow;
+ 
++  #[cfg(target_env = "ohos")]
++  napi_build_ohos::setup();
++
+   println!("cargo:rerun-if-env-changed=TAURI_CONFIG");
+ 
+   let target_os = env::var_os("CARGO_CFG_TARGET_OS").unwrap();
+-  let mobile = target_os == "ios" || target_os == "android";
++  let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
++  let mobile = target_os == "ios" || target_os == "android" || target_env == "ohos";
+   cfg_alias("desktop", !mobile);
+   cfg_alias("mobile", mobile);
+ 
+diff --git a/crates/tauri-codegen/src/context.rs b/crates/tauri-codegen/src/context.rs
+index 415b741..dd37620 100644
+--- a/crates/tauri-codegen/src/context.rs
++++ b/crates/tauri-codegen/src/context.rs
+@@ -379,7 +379,12 @@ pub fn context_codegen(data: ContextData) -> EmbeddedAssetsResult<TokenStream> {
+         panic!("The isolation application does not contain a file setting the `window.__TAURI_ISOLATION_HOOK__` value.");
+       }
+ 
+-      let schema = options.isolation_schema;
++      // TODO: OpenHarmony cannot register schemes dynamically, so we hardcode the schema
++      let schema = if let Target::OpenHarmony = target {
++        "isolation".to_string()
++      } else {
++        options.isolation_schema.clone()
++      };
+ 
+       quote!(#root::Pattern::Isolation {
+         assets: ::std::sync::Arc::new(#assets),
+diff --git a/crates/tauri-macros/src/mobile.rs b/crates/tauri-macros/src/mobile.rs
+index 8782717..c67179b 100644
+--- a/crates/tauri-macros/src/mobile.rs
++++ b/crates/tauri-macros/src/mobile.rs
+@@ -83,12 +83,22 @@ pub fn entry_point(_attributes: TokenStream, item: TokenStream) -> TokenStream {
+       }
+ 
+       // be careful when renaming this, the `start_app` symbol is checked by the CLI
+-      #[cfg(not(target_os = "android"))]
++      #[cfg(target_os = "ios")]
+       #[no_mangle]
+       #[inline(never)]
+       pub extern "C" fn start_app() {
+         _start_app()
+       }
++
++      #[cfg(target_env = "ohos")]
++      use ::tauri::ohos::*;
++
++      #[cfg(target_env = "ohos")]
++      #[::tauri::ohos::openharmony_ability_derive::ability(webview, protocol = "tauri,ipc,asset,isolation")]
++      pub fn openharmony(app: ::tauri::ohos::openharmony_ability::OpenHarmonyApp) {
++        ::tauri::ohos::APP.lock().unwrap().replace(app);
++        _start_app()
++      }
+     )
+     .into()
+   }
+diff --git a/crates/tauri-plugin/src/build/mobile.rs b/crates/tauri-plugin/src/build/mobile.rs
+index edccc50..248543e 100644
+--- a/crates/tauri-plugin/src/build/mobile.rs
++++ b/crates/tauri-plugin/src/build/mobile.rs
+@@ -56,10 +56,11 @@ pub(crate) fn setup(
+   android_path: Option<PathBuf>,
+   #[allow(unused_variables)] ios_path: Option<PathBuf>,
+ ) -> Result<()> {
+-  let target_os = build_var("CARGO_CFG_TARGET_OS")?;
+-  let mobile = target_os == "android" || target_os == "ios";
+-  cfg_alias("mobile", mobile);
++  let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
++  let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
++  let mobile = target_os == "ios" || target_os == "android" || target_env == "ohos";
+   cfg_alias("desktop", !mobile);
++  cfg_alias("mobile", mobile);
+ 
+   match target_os.as_str() {
+     "android" => {
+diff --git a/crates/tauri-runtime-wry/Cargo.toml b/crates/tauri-runtime-wry/Cargo.toml
+index e1873ce..3e4a2b7 100644
+--- a/crates/tauri-runtime-wry/Cargo.toml
++++ b/crates/tauri-runtime-wry/Cargo.toml
+@@ -35,7 +35,7 @@ once_cell = "1.20"
+ version = "0.61"
+ features = ["Win32_Foundation", "Win32_Graphics_Dwm"]
+ 
+-[target."cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))".dependencies]
++[target.'cfg(all(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"), not(target_env = "ohos")))'.dependencies]
+ gtk = { version = "0.18", features = ["v3_24"] }
+ webkit2gtk = { version = "=2.0", features = ["v2_40"] }
+ percent-encoding = "2"
+diff --git a/crates/tauri-runtime-wry/build.rs b/crates/tauri-runtime-wry/build.rs
+index 9974c50..1e2d9ac 100644
+--- a/crates/tauri-runtime-wry/build.rs
++++ b/crates/tauri-runtime-wry/build.rs
+@@ -13,7 +13,8 @@ fn alias(alias: &str, has_feature: bool) {
+ 
+ fn main() {
+   let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+-  let mobile = target_os == "ios" || target_os == "android";
++  let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
++  let mobile = target_os == "ios" || target_os == "android" || target_env == "ohos";
+   alias("desktop", !mobile);
+   alias("mobile", mobile);
+ }
+diff --git a/crates/tauri-runtime-wry/src/lib.rs b/crates/tauri-runtime-wry/src/lib.rs
+index 1d59fc5..93bb3a3 100644
+--- a/crates/tauri-runtime-wry/src/lib.rs
++++ b/crates/tauri-runtime-wry/src/lib.rs
+@@ -39,13 +39,13 @@ use objc2::rc::Retained;
+ use tao::platform::android::{WindowBuilderExtAndroid, WindowExtAndroid};
+ #[cfg(target_os = "macos")]
+ use tao::platform::macos::{EventLoopWindowTargetExtMacOS, WindowBuilderExtMacOS};
+-#[cfg(any(
++#[cfg(all(any(
+   target_os = "linux",
+   target_os = "dragonfly",
+   target_os = "freebsd",
+   target_os = "netbsd",
+   target_os = "openbsd"
+-))]
++), not(target_env = "ohos")))]
+ use tao::platform::unix::{WindowBuilderExtUnix, WindowExtUnix};
+ #[cfg(windows)]
+ use tao::platform::windows::{WindowBuilderExtWindows, WindowExtWindows};
+@@ -109,7 +109,8 @@ use wry::{
+   target_os = "windows",
+   target_os = "macos",
+   target_os = "ios",
+-  target_os = "android"
++  target_os = "android",
++  target_env = "ohos",
+ )))]
+ use wry::{WebViewBuilderExtUnix, WebViewExtUnix};
+ 
+@@ -119,6 +120,8 @@ pub use tao::platform::ios::{WindowBuilderExtIOS, WindowExtIOS};
+ pub use tao::platform::macos::{
+   ActivationPolicy as TaoActivationPolicy, EventLoopExtMacOS, WindowExtMacOS,
+ };
++#[cfg(target_env = "ohos")]
++pub use tao::platform::ohos::EventLoopBuilderExtOpenHarmony;
+ #[cfg(target_os = "macos")]
+ use tauri_runtime::ActivationPolicy;
+ 
+@@ -816,13 +819,13 @@ impl WindowBuilder for WindowBuilderWrapper {
+       ");
+     }
+ 
+-    #[cfg(any(
++    #[cfg(all(any(
+       target_os = "linux",
+       target_os = "dragonfly",
+       target_os = "freebsd",
+       target_os = "netbsd",
+       target_os = "openbsd"
+-    ))]
++    ), not(target_env = "ohos")))]
+     {
+       // Mouse event is disabled on Linux since sudden event bursts could block event loop.
+       window.inner = window.inner.with_cursor_moved_event(false);
+@@ -1101,12 +1104,15 @@ impl WindowBuilder for WindowBuilderWrapper {
+     self
+   }
+ 
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   fn transient_for(mut self, parent: &impl gtk::glib::IsA<gtk::Window>) -> Self {
+     self.inner = self.inner.with_transient_for(parent);
+@@ -1177,20 +1183,25 @@ impl WindowBuilder for WindowBuilderWrapper {
+     self
+   }
+ 
+-  #[cfg(any(
++  #[cfg(all(any(
+     windows,
+     target_os = "linux",
+     target_os = "dragonfly",
+     target_os = "freebsd",
+     target_os = "netbsd",
+     target_os = "openbsd"
+-  ))]
++  ), not(target_env = "ohos")))]
+   fn skip_taskbar(mut self, skip: bool) -> Self {
+     self.inner = self.inner.with_skip_taskbar(skip);
+     self
+   }
+ 
+-  #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
++  #[cfg(any(
++    target_os = "macos",
++    target_os = "ios",
++    target_os = "android",
++    target_env = "ohos"
++  ))]
+   fn skip_taskbar(self, _skip: bool) -> Self {
+     self
+   }
+@@ -1258,38 +1269,50 @@ impl WindowBuilder for WindowBuilderWrapper {
+   }
+ }
+ 
+-#[cfg(any(
+-  target_os = "linux",
+-  target_os = "dragonfly",
+-  target_os = "freebsd",
+-  target_os = "netbsd",
+-  target_os = "openbsd"
++#[cfg(all(
++  any(
++    target_os = "linux",
++    target_os = "dragonfly",
++    target_os = "freebsd",
++    target_os = "netbsd",
++    target_os = "openbsd",
++  ),
++  not(target_env = "ohos")
+ ))]
+ pub struct GtkWindow(pub gtk::ApplicationWindow);
+-#[cfg(any(
+-  target_os = "linux",
+-  target_os = "dragonfly",
+-  target_os = "freebsd",
+-  target_os = "netbsd",
+-  target_os = "openbsd"
++#[cfg(all(
++  any(
++    target_os = "linux",
++    target_os = "dragonfly",
++    target_os = "freebsd",
++    target_os = "netbsd",
++    target_os = "openbsd",
++  ),
++  not(target_env = "ohos")
+ ))]
+ #[allow(clippy::non_send_fields_in_send_ty)]
+ unsafe impl Send for GtkWindow {}
+ 
+-#[cfg(any(
+-  target_os = "linux",
+-  target_os = "dragonfly",
+-  target_os = "freebsd",
+-  target_os = "netbsd",
+-  target_os = "openbsd"
++#[cfg(all(
++  any(
++    target_os = "linux",
++    target_os = "dragonfly",
++    target_os = "freebsd",
++    target_os = "netbsd",
++    target_os = "openbsd",
++  ),
++  not(target_env = "ohos")
+ ))]
+ pub struct GtkBox(pub gtk::Box);
+-#[cfg(any(
+-  target_os = "linux",
+-  target_os = "dragonfly",
+-  target_os = "freebsd",
+-  target_os = "netbsd",
+-  target_os = "openbsd"
++#[cfg(all(
++  any(
++    target_os = "linux",
++    target_os = "dragonfly",
++    target_os = "freebsd",
++    target_os = "netbsd",
++    target_os = "openbsd",
++  ),
++  not(target_env = "ohos")
+ ))]
+ #[allow(clippy::non_send_fields_in_send_ty)]
+ unsafe impl Send for GtkBox {}
+@@ -1331,20 +1354,26 @@ pub enum WindowMessage {
+   PrimaryMonitor(Sender<Option<MonitorHandle>>),
+   MonitorFromPoint(Sender<Option<MonitorHandle>>, (f64, f64)),
+   AvailableMonitors(Sender<Vec<MonitorHandle>>),
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   GtkWindow(Sender<GtkWindow>),
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   GtkBox(Sender<GtkBox>),
+   #[cfg(target_os = "android")]
+@@ -2038,23 +2067,29 @@ impl<T: UserEvent> WindowDispatch<T> for WryWindowDispatcher<T> {
+     window_getter!(self, WindowMessage::IsAlwaysOnTop)
+   }
+ 
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   fn gtk_window(&self) -> Result<gtk::ApplicationWindow> {
+     window_getter!(self, WindowMessage::GtkWindow).map(|w| w.0)
+   }
+ 
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   fn default_vbox(&self) -> Result<gtk::Box> {
+     window_getter!(self, WindowMessage::GtkBox).map(|w| w.0)
+@@ -2852,12 +2887,20 @@ impl<T: UserEvent> Wry<T> {
+       event_loop_builder.with_msg_hook(hook);
+     }
+ 
+-    #[cfg(any(
+-      target_os = "linux",
+-      target_os = "dragonfly",
+-      target_os = "freebsd",
+-      target_os = "netbsd",
+-      target_os = "openbsd"
++    #[cfg(target_env = "ohos")]
++    {
++      event_loop_builder.with_openharmony_app(args.app);
++    }
++
++    #[cfg(all(
++      any(
++        target_os = "linux",
++        target_os = "dragonfly",
++        target_os = "freebsd",
++        target_os = "netbsd",
++        target_os = "openbsd",
++      ),
++      not(target_env = "ohos")
+     ))]
+     if let Some(app_id) = args.app_id {
+       use tao::platform::unix::EventLoopBuilderExtUnix;
+@@ -2910,12 +2953,15 @@ impl<T: UserEvent> Runtime<T> for Wry<T> {
+   fn new(args: RuntimeInitArgs) -> Result<Self> {
+     Self::init_with_builder(EventLoopBuilder::<Message<T>>::with_user_event(), args)
+   }
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   fn new_any_thread(args: RuntimeInitArgs) -> Result<Self> {
+     use tao::platform::unix::EventLoopBuilderExtUnix;
+@@ -2932,6 +2978,11 @@ impl<T: UserEvent> Runtime<T> for Wry<T> {
+     Self::init_with_builder(event_loop_builder, args)
+   }
+ 
++  #[cfg(target_env = "ohos")]
++  fn new_any_thread(args: RuntimeInitArgs) -> Result<Self> {
++    unimplemented!()
++  }
++
+   fn create_proxy(&self) -> EventProxy<T> {
+     EventProxy(self.event_loop.create_proxy())
+   }
+@@ -3361,20 +3412,26 @@ fn handle_user_message<T: UserEvent>(
+           WindowMessage::AvailableMonitors(tx) => {
+             tx.send(window.available_monitors().collect()).unwrap()
+           }
+-          #[cfg(any(
+-            target_os = "linux",
+-            target_os = "dragonfly",
+-            target_os = "freebsd",
+-            target_os = "netbsd",
+-            target_os = "openbsd"
++          #[cfg(all(
++            any(
++              target_os = "linux",
++              target_os = "dragonfly",
++              target_os = "freebsd",
++              target_os = "netbsd",
++              target_os = "openbsd"
++            ),
++            not(target_env = "ohos")
+           ))]
+           WindowMessage::GtkWindow(tx) => tx.send(GtkWindow(window.gtk_window().clone())).unwrap(),
+-          #[cfg(any(
+-            target_os = "linux",
+-            target_os = "dragonfly",
+-            target_os = "freebsd",
+-            target_os = "netbsd",
+-            target_os = "openbsd"
++          #[cfg(all(
++            any(
++              target_os = "linux",
++              target_os = "dragonfly",
++              target_os = "freebsd",
++              target_os = "netbsd",
++              target_os = "openbsd"
++            ),
++            not(target_env = "ohos")
+           ))]
+           WindowMessage::GtkBox(tx) => tx
+             .send(GtkBox(window.default_vbox().unwrap().clone()))
+@@ -3504,14 +3561,14 @@ fn handle_user_message<T: UserEvent>(
+           }
+           #[allow(unused_variables)]
+           WindowMessage::SetSkipTaskbar(skip) => {
+-            #[cfg(any(
++            #[cfg(all(any(
+               windows,
+               target_os = "linux",
+               target_os = "dragonfly",
+               target_os = "freebsd",
+               target_os = "netbsd",
+               target_os = "openbsd"
+-            ))]
++            ), not(target_env = "ohos")))]
+             let _ = window.set_skip_taskbar(skip);
+           }
+           WindowMessage::SetCursorGrab(grab) => {
+@@ -3556,12 +3613,15 @@ fn handle_user_message<T: UserEvent>(
+             #[cfg(target_os = "macos")]
+             window.set_badge_label(_count.map(|x| x.to_string()));
+ 
+-            #[cfg(any(
+-              target_os = "linux",
+-              target_os = "dragonfly",
+-              target_os = "freebsd",
+-              target_os = "netbsd",
+-              target_os = "openbsd"
++            #[cfg(all(
++              any(
++                target_os = "linux",
++                target_os = "dragonfly",
++                target_os = "freebsd",
++                target_os = "netbsd",
++                target_os = "openbsd",
++              ),
++              not(target_env = "ohos")
+             ))]
+             window.set_badge_count(_count, _desktop_filename);
+           }
+@@ -3614,14 +3674,17 @@ fn handle_user_message<T: UserEvent>(
+       }
+     }
+     Message::Webview(window_id, webview_id, webview_message) => {
+-      #[cfg(any(
+-        target_os = "macos",
+-        windows,
+-        target_os = "linux",
+-        target_os = "dragonfly",
+-        target_os = "freebsd",
+-        target_os = "netbsd",
+-        target_os = "openbsd"
++      #[cfg(all(
++        any(
++          target_os = "macos",
++          windows,
++          target_os = "linux",
++          target_os = "dragonfly",
++          target_os = "freebsd",
++          target_os = "netbsd",
++          target_os = "openbsd"
++        ),
++        not(target_env = "ohos")
+       ))]
+       if let WebviewMessage::Reparent(new_parent_window_id, tx) = webview_message {
+         let webview_handle = windows.0.borrow_mut().get_mut(&window_id).and_then(|w| {
+@@ -3646,12 +3709,15 @@ fn handle_user_message<T: UserEvent>(
+             #[cfg(windows)]
+             let reparent_result = { webview.inner.reparent(new_parent_window.hwnd()) };
+ 
+-            #[cfg(any(
+-              target_os = "linux",
+-              target_os = "dragonfly",
+-              target_os = "freebsd",
+-              target_os = "netbsd",
+-              target_os = "openbsd"
++            #[cfg(all(
++              any(
++                target_os = "linux",
++                target_os = "dragonfly",
++                target_os = "freebsd",
++                target_os = "netbsd",
++                target_os = "openbsd",
++              ),
++              not(target_env = "ohos")
+             ))]
+             let reparent_result = {
+               if let Some(container) = new_parent_window.default_vbox() {
+@@ -3928,12 +3994,15 @@ fn handle_user_message<T: UserEvent>(
+             }
+           },
+           WebviewMessage::WithWebview(f) => {
+-            #[cfg(any(
+-              target_os = "linux",
+-              target_os = "dragonfly",
+-              target_os = "freebsd",
+-              target_os = "netbsd",
+-              target_os = "openbsd"
++            #[cfg(all(
++              any(
++                target_os = "linux",
++                target_os = "dragonfly",
++                target_os = "freebsd",
++                target_os = "netbsd",
++                target_os = "openbsd",
++              ),
++              not(target_env = "ohos")
+             ))]
+             {
+               f(webview.webview());
+@@ -4476,6 +4545,7 @@ fn create_window<T: UserEvent, F: Fn(RawWindow) + Send + 'static>(
+         }
+       }
+ 
++      #[cfg(not(target_env = "ohos"))]
+       if let Some(margin) = window_builder.prevent_overflow {
+         let work_area = monitor.work_area();
+         let margin = margin.to_physical::<u32>(scale_factor);
+@@ -4509,7 +4579,7 @@ fn create_window<T: UserEvent, F: Fn(RawWindow) + Send + 'static>(
+     }
+   };
+ 
+-  #[cfg(any(target_os = "macos", target_os = "linux"))]
++  #[cfg(all(any(target_os = "macos", target_os = "linux"), not(target_env = "ohos")))]
+   let (initial_position, is_fullscreen) = (
+     window_builder.inner.window.position,
+     window_builder.inner.window.fullscreen.is_some(),
+@@ -4517,7 +4587,7 @@ fn create_window<T: UserEvent, F: Fn(RawWindow) + Send + 'static>(
+ 
+   // If fullscreen is requested with an explicit position, resolve the target
+   // monitor up front so the window is created fullscreen on that display.
+-  #[cfg(any(target_os = "macos", target_os = "linux"))]
++  #[cfg(all(any(target_os = "macos", target_os = "linux"), not(target_env = "ohos")))]
+   if let (true, Some(position)) = (is_fullscreen, initial_position) {
+     if let Some(target_monitor) =
+       find_monitor_for_position(event_loop.available_monitors(), position)
+@@ -4562,20 +4632,26 @@ fn create_window<T: UserEvent, F: Fn(RawWindow) + Send + 'static>(
+     let raw = RawWindow {
+       #[cfg(windows)]
+       hwnd: window.hwnd(),
+-      #[cfg(any(
+-        target_os = "linux",
+-        target_os = "dragonfly",
+-        target_os = "freebsd",
+-        target_os = "netbsd",
+-        target_os = "openbsd"
++      #[cfg(all(
++        any(
++          target_os = "linux",
++          target_os = "dragonfly",
++          target_os = "freebsd",
++          target_os = "netbsd",
++          target_os = "openbsd"
++        ),
++        not(target_env = "ohos")
+       ))]
+       gtk_window: window.gtk_window(),
+-      #[cfg(any(
+-        target_os = "linux",
+-        target_os = "dragonfly",
+-        target_os = "freebsd",
+-        target_os = "netbsd",
+-        target_os = "openbsd"
++      #[cfg(all(
++        any(
++          target_os = "linux",
++          target_os = "dragonfly",
++          target_os = "freebsd",
++          target_os = "netbsd",
++          target_os = "openbsd"
++        ),
++        not(target_env = "ohos")
+       ))]
+       default_vbox: window.default_vbox(),
+       _marker: &std::marker::PhantomData,
+@@ -4993,13 +5069,16 @@ You may have it installed on another user account, but it is not available for t
+       .with_browser_extensions_enabled(webview_attributes.browser_extensions_enabled);
+   }
+ 
+-  #[cfg(any(
+-    windows,
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      windows,
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   {
+     if let Some(path) = &webview_attributes.extensions_path {
+@@ -5007,12 +5086,15 @@ You may have it installed on another user account, but it is not available for t
+     }
+   }
+ 
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   {
+     if let Some(related_view) = webview_attributes.related_view {
+@@ -5094,12 +5176,15 @@ You may have it installed on another user account, but it is not available for t
+   for (scheme, protocol) in uri_scheme_protocols {
+     // on Linux the custom protocols are associated with the web context
+     // and you cannot register a scheme more than once
+-    #[cfg(any(
+-      target_os = "linux",
+-      target_os = "dragonfly",
+-      target_os = "freebsd",
+-      target_os = "netbsd",
+-      target_os = "openbsd"
++    #[cfg(all(
++      any(
++        target_os = "linux",
++        target_os = "dragonfly",
++        target_os = "freebsd",
++        target_os = "netbsd",
++        target_os = "openbsd",
++      ),
++      not(target_env = "ohos")
+     ))]
+     {
+       if web_context.registered_custom_protocols.contains(&scheme) {
+@@ -5146,7 +5231,8 @@ You may have it installed on another user account, but it is not available for t
+       target_os = "windows",
+       target_os = "macos",
+       target_os = "ios",
+-      target_os = "android"
++      target_os = "android",
++      target_env = "ohos"
+     )))]
+     WebviewKind::WindowChild => {
+       // only way to account for menu bar height, and also works for multiwebviews :)
+@@ -5157,7 +5243,8 @@ You may have it installed on another user account, but it is not available for t
+       target_os = "windows",
+       target_os = "macos",
+       target_os = "ios",
+-      target_os = "android"
++      target_os = "android",
++      target_env = "ohos"
+     ))]
+     WebviewKind::WindowChild => webview_builder.build_as_child(&window),
+     WebviewKind::WindowContent => {
+@@ -5165,14 +5252,16 @@ You may have it installed on another user account, but it is not available for t
+         target_os = "windows",
+         target_os = "macos",
+         target_os = "ios",
+-        target_os = "android"
++        target_os = "android",
++        target_env = "ohos"
+       ))]
+       let builder = webview_builder.build(&window);
+       #[cfg(not(any(
+         target_os = "windows",
+         target_os = "macos",
+         target_os = "ios",
+-        target_os = "android"
++        target_os = "android",
++        target_env = "ohos"
+       )))]
+       let builder = {
+         let vbox = window.default_vbox().unwrap();
+@@ -5184,12 +5273,15 @@ You may have it installed on another user account, but it is not available for t
+   .map_err(|e| Error::CreateWebview(Box::new(e)))?;
+ 
+   if kind == WebviewKind::WindowContent {
+-    #[cfg(any(
+-      target_os = "linux",
+-      target_os = "dragonfly",
+-      target_os = "freebsd",
+-      target_os = "netbsd",
+-      target_os = "openbsd"
++    #[cfg(all(
++      any(
++        target_os = "linux",
++        target_os = "dragonfly",
++        target_os = "freebsd",
++        target_os = "netbsd",
++        target_os = "openbsd",
++      ),
++      not(target_env = "ohos")
+     ))]
+     undecorated_resizing::attach_resize_handler(&webview);
+     #[cfg(windows)]
+diff --git a/crates/tauri-runtime-wry/src/monitor/mod.rs b/crates/tauri-runtime-wry/src/monitor/mod.rs
+index 4322c3c..0fd25e6 100644
+--- a/crates/tauri-runtime-wry/src/monitor/mod.rs
++++ b/crates/tauri-runtime-wry/src/monitor/mod.rs
+@@ -4,12 +4,15 @@
+ 
+ use tauri_runtime::dpi::PhysicalRect;
+ 
+-#[cfg(any(
+-  target_os = "linux",
+-  target_os = "dragonfly",
+-  target_os = "freebsd",
+-  target_os = "netbsd",
+-  target_os = "openbsd"
++#[cfg(all(
++  any(
++    target_os = "linux",
++    target_os = "dragonfly",
++    target_os = "freebsd",
++    target_os = "netbsd",
++    target_os = "openbsd",
++  ),
++  not(target_env = "ohos")
+ ))]
+ mod linux;
+ #[cfg(target_os = "macos")]
+diff --git a/crates/tauri-runtime-wry/src/undecorated_resizing.rs b/crates/tauri-runtime-wry/src/undecorated_resizing.rs
+index 75dfe80..8d15a18 100644
+--- a/crates/tauri-runtime-wry/src/undecorated_resizing.rs
++++ b/crates/tauri-runtime-wry/src/undecorated_resizing.rs
+@@ -2,13 +2,16 @@
+ // SPDX-License-Identifier: Apache-2.0
+ // SPDX-License-Identifier: MIT
+ 
+-#![cfg(any(
+-  windows,
+-  target_os = "linux",
+-  target_os = "dragonfly",
+-  target_os = "freebsd",
+-  target_os = "netbsd",
+-  target_os = "openbsd"
++#![cfg(all(
++  any(
++    windows,
++    target_os = "linux",
++    target_os = "dragonfly",
++    target_os = "freebsd",
++    target_os = "netbsd",
++    target_os = "openbsd",
++  ),
++  not(target_env = "ohos")
+ ))]
+ 
+ const CLIENT: isize = 0b0000;
+diff --git a/crates/tauri-runtime-wry/src/webview.rs b/crates/tauri-runtime-wry/src/webview.rs
+index 69a7863..82bdf43 100644
+--- a/crates/tauri-runtime-wry/src/webview.rs
++++ b/crates/tauri-runtime-wry/src/webview.rs
+@@ -2,17 +2,25 @@
+ // SPDX-License-Identifier: Apache-2.0
+ // SPDX-License-Identifier: MIT
+ 
+-#[cfg(any(
+-  target_os = "linux",
+-  target_os = "dragonfly",
+-  target_os = "freebsd",
+-  target_os = "netbsd",
+-  target_os = "openbsd"
++#[cfg(all(
++  any(
++    target_os = "linux",
++    target_os = "dragonfly",
++    target_os = "freebsd",
++    target_os = "netbsd",
++    target_os = "openbsd",
++  ),
++  not(target_env = "ohos")
+ ))]
+ mod imp {
+   pub type Webview = webkit2gtk::WebView;
+ }
+ 
++#[cfg(target_env = "ohos")]
++mod imp {
++  pub type Webview = ();
++}
++
+ #[cfg(target_vendor = "apple")]
+ mod imp {
+   use std::ffi::c_void;
+diff --git a/crates/tauri-runtime-wry/src/window/linux.rs b/crates/tauri-runtime-wry/src/window/linux.rs
+index e7ee927..81b9fa9 100644
+--- a/crates/tauri-runtime-wry/src/window/linux.rs
++++ b/crates/tauri-runtime-wry/src/window/linux.rs
+@@ -3,12 +3,15 @@
+ // SPDX-License-Identifier: MIT
+ 
+ use gtk::prelude::*;
+-#[cfg(any(
+-  target_os = "linux",
+-  target_os = "dragonfly",
+-  target_os = "freebsd",
+-  target_os = "netbsd",
+-  target_os = "openbsd"
++#[cfg(all(
++  any(
++    target_os = "linux",
++    target_os = "dragonfly",
++    target_os = "freebsd",
++    target_os = "netbsd",
++    target_os = "openbsd",
++  ),
++  not(target_env = "ohos")
+ ))]
+ use tao::platform::unix::WindowExtUnix;
+ 
+diff --git a/crates/tauri-runtime-wry/src/window/mod.rs b/crates/tauri-runtime-wry/src/window/mod.rs
+index 56384f4..5df2e30 100644
+--- a/crates/tauri-runtime-wry/src/window/mod.rs
++++ b/crates/tauri-runtime-wry/src/window/mod.rs
+@@ -2,12 +2,15 @@
+ // SPDX-License-Identifier: Apache-2.0
+ // SPDX-License-Identifier: MIT
+ 
+-#[cfg(any(
+-  target_os = "linux",
+-  target_os = "dragonfly",
+-  target_os = "freebsd",
+-  target_os = "netbsd",
+-  target_os = "openbsd"
++#[cfg(all(
++  any(
++    target_os = "linux",
++    target_os = "dragonfly",
++    target_os = "freebsd",
++    target_os = "netbsd",
++    target_os = "openbsd",
++  ),
++  not(target_env = "ohos")
+ ))]
+ mod linux;
+ #[cfg(target_os = "macos")]
+diff --git a/crates/tauri-runtime/Cargo.toml b/crates/tauri-runtime/Cargo.toml
+index 3ecbdc5..dec88f3 100644
+--- a/crates/tauri-runtime/Cargo.toml
++++ b/crates/tauri-runtime/Cargo.toml
+@@ -42,13 +42,16 @@ features = ["Win32_Foundation", "Win32_System_WinRT"]
+ [target."cfg(windows)".dependencies]
+ webview2-com = "0.38"
+ 
+-[target."cfg(any(target_os = \"linux\", target_os = \"dragonfly\", target_os = \"freebsd\", target_os = \"openbsd\", target_os = \"netbsd\"))".dependencies]
++[target.'cfg(all(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"), not(target_env = "ohos")))'.dependencies]
+ gtk = { version = "0.18", features = ["v3_24"] }
+ webkit2gtk = { version = "=2.0", features = ["v2_40"] }
+ 
+ [target."cfg(target_os = \"android\")".dependencies]
+ jni = "0.21"
+ 
++[target.'cfg(target_env = "ohos")'.dependencies]
++openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git", rev = "295a276a699ba2352addc69b8cacb6acd3be6ab1" }
++
+ [target.'cfg(all(target_vendor = "apple", not(target_os = "macos")))'.dependencies]
+ objc2 = "0.6"
+ objc2-ui-kit = { version = "0.3.2", default-features = false, features = [
+diff --git a/crates/tauri-runtime/build.rs b/crates/tauri-runtime/build.rs
+index 9974c50..1e2d9ac 100644
+--- a/crates/tauri-runtime/build.rs
++++ b/crates/tauri-runtime/build.rs
+@@ -13,7 +13,8 @@ fn alias(alias: &str, has_feature: bool) {
+ 
+ fn main() {
+   let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+-  let mobile = target_os == "ios" || target_os == "android";
++  let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
++  let mobile = target_os == "ios" || target_os == "android" || target_env == "ohos";
+   alias("desktop", !mobile);
+   alias("mobile", mobile);
+ }
+diff --git a/crates/tauri-runtime/src/lib.rs b/crates/tauri-runtime/src/lib.rs
+index eac06fb..89ada24 100644
+--- a/crates/tauri-runtime/src/lib.rs
++++ b/crates/tauri-runtime/src/lib.rs
+@@ -384,18 +384,22 @@ pub trait EventLoopProxy<T: UserEvent>: Debug + Clone + Send + Sync {
+   fn send_event(&self, event: T) -> Result<()>;
+ }
+ 
+-#[derive(Default)]
+ pub struct RuntimeInitArgs {
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub app_id: Option<String>,
+   #[cfg(windows)]
+   pub msg_hook: Option<Box<dyn FnMut(*const std::ffi::c_void) -> bool + 'static>>,
++  #[cfg(target_env = "ohos")]
++  pub app: openharmony_ability::OpenHarmonyApp,
+ }
+ 
+ /// The webview runtime interface.
+@@ -752,22 +756,28 @@ pub trait WindowDispatch<T: UserEvent>: Debug + Clone + Send + Sync + Sized + 's
+   fn available_monitors(&self) -> Result<Vec<Monitor>>;
+ 
+   /// Returns the `ApplicationWindow` from gtk crate that is used by this window.
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd"
++    ),
++    not(target_env = "ohos")
+   ))]
+   fn gtk_window(&self) -> Result<gtk::ApplicationWindow>;
+ 
+   /// Returns the vertical [`gtk::Box`] that is added by default as the sole child of this window.
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd"
++    ),
++    not(target_env = "ohos")
+   ))]
+   fn default_vbox(&self) -> Result<gtk::Box>;
+ 
+diff --git a/crates/tauri-runtime/src/webview.rs b/crates/tauri-runtime/src/webview.rs
+index 61bc15d..f10d1df 100644
+--- a/crates/tauri-runtime/src/webview.rs
++++ b/crates/tauri-runtime/src/webview.rs
+@@ -4,7 +4,7 @@
+ 
+ //! A layer between raw [`Runtime`] webviews and Tauri.
+ //!
+-#[cfg(not(any(target_os = "android", target_os = "ios")))]
++#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
+ use crate::window::WindowId;
+ use crate::{window::is_label_valid, Rect, Runtime, UserEvent};
+ 
+@@ -94,12 +94,15 @@ pub struct NewWindowOpener {
+   /// The instance of the webview that initiated the new window request.
+   ///
+   /// This must be set as the related view of the new webview. See [`WebviewAttributes::related_view`].
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd",
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub webview: webkit2gtk::WebView,
+   /// The instance of the webview that initiated the new window request.
+@@ -168,7 +171,7 @@ pub enum NewWindowResponse {
+   ///
+   /// **Linux**: The webview must be related to the caller webview. See [`WebviewAttributes::related_view`].
+   /// **Windows**: The webview must use the same environment as the caller webview. See [`WebviewAttributes::with_environment`].
+-  #[cfg(not(any(target_os = "android", target_os = "ios")))]
++  #[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
+   Create { window_id: WindowId },
+   /// Deny the window from being opened.
+   Deny,
+@@ -412,12 +415,15 @@ pub struct WebviewAttributes {
+ 
+   /// Creates a new webview sharing the same web process with the provided webview.
+   /// Useful if you need to link a webview to another, for instance when using the [`PendingWebview::new_window_handler`].
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd",
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub related_view: Option<webkit2gtk::WebView>,
+ 
+@@ -545,12 +551,15 @@ impl WebviewAttributes {
+       limit_navigations_to_app_bound_domains: false,
+       #[cfg(windows)]
+       environment: None,
+-      #[cfg(any(
+-        target_os = "linux",
+-        target_os = "dragonfly",
+-        target_os = "freebsd",
+-        target_os = "netbsd",
+-        target_os = "openbsd",
++      #[cfg(all(
++        any(
++          target_os = "linux",
++          target_os = "dragonfly",
++          target_os = "freebsd",
++          target_os = "netbsd",
++          target_os = "openbsd",
++        ),
++        not(target_env = "ohos")
+       ))]
+       related_view: None,
+       #[cfg(target_os = "macos")]
+diff --git a/crates/tauri-runtime/src/window.rs b/crates/tauri-runtime/src/window.rs
+index 936280c..7ec8735 100644
+--- a/crates/tauri-runtime/src/window.rs
++++ b/crates/tauri-runtime/src/window.rs
+@@ -448,12 +448,15 @@ pub trait WindowBuilder: WindowBuilderBase {
+   /// Sets the window to be created transient for parent.
+   ///
+   /// See <https://docs.gtk.org/gtk3/method.Window.set_transient_for.html>
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd"
++    ),
++    not(target_env = "ohos")
+   ))]
+   fn transient_for(self, parent: &impl gtk::glib::IsA<gtk::Window>) -> Self;
+ 
+@@ -648,20 +651,26 @@ impl<T: UserEvent, R: Runtime<T>> PartialEq for DetachedWindow<T, R> {
+ pub struct RawWindow<'a> {
+   #[cfg(windows)]
+   pub hwnd: isize,
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd"
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub gtk_window: &'a gtk::ApplicationWindow,
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd"
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub default_vbox: Option<&'a gtk::Box>,
+   pub _marker: &'a PhantomData<()>,
+diff --git a/crates/tauri-utils/src/config/parse.rs b/crates/tauri-utils/src/config/parse.rs
+index df79a32..aed6a49 100644
+--- a/crates/tauri-utils/src/config/parse.rs
++++ b/crates/tauri-utils/src/config/parse.rs
+@@ -56,6 +56,7 @@ impl ConfigFormat {
+         Target::Linux => "tauri.linux.conf.json",
+         Target::Android => "tauri.android.conf.json",
+         Target::Ios => "tauri.ios.conf.json",
++        Target::OpenHarmony => "tauri.ohos.conf.json",
+       },
+       Self::Json5 => match target {
+         Target::MacOS => "tauri.macos.conf.json5",
+@@ -63,6 +64,7 @@ impl ConfigFormat {
+         Target::Linux => "tauri.linux.conf.json5",
+         Target::Android => "tauri.android.conf.json5",
+         Target::Ios => "tauri.ios.conf.json5",
++        Target::OpenHarmony => "tauri.ohos.conf.json5",
+       },
+       Self::Toml => match target {
+         Target::MacOS => "Tauri.macos.toml",
+@@ -70,6 +72,7 @@ impl ConfigFormat {
+         Target::Linux => "Tauri.linux.toml",
+         Target::Android => "Tauri.android.toml",
+         Target::Ios => "Tauri.ios.toml",
++        Target::OpenHarmony => "Tauri.ohos.toml",
+       },
+     }
+   }
+@@ -172,6 +175,7 @@ pub fn is_configuration_file(target: Target, path: &Path) -> bool {
+ /// - `tauri.windows.conf.json[5]` or `Tauri.windows.toml` on Windows
+ /// - `tauri.android.conf.json[5]` or `Tauri.android.toml` on Android
+ /// - `tauri.ios.conf.json[5]` or `Tauri.ios.toml` on iOS
++/// - `tauri.ohos.conf.json[5]` or `Tauri.ohos.toml` on OpenHarmony
+ ///   Merging the configurations using [JSON Merge Patch (RFC 7396)].
+ ///
+ /// Returns the raw configuration and used config paths.
+diff --git a/crates/tauri-utils/src/lib.rs b/crates/tauri-utils/src/lib.rs
+index 3b2a31e..e8b5af8 100644
+--- a/crates/tauri-utils/src/lib.rs
++++ b/crates/tauri-utils/src/lib.rs
+@@ -267,10 +267,10 @@ impl Display for Theme {
+ #[non_exhaustive]
+ pub struct Env {
+   /// The APPIMAGE environment variable.
+-  #[cfg(target_os = "linux")]
++  #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+   pub appimage: Option<std::ffi::OsString>,
+   /// The APPDIR environment variable.
+-  #[cfg(target_os = "linux")]
++  #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+   pub appdir: Option<std::ffi::OsString>,
+   /// The command line arguments of the current process.
+   pub args_os: Vec<OsString>,
+@@ -280,12 +280,12 @@ pub struct Env {
+ impl Default for Env {
+   fn default() -> Self {
+     let args_os = std::env::args_os().collect();
+-    #[cfg(target_os = "linux")]
++    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+     {
+       let env = Self {
+-        #[cfg(target_os = "linux")]
++        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+         appimage: std::env::var_os("APPIMAGE"),
+-        #[cfg(target_os = "linux")]
++        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+         appdir: std::env::var_os("APPDIR"),
+         args_os,
+       };
+@@ -308,7 +308,7 @@ impl Default for Env {
+       }
+       env
+     }
+-    #[cfg(not(target_os = "linux"))]
++    #[cfg(any(target_env = "ohos", not(target_os = "linux")))]
+     {
+       Self { args_os }
+     }
+diff --git a/crates/tauri-utils/src/platform.rs b/crates/tauri-utils/src/platform.rs
+index a83201b..9191647 100644
+--- a/crates/tauri-utils/src/platform.rs
++++ b/crates/tauri-utils/src/platform.rs
+@@ -37,6 +37,8 @@ pub enum Target {
+   /// iOS.
+   #[serde(rename = "iOS")]
+   Ios,
++  /// OpenHarmony.
++  OpenHarmony,
+ }
+ 
+ impl Display for Target {
+@@ -50,6 +52,7 @@ impl Display for Target {
+         Self::Linux => "linux",
+         Self::Android => "android",
+         Self::Ios => "iOS",
++        Self::OpenHarmony => "open-harmony",
+       }
+     )
+   }
+@@ -66,6 +69,8 @@ impl Target {
+       Self::Android
+     } else if target.contains("ios") {
+       Self::Ios
++    } else if target.contains("ohos") {
++      Self::OpenHarmony
+     } else {
+       Self::Linux
+     }
+@@ -81,6 +86,8 @@ impl Target {
+       Self::Ios
+     } else if cfg!(target_os = "android") {
+       Self::Android
++    } else if cfg!(target_env = "ohos") {
++      Self::OpenHarmony
+     } else {
+       Self::Linux
+     }
+@@ -88,7 +95,7 @@ impl Target {
+ 
+   /// Whether the target is mobile or not.
+   pub fn is_mobile(&self) -> bool {
+-    matches!(self, Target::Android | Target::Ios)
++    matches!(self, Target::Android | Target::Ios | Target::OpenHarmony)
+   }
+ 
+   /// Whether the target is desktop or not.
+@@ -304,7 +311,7 @@ fn resource_dir_from<P: AsRef<std::path::Path>>(
+   #[allow(unused_mut, unused_assignments)]
+   let mut res = Err(crate::Error::UnsupportedPlatform);
+ 
+-  #[cfg(target_os = "linux")]
++  #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+   {
+     // (canonicalize checks for existence, so there's no need for an extra check)
+     res = if let Ok(bundle_dir) = exe_dir
+@@ -386,6 +393,7 @@ mod build {
+         Self::Windows => quote! { #prefix::Windows },
+         Self::Android => quote! { #prefix::Android },
+         Self::Ios => quote! { #prefix::Ios },
++        Self::OpenHarmony => quote! { #prefix::OpenHarmony },
+       });
+     }
+   }
+@@ -426,7 +434,7 @@ mod tests {
+     let resource_dir = super::resource_dir_from(&path, &package_info, &env);
+     #[cfg(target_os = "macos")]
+     assert!(resource_dir.is_err());
+-    #[cfg(target_os = "linux")]
++    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+     assert_eq!(resource_dir.unwrap(), PathBuf::from("/usr/lib/MyApp"));
+     #[cfg(windows)]
+     assert_eq!(resource_dir.unwrap(), path.parent().unwrap());
+diff --git a/crates/tauri/Cargo.toml b/crates/tauri/Cargo.toml
+index 88e778b..f8acf7b 100644
+--- a/crates/tauri/Cargo.toml
++++ b/crates/tauri/Cargo.toml
+@@ -86,7 +86,7 @@ specta = { version = "^2.0.0-rc.16", optional = true, default-features = false,
+ cookie = "0.18"
+ 
+ # desktop
+-[target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "windows", target_os = "macos"))'.dependencies]
++[target.'cfg(all(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "windows", target_os = "macos"), not(target_env = "ohos")))'.dependencies]
+ muda = { version = "0.19", default-features = false, features = [
+   "serde",
+   "gtk",
+@@ -97,7 +97,7 @@ tray-icon = { version = "0.24", default-features = false, features = [
+ ], optional = true }
+ 
+ # linux
+-[target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))'.dependencies]
++[target.'cfg(all(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"), not(target_env = "ohos")))'.dependencies]
+ gtk = { version = "0.18", features = ["v3_24"] }
+ webkit2gtk = { version = "2", features = ["v2_40"], optional = true }
+ 
+@@ -142,7 +142,7 @@ windows = { version = "0.61", features = [
+ ] }
+ 
+ # mobile
+-[target.'cfg(any(target_os = "android", all(target_vendor = "apple", not(target_os = "macos"))))'.dependencies]
++[target.'cfg(any(target_os = "android", target_env = "ohos", all(target_vendor = "apple", not(target_os = "macos"))))'.dependencies]
+ bytes = { version = "1", features = ["serde"] }
+ reqwest = { version = "0.13", default-features = false, features = [
+   "json",
+@@ -152,6 +152,10 @@ rustls = { version = "0.23", default-features = false, features = [
+   "ring",
+ ], optional = true }
+ 
++[target.'cfg(target_env = "ohos")'.dependencies]
++openharmony-ability = { git = "https://github.com/harmony-contrib/openharmony-ability.git", rev = "295a276a699ba2352addc69b8cacb6acd3be6ab1" }
++openharmony-ability-derive = { git = "https://github.com/harmony-contrib/openharmony-ability.git", rev = "295a276a699ba2352addc69b8cacb6acd3be6ab1" }
++
+ # android
+ [target.'cfg(target_os = "android")'.dependencies]
+ jni = "0.21"
+diff --git a/crates/tauri/build.rs b/crates/tauri/build.rs
+index 9c21776..665dbf5 100644
+--- a/crates/tauri/build.rs
++++ b/crates/tauri/build.rs
+@@ -261,7 +261,8 @@ fn main() {
+   println!("cargo:dev={dev}");
+ 
+   let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+-  let mobile = target_os == "ios" || target_os == "android";
++  let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
++  let mobile = target_os == "ios" || target_os == "android" || target_env == "ohos";
+   alias("desktop", !mobile);
+   alias("mobile", mobile);
+ 
+diff --git a/crates/tauri/scripts/core.js b/crates/tauri/scripts/core.js
+index 86bafac..9b15f1a 100644
+--- a/crates/tauri/scripts/core.js
++++ b/crates/tauri/scripts/core.js
+@@ -111,4 +111,4 @@
+       })
+     }
+   })
+-})()
++})();
+diff --git a/crates/tauri/scripts/init.js b/crates/tauri/scripts/init.js
+index ef6f72f..fc67fea 100644
+--- a/crates/tauri/scripts/init.js
++++ b/crates/tauri/scripts/init.js
+@@ -12,4 +12,4 @@
+   __RAW_core_script__
+ 
+   __RAW_event_initialization_script__
+-})()
++})();
+diff --git a/crates/tauri/scripts/ipc-protocol.js b/crates/tauri/scripts/ipc-protocol.js
+index 9ca2440..18dab7e 100644
+--- a/crates/tauri/scripts/ipc-protocol.js
++++ b/crates/tauri/scripts/ipc-protocol.js
+@@ -88,4 +88,4 @@
+   Object.defineProperty(window.__TAURI_INTERNALS__, 'postMessage', {
+     value: sendIpcMessage
+   })
+-})()
++})();
+diff --git a/crates/tauri/scripts/ipc.js b/crates/tauri/scripts/ipc.js
+index d6aa080..17d7c2f 100644
+--- a/crates/tauri/scripts/ipc.js
++++ b/crates/tauri/scripts/ipc.js
+@@ -207,4 +207,4 @@
+       false
+     )
+   }
+-})()
++})();
+diff --git a/crates/tauri/scripts/pattern.js b/crates/tauri/scripts/pattern.js
+index dce39b4..c302eb4 100644
+--- a/crates/tauri/scripts/pattern.js
++++ b/crates/tauri/scripts/pattern.js
+@@ -18,4 +18,4 @@
+   Object.defineProperty(window.__TAURI_INTERNALS__, '__TAURI_PATTERN__', {
+     value: __tauriDeepFreeze(__TEMPLATE_pattern__)
+   })
+-})()
++})();
+diff --git a/crates/tauri/src/app.rs b/crates/tauri/src/app.rs
+index a8da6ee..f39d47e 100644
+--- a/crates/tauri/src/app.rs
++++ b/crates/tauri/src/app.rs
+@@ -1128,6 +1128,12 @@ macro_rules! shared_app_impl {
+         self.manager.invoke_key()
+       }
+ 
++      /// The current OHOS host owns one native Ability window.
++      #[cfg(target_env = "ohos")]
++      pub fn supports_multiple_windows(&self) -> bool {
++        false
++      }
++
+       /// Whether the application supports multiple windows.
+       #[cfg(desktop)]
+       pub fn supports_multiple_windows(&self) -> bool {
+@@ -2264,12 +2270,15 @@ tauri::Builder::default()
+       self.invoke_key,
+     ));
+ 
+-    #[cfg(any(
+-      target_os = "linux",
+-      target_os = "dragonfly",
+-      target_os = "freebsd",
+-      target_os = "netbsd",
+-      target_os = "openbsd"
++    #[cfg(all(
++      any(
++        target_os = "linux",
++        target_os = "dragonfly",
++        target_os = "freebsd",
++        target_os = "netbsd",
++        target_os = "openbsd",
++      ),
++      not(target_env = "ohos")
+     ))]
+     let app_id = if manager.config.app.enable_gtk_app_id {
+       Some(manager.config.identifier.clone())
+@@ -2278,12 +2287,15 @@ tauri::Builder::default()
+     };
+ 
+     let runtime_args = RuntimeInitArgs {
+-      #[cfg(any(
+-        target_os = "linux",
+-        target_os = "dragonfly",
+-        target_os = "freebsd",
+-        target_os = "netbsd",
+-        target_os = "openbsd"
++      #[cfg(all(
++        any(
++          target_os = "linux",
++          target_os = "dragonfly",
++          target_os = "freebsd",
++          target_os = "netbsd",
++          target_os = "openbsd"
++        ),
++        not(target_env = "ohos")
+       ))]
+       app_id,
+ 
+@@ -2306,6 +2318,13 @@ tauri::Builder::default()
+           }
+         }))
+       },
++
++      #[cfg(target_env = "ohos")]
++      app: crate::ohos::APP
++        .lock()
++        .unwrap()
++        .take()
++        .expect("OpenHarmony app instance not initialized"),
+     };
+ 
+     // The env var must be set before the Runtime is created so that GetAvailableBrowserVersionString picks it up.
+diff --git a/crates/tauri/src/ipc/protocol.rs b/crates/tauri/src/ipc/protocol.rs
+index 66f9abe..0ed5cbb 100644
+--- a/crates/tauri/src/ipc/protocol.rs
++++ b/crates/tauri/src/ipc/protocol.rs
+@@ -298,11 +298,20 @@ fn handle_ipc_message<R: Runtime>(request: Request<String>, manager: &AppManager
+     Ok(message) => {
+       let options = message.options.unwrap_or_default();
+ 
++      let uri = request.uri().to_string();
++      #[cfg(target_env = "ohos")]
++      let url = if uri == "/" {
++        webview.url().unwrap_or_else(|_| "about:blank".parse().unwrap())
++      } else {
++        Url::parse(&uri).expect("invalid IPC request URL")
++      };
++      #[cfg(not(target_env = "ohos"))]
++      let url = Url::parse(&uri).expect("invalid IPC request URL");
+       let request = InvokeRequest {
+         cmd: message.cmd,
+         callback: message.callback,
+         error: message.error,
+-        url: Url::parse(&request.uri().to_string()).expect("invalid IPC request URL"),
++        url,
+         body: message.payload.into(),
+         headers: options.headers.0,
+         invoke_key: message.invoke_key,
+diff --git a/crates/tauri/src/lib.rs b/crates/tauri/src/lib.rs
+index de6944c..d96e6e1 100644
+--- a/crates/tauri/src/lib.rs
++++ b/crates/tauri/src/lib.rs
+@@ -88,6 +88,9 @@ mod error;
+ mod event;
+ pub mod ipc;
+ mod manager;
++#[doc(hidden)]
++#[cfg(target_env = "ohos")]
++pub mod ohos;
+ mod pattern;
+ pub mod plugin;
+ pub(crate) mod protocol;
+@@ -576,7 +579,9 @@ pub trait Manager<R: Runtime>: sealed::ManagerBase<R> {
+   fn get_webview_window(&self, label: &str) -> Option<WebviewWindow<R>> {
+     self.manager().get_webview(label).and_then(|webview| {
+       let window = webview.window();
+-      if window.is_webview_window() {
++      if window.is_webview_window()
++        || (cfg!(target_env = "ohos") && window.label() == webview.label())
++      {
+         Some(WebviewWindow { window, webview })
+       } else {
+         None
+@@ -592,7 +597,9 @@ pub trait Manager<R: Runtime>: sealed::ManagerBase<R> {
+       .into_iter()
+       .filter_map(|(label, webview)| {
+         let window = webview.window();
+-        if window.is_webview_window() {
++        if window.is_webview_window()
++        || (cfg!(target_env = "ohos") && window.label() == webview.label())
++      {
+           Some((label, WebviewWindow { window, webview }))
+         } else {
+           None
+diff --git a/crates/tauri/src/manager/mod.rs b/crates/tauri/src/manager/mod.rs
+index 086d270..5f0ec8f 100644
+--- a/crates/tauri/src/manager/mod.rs
++++ b/crates/tauri/src/manager/mod.rs
+@@ -664,7 +664,7 @@ impl<R: Runtime> AppManager<R> {
+     self.listeners().remove_window_listeners(label);
+   }
+ 
+-  #[cfg(desktop)]
++  #[cfg(any(desktop, target_env = "ohos"))]
+   pub(crate) fn on_webview_close(&self, label: &str) {
+     self.webview.webviews_lock().remove(label);
+     self.listeners().remove_webview_listeners(label);
+diff --git a/crates/tauri/src/manager/webview.rs b/crates/tauri/src/manager/webview.rs
+index 8c99afb..5483b0b 100644
+--- a/crates/tauri/src/manager/webview.rs
++++ b/crates/tauri/src/manager/webview.rs
+@@ -531,9 +531,11 @@ impl<R: Runtime> WebviewManager<R> {
+       manager.manager_owned(),
+     ));
+ 
+-    // in `windows`, we need to force a data_directory
++    // in `windows` and `linux`, we need to force a data_directory
+     // but we do respect user-specification
+-    #[cfg(any(target_os = "linux", target_os = "windows"))]
++    // Note: Android and OHOS (mobile platforms) don't need data_directory as their webviews
++    // automatically use the app's data directory
++    #[cfg(all(any(target_os = "linux", target_os = "windows"), not(target_env = "ohos")))]
+     if pending.webview_attributes.data_directory.is_none() {
+       let local_app_data = manager.path().resolve(
+         &app_manager.config.identifier,
+@@ -545,6 +547,8 @@ impl<R: Runtime> WebviewManager<R> {
+     }
+ 
+     // make sure the directory is created and available to prevent a panic
++    // On mobile platforms (Android, OHOS), data_directory is not used, so we skip this
++    #[cfg(not(any(target_os = "android", target_env = "ohos")))]
+     if let Some(user_data_dir) = &pending.webview_attributes.data_directory {
+       if !user_data_dir.exists() {
+         create_dir_all(user_data_dir)?;
+diff --git a/crates/tauri/src/menu/menu.rs b/crates/tauri/src/menu/menu.rs
+index d4f5d68..4ee8028 100644
+--- a/crates/tauri/src/menu/menu.rs
++++ b/crates/tauri/src/menu/menu.rs
+@@ -56,12 +56,15 @@ impl<R: Runtime> ContextMenuBase for Menu<R> {
+         }
+       }
+ 
+-      #[cfg(any(
+-        target_os = "linux",
+-        target_os = "dragonfly",
+-        target_os = "freebsd",
+-        target_os = "netbsd",
+-        target_os = "openbsd"
++      #[cfg(all(
++        any(
++          target_os = "linux",
++          target_os = "dragonfly",
++          target_os = "freebsd",
++          target_os = "netbsd",
++          target_os = "openbsd"
++        ),
++        not(target_env = "ohos")
+       ))]
+       if let Ok(w) = window.gtk_window() {
+         self_
+diff --git a/crates/tauri/src/menu/submenu.rs b/crates/tauri/src/menu/submenu.rs
+index e3b17bb..01efb76 100644
+--- a/crates/tauri/src/menu/submenu.rs
++++ b/crates/tauri/src/menu/submenu.rs
+@@ -49,12 +49,15 @@ impl<R: Runtime> ContextMenuBase for Submenu<R> {
+         }
+       }
+ 
+-      #[cfg(any(
+-        target_os = "linux",
+-        target_os = "dragonfly",
+-        target_os = "freebsd",
+-        target_os = "netbsd",
+-        target_os = "openbsd"
++      #[cfg(all(
++        any(
++          target_os = "linux",
++          target_os = "dragonfly",
++          target_os = "freebsd",
++          target_os = "netbsd",
++          target_os = "openbsd"
++        ),
++        not(target_env = "ohos")
+       ))]
+       if let Ok(w) = window.gtk_window() {
+         self_
+diff --git a/crates/tauri/src/plugin/mobile.rs b/crates/tauri/src/plugin/mobile.rs
+index ad2060a..ff7b7d5 100644
+--- a/crates/tauri/src/plugin/mobile.rs
++++ b/crates/tauri/src/plugin/mobile.rs
+@@ -349,6 +349,18 @@ impl<R: Runtime> PluginHandle<R> {
+   }
+ }
+ 
++#[cfg(target_env = "ohos")]
++pub(crate) fn run_command<R: Runtime, C: AsRef<str>, F: FnOnce(PluginResponse) + Send + 'static>(
++  _name: &str,
++  _handle: &AppHandle<R>,
++  _command: C,
++  _payload: serde_json::Value,
++  _handler: F,
++) -> Result<(), PluginInvokeError> {
++  // TODO
++  Ok(())
++}
++
+ #[cfg(target_os = "ios")]
+ pub(crate) fn run_command<R: Runtime, C: AsRef<str>, F: FnOnce(PluginResponse) + Send + 'static>(
+   name: &str,
+diff --git a/crates/tauri/src/process.rs b/crates/tauri/src/process.rs
+index 0264b57..7514c91 100644
+--- a/crates/tauri/src/process.rs
++++ b/crates/tauri/src/process.rs
+@@ -47,7 +47,7 @@ use std::path::PathBuf;
+ /// [AppImage]: https://appimage.org/
+ pub fn current_binary(_env: &Env) -> std::io::Result<PathBuf> {
+   // if we are running from an AppImage, we ONLY want the set AppImage path
+-  #[cfg(target_os = "linux")]
++  #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+   if let Some(app_image_path) = &_env.appimage {
+     return Ok(PathBuf::from(app_image_path));
+   }
+diff --git a/crates/tauri/src/test/mock_runtime.rs b/crates/tauri/src/test/mock_runtime.rs
+index a1f4c88..66392de 100644
+--- a/crates/tauri/src/test/mock_runtime.rs
++++ b/crates/tauri/src/test/mock_runtime.rs
+@@ -227,7 +227,7 @@ impl<T: UserEvent> RuntimeHandle<T> for MockRuntimeHandle {
+   fn display_handle(
+     &self,
+   ) -> std::result::Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
+-    #[cfg(target_os = "linux")]
++    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+     return Ok(unsafe {
+       raw_window_handle::DisplayHandle::borrow_raw(raw_window_handle::RawDisplayHandle::Xlib(
+         raw_window_handle::XlibDisplayHandle::new(None, 0),
+@@ -496,12 +496,15 @@ impl WindowBuilder for MockWindowBuilder {
+     self
+   }
+ 
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   fn transient_for(self, parent: &impl gtk::glib::IsA<gtk::Window>) -> Self {
+     self
+@@ -815,23 +818,29 @@ impl<T: UserEvent> WindowDispatch<T> for MockWindowDispatcher {
+     Ok(Theme::Light)
+   }
+ 
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   fn gtk_window(&self) -> Result<gtk::ApplicationWindow> {
+     unimplemented!()
+   }
+ 
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   fn default_vbox(&self) -> Result<gtk::Box> {
+     unimplemented!()
+@@ -850,7 +859,7 @@ impl<T: UserEvent> WindowDispatch<T> for MockWindowDispatcher {
+   fn window_handle(
+     &self,
+   ) -> std::result::Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
+-    #[cfg(target_os = "linux")]
++    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+     return unsafe {
+       Ok(raw_window_handle::WindowHandle::borrow_raw(
+         raw_window_handle::RawWindowHandle::Xlib(raw_window_handle::XlibWindowHandle::new(0)),
+diff --git a/crates/tauri/src/tray/mod.rs b/crates/tauri/src/tray/mod.rs
+index 064d8b4..dab2bce 100644
+--- a/crates/tauri/src/tray/mod.rs
++++ b/crates/tauri/src/tray/mod.rs
+@@ -552,7 +552,7 @@ impl<R: Runtime> TrayIcon<R> {
+   pub fn set_temp_dir_path<P: AsRef<Path>>(&self, path: Option<P>) -> crate::Result<()> {
+     #[allow(unused)]
+     let p = path.map(|p| p.as_ref().to_path_buf());
+-    #[cfg(target_os = "linux")]
++    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+     run_item_main_thread!(self, |self_: Self| self_.inner.set_temp_dir_path(p))?;
+     Ok(())
+   }
+diff --git a/crates/tauri/src/webview/mod.rs b/crates/tauri/src/webview/mod.rs
+index 799133d..c67df73 100644
+--- a/crates/tauri/src/webview/mod.rs
++++ b/crates/tauri/src/webview/mod.rs
+@@ -21,7 +21,7 @@ use tauri_macros::default_runtime;
+ pub use tauri_runtime::webview::{NewWindowFeatures, PageLoadEvent, ScrollBarStyle};
+ // Remove this re-export in v3
+ pub use tauri_runtime::Cookie;
+-#[cfg(desktop)]
++#[cfg(any(desktop, target_env = "ohos"))]
+ use tauri_runtime::{
+   dpi::{PhysicalPosition, PhysicalSize, Position, Size},
+   WindowDispatch,
+@@ -153,12 +153,15 @@ pub struct PlatformWebview(tauri_runtime_wry::Webview);
+ #[cfg(feature = "wry")]
+ impl PlatformWebview {
+   /// Returns [`webkit2gtk::WebView`] handle.
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   #[cfg_attr(
+     docsrs,
+@@ -778,7 +781,7 @@ tauri::Builder::default()
+   }
+ 
+   /// Creates a new webview on the given window.
+-  #[cfg(desktop)]
++  #[cfg(any(desktop, target_env = "ohos"))]
+   pub(crate) fn build(
+     self,
+     window: Window<R>,
+@@ -1331,7 +1334,8 @@ fn main() {
+       target_os = "freebsd",
+       target_os = "netbsd",
+       target_os = "openbsd",
+-    )
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub fn with_related_view(mut self, related_view: webkit2gtk::WebView) -> Self {
+     self.webview_attributes.related_view.replace(related_view);
+@@ -1536,6 +1540,16 @@ impl<R: Runtime> Webview<R> {
+   }
+ }
+ 
++// OHOS hosts child WebViews in independently managed ArkUI containers.
++#[cfg(target_env = "ohos")]
++impl<R: Runtime> Webview<R> {
++  pub fn close(&self) -> crate::Result<()> {
++    self.webview.dispatcher.close()?;
++    self.manager().on_webview_close(self.label());
++    Ok(())
++  }
++}
++
+ /// Desktop webview setters and actions.
+ #[cfg(desktop)]
+ impl<R: Runtime> Webview<R> {
+@@ -1684,7 +1698,7 @@ tauri::Builder::default()
+   .setup(|app| {
+     let main_webview = app.get_webview("main").unwrap();
+     main_webview.with_webview(|webview| {
+-      #[cfg(target_os = "linux")]
++      #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+       {
+         // see <https://docs.rs/webkit2gtk/2.0.0/webkit2gtk/struct.WebView.html>
+         // and <https://docs.rs/webkit2gtk/2.0.0/webkit2gtk/trait.WebViewExt.html>
+diff --git a/crates/tauri/src/webview/scripts/toggle-devtools.js b/crates/tauri/src/webview/scripts/toggle-devtools.js
+index 5997187..69ec1c4 100644
+--- a/crates/tauri/src/webview/scripts/toggle-devtools.js
++++ b/crates/tauri/src/webview/scripts/toggle-devtools.js
+@@ -28,4 +28,4 @@
+   } else {
+     window.addEventListener('DOMContentLoaded', toggleDevtoolsHotkey, true)
+   }
+-})()
++})();
+diff --git a/crates/tauri/src/webview/webview_window.rs b/crates/tauri/src/webview/webview_window.rs
+index 15b505f..ebb842d 100644
+--- a/crates/tauri/src/webview/webview_window.rs
++++ b/crates/tauri/src/webview/webview_window.rs
+@@ -694,12 +694,15 @@ impl<'a, R: Runtime, M: Manager<R>> WebviewWindowBuilder<'a, R, M> {
+   /// Sets the window to be created transient for parent.
+   ///
+   /// See <https://docs.gtk.org/gtk3/method.Window.set_transient_for.html>
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub fn transient_for(mut self, parent: &WebviewWindow<R>) -> crate::Result<Self> {
+     self.window_builder = self.window_builder.transient_for(&parent.window)?;
+@@ -709,12 +712,15 @@ impl<'a, R: Runtime, M: Manager<R>> WebviewWindowBuilder<'a, R, M> {
+   /// Sets the window to be created transient for parent.
+   ///
+   /// See <https://docs.gtk.org/gtk3/method.Window.set_transient_for.html>
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   #[must_use]
+   pub fn transient_for_raw(mut self, parent: &impl gtk::glib::IsA<gtk::Window>) -> Self {
+@@ -1401,7 +1407,8 @@ impl<R: Runtime, M: Manager<R>> WebviewWindowBuilder<'_, R, M> {
+       target_os = "freebsd",
+       target_os = "netbsd",
+       target_os = "openbsd",
+-    )
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub fn with_related_view(mut self, related_view: webkit2gtk::WebView) -> Self {
+     self.webview_builder = self.webview_builder.with_related_view(related_view);
+@@ -1423,14 +1430,17 @@ impl<R: Runtime, M: Manager<R>> WebviewWindowBuilder<'_, R, M> {
+ 
+   /// Set the window features.
+   /// Useful if you need to share the same window features, for instance when using the [`Self::on_new_window`].
+-  #[cfg(any(
+-    target_os = "macos",
+-    windows,
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "macos",
++      windows,
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub fn window_features(mut self, features: NewWindowFeatures) -> Self {
+     if let Some(position) = features.position() {
+@@ -1463,7 +1473,8 @@ impl<R: Runtime, M: Manager<R>> WebviewWindowBuilder<'_, R, M> {
+         target_os = "freebsd",
+         target_os = "netbsd",
+         target_os = "openbsd",
+-      )
++      ),
++      not(target_env = "ohos")
+     ))]
+     {
+       self.webview_builder = self
+@@ -1924,12 +1935,15 @@ impl<R: Runtime> WebviewWindow<R> {
+   /// Returns the `ApplicationWindow` from gtk crate that is used by this window.
+   ///
+   /// Note that this type can only be used on the main thread.
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub fn gtk_window(&self) -> crate::Result<gtk::ApplicationWindow> {
+     self.window.gtk_window()
+@@ -1938,12 +1952,15 @@ impl<R: Runtime> WebviewWindow<R> {
+   /// Returns the vertical [`gtk::Box`] that is added by default as the sole child of this window.
+   ///
+   /// Note that this type can only be used on the main thread.
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub fn default_vbox(&self) -> crate::Result<gtk::Box> {
+     self.window.default_vbox()
+@@ -2400,7 +2417,7 @@ impl<R: Runtime> WebviewWindow<R> {
+   ///     .setup(|app| {
+   ///       let main_webview = app.get_webview_window("main").unwrap();
+   ///       main_webview.with_webview(|webview| {
+-  ///         #[cfg(target_os = "linux")]
++  ///         #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+   ///         {
+   ///           // see <https://docs.rs/webkit2gtk/2.0.0/webkit2gtk/struct.WebView.html>
+   ///           // and <https://docs.rs/webkit2gtk/2.0.0/webkit2gtk/trait.WebViewExt.html>
+diff --git a/crates/tauri/src/window/mod.rs b/crates/tauri/src/window/mod.rs
+index 8d6309b..ac58aa3 100644
+--- a/crates/tauri/src/window/mod.rs
++++ b/crates/tauri/src/window/mod.rs
+@@ -653,12 +653,15 @@ impl<'a, R: Runtime, M: Manager<R>> WindowBuilder<'a, R, M> {
+       self.window_builder = self.window_builder.owner(parent.hwnd()?);
+     }
+ 
+-    #[cfg(any(
+-      target_os = "linux",
+-      target_os = "dragonfly",
+-      target_os = "freebsd",
+-      target_os = "netbsd",
+-      target_os = "openbsd"
++    #[cfg(all(
++      any(
++        target_os = "linux",
++        target_os = "dragonfly",
++        target_os = "freebsd",
++        target_os = "netbsd",
++        target_os = "openbsd",
++      ),
++      not(target_env = "ohos")
+     ))]
+     {
+       self.window_builder = self.window_builder.transient_for(&parent.gtk_window()?);
+@@ -734,12 +737,15 @@ impl<'a, R: Runtime, M: Manager<R>> WindowBuilder<'a, R, M> {
+   /// See <https://docs.gtk.org/gtk3/method.Window.set_transient_for.html>
+   ///
+   /// **Note:** This is a low level API. See [`Self::parent`] for a higher level wrapper for Tauri windows.
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub fn transient_for(mut self, parent: &Window<R>) -> crate::Result<Self> {
+     self.window_builder = self.window_builder.transient_for(&parent.gtk_window()?);
+@@ -751,12 +757,15 @@ impl<'a, R: Runtime, M: Manager<R>> WindowBuilder<'a, R, M> {
+   /// See <https://docs.gtk.org/gtk3/method.Window.set_transient_for.html>
+   ///
+   /// **Note:** This is a low level API. See [`Self::parent`] and [`Self::transient_for`] for higher level wrappers for Tauri windows.
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   #[must_use]
+   pub fn transient_for_raw(mut self, parent: &impl gtk::glib::IsA<gtk::Window>) -> Self {
+@@ -1137,7 +1146,7 @@ impl<R: Runtime> Window<R> {
+   }
+ 
+   /// Adds a new webview as a child of this window.
+-  #[cfg(any(test, all(desktop, feature = "unstable")))]
++  #[cfg(any(test, all(any(desktop, target_env = "ohos"), feature = "unstable")))]
+   #[cfg_attr(docsrs, doc(cfg(all(desktop, feature = "unstable"))))]
+   pub fn add_child<P: Into<Position>, S: Into<Size>>(
+     &self,
+@@ -1303,12 +1312,15 @@ tauri::Builder::default()
+ 
+         let _ = unsafe { menu_.inner().init_for_hwnd_with_theme(hwnd.0 as _, theme) };
+       }
+-      #[cfg(any(
+-        target_os = "linux",
+-        target_os = "dragonfly",
+-        target_os = "freebsd",
+-        target_os = "netbsd",
+-        target_os = "openbsd"
++      #[cfg(all(
++        any(
++          target_os = "linux",
++          target_os = "dragonfly",
++          target_os = "freebsd",
++          target_os = "netbsd",
++          target_os = "openbsd"
++        ),
++        not(target_env = "ohos")
+       ))]
+       if let (Ok(gtk_window), Ok(gtk_box)) = (window.gtk_window(), window.default_vbox()) {
+         let _ = menu_
+@@ -1696,12 +1708,15 @@ impl<R: Runtime> Window<R> {
+   /// Returns the `ApplicationWindow` from gtk crate that is used by this window.
+   ///
+   /// Note that this type can only be used on the main thread.
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub fn gtk_window(&self) -> crate::Result<gtk::ApplicationWindow> {
+     self.window.dispatcher.gtk_window().map_err(Into::into)
+@@ -1710,12 +1725,15 @@ impl<R: Runtime> Window<R> {
+   /// Returns the vertical [`gtk::Box`] that is added by default as the sole child of this window.
+   ///
+   /// Note that this type can only be used on the main thread.
+-  #[cfg(any(
+-    target_os = "linux",
+-    target_os = "dragonfly",
+-    target_os = "freebsd",
+-    target_os = "netbsd",
+-    target_os = "openbsd"
++  #[cfg(all(
++    any(
++      target_os = "linux",
++      target_os = "dragonfly",
++      target_os = "freebsd",
++      target_os = "netbsd",
++      target_os = "openbsd",
++    ),
++    not(target_env = "ohos")
+   ))]
+   pub fn default_vbox(&self) -> crate::Result<gtk::Box> {
+     self.window.dispatcher.default_vbox().map_err(Into::into)
+diff --git a/crates/tauri/src/window/scripts/drag.js b/crates/tauri/src/window/scripts/drag.js
+index 5a0b124..e2c293b 100644
+--- a/crates/tauri/src/window/scripts/drag.js
++++ b/crates/tauri/src/window/scripts/drag.js
+@@ -126,4 +126,4 @@
+       }
+     })
+   }
+-})()
++})();
+diff --git a/crates/tauri/src/ohos.rs b/crates/tauri/src/ohos.rs
+new file mode 100644
+index 0000000..0452f8f
+--- /dev/null
++++ b/crates/tauri/src/ohos.rs
+@@ -0,0 +1,6 @@
++use std::sync::Mutex;
++
++pub use openharmony_ability;
++pub use openharmony_ability_derive;
++
++pub static APP: Mutex<Option<openharmony_ability::OpenHarmonyApp>> = Mutex::new(None);

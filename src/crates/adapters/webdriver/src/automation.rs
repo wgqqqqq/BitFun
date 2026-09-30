@@ -197,6 +197,12 @@ impl EmbeddedWebviewAutomation {
                     .map_err(|error| format!("Failed to set cookie: {error}"))?;
                 Ok(json!({ "success": true }))
             }
+            #[cfg(target_env = "ohos")]
+            "Page.close" => Err(
+                "Closing the Ability WebView is not supported by the OpenHarmony bridge"
+                    .to_string(),
+            ),
+            #[cfg(not(target_env = "ohos"))]
             "Page.close" => {
                 self.webview()?
                     .close()

@@ -58,7 +58,6 @@ rustls = { workspace = true, optional = true }
 rustls-native-certs = { version = "0.8", optional = true }
 sha2 = { workspace = true, optional = true }
 hkdf = { workspace = true, optional = true }
-sherpa-onnx = { workspace = true, optional = true }
 sse-stream = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 tar = { workspace = true, optional = true }
@@ -566,3 +565,6 @@ workspace = true
 [[example]]
 name = "relay_realtime_probe"
 required-features = ["remote-connect"]
+
+[target.'cfg(not(target_env = "ohos"))'.dependencies]
+sherpa-onnx = { workspace = true, optional = true }

@@ -137,9 +137,22 @@ impl ShellDetector {
                 | ShellType::Fish
                 | ShellType::Sh
                 | ShellType::Ksh
-                | ShellType::Csh => Self::probe_shell_version(&candidate.path)
-                    .map(|version| cache::CandidateProbeOutcome::Available(Some(version)))
-                    .unwrap_or(cache::CandidateProbeOutcome::AvailableWithProbeFailure),
+                | ShellType::Csh => {
+                    #[cfg(target_env = "ohos")]
+                    {
+                        if Self::probe_shell_execution(&candidate.path) {
+                            cache::CandidateProbeOutcome::Available(None)
+                        } else {
+                            cache::CandidateProbeOutcome::Unavailable
+                        }
+                    }
+                    #[cfg(not(target_env = "ohos"))]
+                    {
+                        Self::probe_shell_version(&candidate.path)
+                            .map(|version| cache::CandidateProbeOutcome::Available(Some(version)))
+                            .unwrap_or(cache::CandidateProbeOutcome::AvailableWithProbeFailure)
+                    }
+                }
                 ShellType::PowerShell | ShellType::Cmd | ShellType::Custom(_) => {
                     cache::CandidateProbeOutcome::Available(None)
                 }

@@ -5,12 +5,14 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{io::Write, path::Path, sync::OnceLock};
 use tauri::{AppHandle, Emitter, Manager};
+#[cfg(not(target_env = "ohos"))]
 use tauri_plugin_updater::{Update, UpdaterBuilder, UpdaterExt};
 
 const PROGRESS_EVENT: &str = "openbitfun-update-progress";
 const RECORD_NAME: &str = "pending.json";
 
 // Serialize downloads and installs at the host, including calls from multiple windows.
+#[cfg(not(target_env = "ohos"))]
 static UPDATE: OnceLock<tokio::sync::Mutex<Option<Update>>> = OnceLock::new();
 
 #[derive(Debug, Deserialize, Default)]
@@ -154,6 +156,7 @@ fn verify_package(bytes: &[u8], record: &PendingUpdateRecord, pubkey: &str) -> R
         .map_err(|e| format!("Update signature verification failed: {e}"))
 }
 
+#[cfg(not(target_env = "ohos"))]
 pub(super) fn with_update_exit_cleanup(builder: UpdaterBuilder, app: &AppHandle) -> UpdaterBuilder {
     let app = app.clone();
     builder.on_before_exit(move || {
@@ -172,14 +175,22 @@ pub async fn get_pending_update(
     app: AppHandle,
     request: PendingUpdateRequest,
 ) -> Result<Option<PendingUpdateResponse>, String> {
-    let _ = request;
-    let dir = cache_dir(&app)?;
-    let current = app.package_info().version.clone();
-    tokio::task::spawn_blocking(move || {
-        read_record(&dir, &current, &platform()).map(|r| r.map(|r| r.response()))
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (app, request);
+        Err("Application updates are not available through the Desktop updater on HarmonyOS PC; use a signed HAP deployment".to_string())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let _ = request;
+        let dir = cache_dir(&app)?;
+        let current = app.package_info().version.clone();
+        tokio::task::spawn_blocking(move || {
+            read_record(&dir, &current, &platform()).map(|r| r.map(|r| r.response()))
+        })
+        .await
+        .map_err(|e| e.to_string())?
+    }
 }
 
 #[tauri::command]
@@ -187,44 +198,52 @@ pub async fn download_update(
     app: AppHandle,
     request: DownloadUpdateRequest,
 ) -> Result<PendingUpdateResponse, String> {
-    let mut state = UPDATE
-        .get_or_init(Default::default)
-        .try_lock()
-        .map_err(|_| "An update operation is already in progress".to_string())?;
-    let updater = super::system_api::ranked_updater(&app).await?;
-    let update = updater
-        .check()
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "No update available".to_string())?;
-    request.validate_version(&update.version)?;
-    let mut downloaded = 0u64;
-    let bytes = update
-        .download(
-            |chunk, total| {
-                downloaded = downloaded.saturating_add(chunk as u64);
-                let _ = app.emit(
-                    PROGRESS_EVENT,
-                    serde_json::json!({ "downloaded": downloaded, "total": total }),
-                );
-            },
-            || {},
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-    let record = PendingUpdateRecord {
-        version: update.version.clone(),
-        platform: platform(),
-        signature: update.signature.clone(),
-        sha256: format!("{:x}", Sha256::digest(&bytes)),
-    };
-    let response = record.response();
-    let dir = cache_dir(&app)?;
-    tokio::task::spawn_blocking(move || save_package(&dir, &record, &bytes))
-        .await
-        .map_err(|e| e.to_string())??;
-    *state = Some(update);
-    Ok(response)
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (app, request);
+        Err("Application updates are not available through the Desktop updater on HarmonyOS PC; use a signed HAP deployment".to_string())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let mut state = UPDATE
+            .get_or_init(Default::default)
+            .try_lock()
+            .map_err(|_| "An update operation is already in progress".to_string())?;
+        let updater = super::system_api::ranked_updater(&app).await?;
+        let update = updater
+            .check()
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "No update available".to_string())?;
+        request.validate_version(&update.version)?;
+        let mut downloaded = 0u64;
+        let bytes = update
+            .download(
+                |chunk, total| {
+                    downloaded = downloaded.saturating_add(chunk as u64);
+                    let _ = app.emit(
+                        PROGRESS_EVENT,
+                        serde_json::json!({ "downloaded": downloaded, "total": total }),
+                    );
+                },
+                || {},
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+        let record = PendingUpdateRecord {
+            version: update.version.clone(),
+            platform: platform(),
+            signature: update.signature.clone(),
+            sha256: format!("{:x}", Sha256::digest(&bytes)),
+        };
+        let response = record.response();
+        let dir = cache_dir(&app)?;
+        tokio::task::spawn_blocking(move || save_package(&dir, &record, &bytes))
+            .await
+            .map_err(|e| e.to_string())??;
+        *state = Some(update);
+        Ok(response)
+    }
 }
 
 #[tauri::command]
@@ -232,58 +251,67 @@ pub async fn install_pending_update(
     app: AppHandle,
     request: InstallPendingUpdateRequest,
 ) -> Result<(), String> {
-    let mut state = UPDATE
-        .get_or_init(Default::default)
-        .try_lock()
-        .map_err(|_| "An update operation is already in progress".to_string())?;
-    let dir = cache_dir(&app)?;
-    let current = app.package_info().version.clone();
-    let pubkey = app
-        .config()
-        .plugins
-        .0
-        .get("updater")
-        .and_then(|v| v.get("pubkey"))
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "Update signature public key is unavailable".to_string())?
-        .to_owned();
-    let (record, bytes) = tokio::task::spawn_blocking(move || {
-        let record = read_record(&dir, &current, &platform())?
-            .ok_or_else(|| "No downloaded update is available".to_string())?;
-        if record.version != request.version {
-            return Err(
-                "The downloaded update has changed; reopen About before installing".to_string(),
-            );
-        }
-        let bytes = std::fs::read(dir.join(record.package_name()?)).map_err(|e| e.to_string())?;
-        verify_package(&bytes, &record, &pubkey)?;
-        Ok::<_, String>((record, bytes))
-    })
-    .await
-    .map_err(|e| e.to_string())??;
-
-    if state.as_ref().is_none_or(|u| u.version != record.version) {
-        // Tauri 2.10 cannot deserialize an Update. After an application restart,
-        // obtain its platform installer context through the configured endpoint.
-        // No package is downloaded; the user's already verified version stays pinned.
-        let updater = with_update_exit_cleanup(app.updater_builder(), &app)
-            .timeout(std::time::Duration::from_secs(20))
-            .version_comparator(|_, _| true)
-            .build()
-            .map_err(|e| e.to_string())?;
-        let mut update = updater.check().await
-            .map_err(|e| format!("Cannot restore update installer metadata; connect to the update server and retry: {e}"))?
-            .ok_or_else(|| "Update installer metadata is unavailable; retry later".to_string())?;
-        update.version = record.version.clone();
-        update.signature = record.signature.clone();
-        *state = Some(update);
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (app, request);
+        Err("Application updates are not available through the Desktop updater on HarmonyOS PC; use a signed HAP deployment".to_string())
     }
-    let update = state.as_ref().expect("update context initialized").clone();
-    tokio::task::spawn_blocking(move || update.install(bytes).map_err(|e| e.to_string()))
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let mut state = UPDATE
+            .get_or_init(Default::default)
+            .try_lock()
+            .map_err(|_| "An update operation is already in progress".to_string())?;
+        let dir = cache_dir(&app)?;
+        let current = app.package_info().version.clone();
+        let pubkey = app
+            .config()
+            .plugins
+            .0
+            .get("updater")
+            .and_then(|v| v.get("pubkey"))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "Update signature public key is unavailable".to_string())?
+            .to_owned();
+        let (record, bytes) = tokio::task::spawn_blocking(move || {
+            let record = read_record(&dir, &current, &platform())?
+                .ok_or_else(|| "No downloaded update is available".to_string())?;
+            if record.version != request.version {
+                return Err(
+                    "The downloaded update has changed; reopen About before installing".to_string(),
+                );
+            }
+            let bytes =
+                std::fs::read(dir.join(record.package_name()?)).map_err(|e| e.to_string())?;
+            verify_package(&bytes, &record, &pubkey)?;
+            Ok::<_, String>((record, bytes))
+        })
         .await
         .map_err(|e| e.to_string())??;
-    // Windows exits inside install(); macOS and Linux return after replacement.
-    super::system_api::restart_app(app, Default::default()).await
+
+        if state.as_ref().is_none_or(|u| u.version != record.version) {
+            // Tauri 2.10 cannot deserialize an Update. After an application restart,
+            // obtain its platform installer context through the configured endpoint.
+            // No package is downloaded; the user's already verified version stays pinned.
+            let updater = with_update_exit_cleanup(app.updater_builder(), &app)
+                .timeout(std::time::Duration::from_secs(20))
+                .version_comparator(|_, _| true)
+                .build()
+                .map_err(|e| e.to_string())?;
+            let mut update = updater.check().await
+            .map_err(|e| format!("Cannot restore update installer metadata; connect to the update server and retry: {e}"))?
+            .ok_or_else(|| "Update installer metadata is unavailable; retry later".to_string())?;
+            update.version = record.version.clone();
+            update.signature = record.signature.clone();
+            *state = Some(update);
+        }
+        let update = state.as_ref().expect("update context initialized").clone();
+        tokio::task::spawn_blocking(move || update.install(bytes).map_err(|e| e.to_string()))
+            .await
+            .map_err(|e| e.to_string())??;
+        // Windows exits inside install(); macOS and Linux return after replacement.
+        super::system_api::restart_app(app, Default::default()).await
+    }
 }
 
 #[cfg(test)]

@@ -270,46 +270,57 @@ pub async fn browser_webview_create(
     app: tauri::AppHandle,
     request: WebviewCreateRequest,
 ) -> Result<(), String> {
-    validate_browser_label(&request.label)?;
-    validate_webview_bounds(request.x, request.y, request.width, request.height)?;
-
-    let url = request
-        .url
-        .parse::<tauri::Url>()
-        .map_err(|e| format!("invalid url: {e}"))?;
-    match url.scheme() {
-        "http" | "https" => {}
-        scheme => return Err(format!("unsupported protocol: {scheme}")),
-    }
-
-    let window = app
-        .get_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
-    let mut builder =
-        tauri::webview::WebviewBuilder::new(request.label, tauri::WebviewUrl::External(url))
-            .initialization_script(video_decoder_compatibility_script())
-            .transparent(false)
-            .background_color(tauri::window::Color(0, 0, 0, 255));
-
-    #[cfg(any(debug_assertions, feature = "devtools"))]
+    #[cfg(target_env = "ohos")]
     {
-        builder = builder.devtools(true);
-    }
-
-    let webview = window
-        .add_child(
-            builder,
-            tauri::LogicalPosition::new(request.x, request.y),
-            tauri::LogicalSize::new(request.width, request.height),
+        let _ = (app, request);
+        Err(
+            "Embedded browser child WebViews are not implemented by the HarmonyOS PC adapter"
+                .to_string(),
         )
-        .map_err(|e| format!("failed to create browser webview: {e}"))?;
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        validate_browser_label(&request.label)?;
+        validate_webview_bounds(request.x, request.y, request.width, request.height)?;
 
-    webview
-        .hide()
-        .map_err(|e| format!("failed to hide browser webview before positioning: {e}"))?;
-    let target_url = webview.url().map(|url| url.to_string()).unwrap_or_default();
-    register_browser_target(webview.label(), &target_url, request.open_request_id);
-    Ok(())
+        let url = request
+            .url
+            .parse::<tauri::Url>()
+            .map_err(|e| format!("invalid url: {e}"))?;
+        match url.scheme() {
+            "http" | "https" => {}
+            scheme => return Err(format!("unsupported protocol: {scheme}")),
+        }
+
+        let window = app
+            .get_window("main")
+            .ok_or_else(|| "main window not found".to_string())?;
+        let mut builder =
+            tauri::webview::WebviewBuilder::new(request.label, tauri::WebviewUrl::External(url))
+                .initialization_script(video_decoder_compatibility_script())
+                .transparent(false)
+                .background_color(tauri::window::Color(0, 0, 0, 255));
+
+        #[cfg(any(debug_assertions, feature = "devtools"))]
+        {
+            builder = builder.devtools(true);
+        }
+
+        let webview = window
+            .add_child(
+                builder,
+                tauri::LogicalPosition::new(request.x, request.y),
+                tauri::LogicalSize::new(request.width, request.height),
+            )
+            .map_err(|e| format!("failed to create browser webview: {e}"))?;
+
+        webview
+            .hide()
+            .map_err(|e| format!("failed to hide browser webview before positioning: {e}"))?;
+        let target_url = webview.url().map(|url| url.to_string()).unwrap_or_default();
+        register_browser_target(webview.label(), &target_url, request.open_request_id);
+        Ok(())
+    }
 }
 
 /// Advertise which built-in browser surface the Agent should target. This is
@@ -457,18 +468,31 @@ pub async fn browser_webview_set_bounds(
     app: tauri::AppHandle,
     request: WebviewBoundsRequest,
 ) -> Result<(), String> {
-    validate_webview_bounds(request.x, request.y, request.width, request.height)?;
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (app, request);
+        Err(
+            "Embedded browser child WebViews are not implemented by the HarmonyOS PC adapter"
+                .to_string(),
+        )
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        validate_webview_bounds(request.x, request.y, request.width, request.height)?;
 
-    let webview = app
-        .get_webview(&request.label)
-        .ok_or_else(|| format!("Webview not found: {}", request.label))?;
+        let webview = app
+            .get_webview(&request.label)
+            .ok_or_else(|| format!("Webview not found: {}", request.label))?;
 
-    webview
-        .set_bounds(tauri::Rect {
-            position: tauri::Position::Logical(tauri::LogicalPosition::new(request.x, request.y)),
-            size: tauri::Size::Logical(tauri::LogicalSize::new(request.width, request.height)),
-        })
-        .map_err(|e| format!("set bounds failed: {e}"))
+        webview
+            .set_bounds(tauri::Rect {
+                position: tauri::Position::Logical(tauri::LogicalPosition::new(
+                    request.x, request.y,
+                )),
+                size: tauri::Size::Logical(tauri::LogicalSize::new(request.width, request.height)),
+            })
+            .map_err(|e| format!("set bounds failed: {e}"))
+    }
 }
 
 /// Return the current URL of a browser webview.
