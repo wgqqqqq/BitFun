@@ -1,3 +1,8 @@
+:root {
+  // Native overlay hosts override this with the measured caption-button area.
+  --openbitfun-host-title-buttons-inset: 0px;
+}
+
 .openbitfun-scene-top-bar {
   position: relative;
   z-index: 10;
@@ -12,6 +17,8 @@
   height: var(--openbitfun-layout-toolbar-md-height);
   min-block-size: var(--openbitfun-layout-toolbar-md-height);
   padding-block: 0;
+  // A native overlay host reports its actual trailing caption-button area.
+  padding-inline-end: var(--openbitfun-host-title-buttons-inset);
   // Subtract the tab strip's own one-border-width inline padding.
   padding-inline-start: calc(
     (

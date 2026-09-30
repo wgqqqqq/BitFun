@@ -22,9 +22,27 @@ fn main() {
     // large debug invoke dispatcher cannot exhaust the default 1 MiB stack.
     #[cfg(target_os = "windows")]
     println!("cargo:rustc-link-arg-bins=/STACK:8388608");
-    println!("cargo:rerun-if-changed=windows-app.manifest");
-    let windows =
-        tauri_build::WindowsAttributes::new().app_manifest(include_str!("windows-app.manifest"));
-    tauri_build::try_build(tauri_build::Attributes::new().windows_attributes(windows))
-        .expect("failed to build desktop platform resources");
+    if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("ohos") {
+        println!("cargo:rerun-if-changed=ohos-capabilities");
+        tauri_build::try_build(
+            tauri_build::Attributes::new()
+                .plugin(
+                    "companion",
+                    tauri_build::InlinedPlugin::new().commands(&["operation"]),
+                )
+                // Stands in for tauri-plugin-dialog, which has no HarmonyOS implementation.
+                .plugin(
+                    "dialog",
+                    tauri_build::InlinedPlugin::new().commands(&["open"]),
+                )
+                .capabilities_path_pattern("ohos-capabilities/*.json"),
+        )
+        .expect("Failed to build HarmonyOS desktop capabilities");
+    } else {
+        println!("cargo:rerun-if-changed=windows-app.manifest");
+        let windows = tauri_build::WindowsAttributes::new()
+            .app_manifest(include_str!("windows-app.manifest"));
+        tauri_build::try_build(tauri_build::Attributes::new().windows_attributes(windows))
+            .expect("failed to build desktop platform resources");
+    }
 }

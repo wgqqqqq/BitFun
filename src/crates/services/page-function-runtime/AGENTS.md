@@ -19,3 +19,8 @@ Functions (rquickjs).
 
 Run `cargo test -p openbitfun-page-function-runtime` and
 `node scripts/check-core-boundaries.mjs` after changes.
+
+For OHOS binding or native build changes, also run
+`node scripts/ohos-cargo.mjs test --locked -p openbitfun-page-function-runtime --no-run`
+from the repository root with the OHOS SDK and Rust target installed. This
+checks target compilation and linking; it does not execute tests on a device.

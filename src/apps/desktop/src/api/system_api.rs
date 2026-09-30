@@ -9,6 +9,7 @@ use openbitfun_core::service::system;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, Position, Size, State};
 use tauri_plugin_opener::OpenerExt;
+#[cfg(not(target_env = "ohos"))]
 use tauri_plugin_updater::UpdaterExt;
 
 /// Emitted during `install_update` download; matches `installUpdateWithProgress` / frontend listener.
@@ -226,6 +227,7 @@ async fn probe_endpoint_throughput(client: &reqwest::Client, url: &str) -> u64 {
 
 /// Build an updater whose endpoints are ordered by measured throughput.
 /// Falls back to the bundled configuration if the builder rejects them.
+#[cfg(not(target_env = "ohos"))]
 pub(super) async fn ranked_updater(
     app: &AppHandle,
 ) -> Result<tauri_plugin_updater::Updater, String> {
@@ -309,31 +311,39 @@ pub async fn check_for_updates(
     app: AppHandle,
     request: CheckForUpdatesRequest,
 ) -> Result<CheckForUpdatesResponse, String> {
-    let _ = request;
-    // Discovery reads only the manifests. Package throughput probes belong to download.
-    let updater = app
-        .updater_builder()
-        .endpoints(default_endpoints())
-        .map_err(|e| e.to_string())?
-        .timeout(std::time::Duration::from_secs(20))
-        .build()
-        .map_err(|e| e.to_string())?;
-    let update = updater.check().await.map_err(|e| e.to_string())?;
-    match update {
-        Some(u) => Ok(CheckForUpdatesResponse {
-            update_available: true,
-            current_version: u.current_version.clone(),
-            latest_version: Some(u.version.clone()),
-            release_notes: u.body.clone(),
-            release_date: u.date.map(|d| d.to_string()),
-        }),
-        None => Ok(CheckForUpdatesResponse {
-            update_available: false,
-            current_version: app.package_info().version.to_string(),
-            latest_version: None,
-            release_notes: None,
-            release_date: None,
-        }),
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (app, request);
+        Err("Application updates are not available through the Desktop updater on HarmonyOS PC; use a signed HAP deployment".to_string())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let _ = request;
+        // Discovery reads only the manifests. Package throughput probes belong to download.
+        let updater = app
+            .updater_builder()
+            .endpoints(default_endpoints())
+            .map_err(|e| e.to_string())?
+            .timeout(std::time::Duration::from_secs(20))
+            .build()
+            .map_err(|e| e.to_string())?;
+        let update = updater.check().await.map_err(|e| e.to_string())?;
+        match update {
+            Some(u) => Ok(CheckForUpdatesResponse {
+                update_available: true,
+                current_version: u.current_version.clone(),
+                latest_version: Some(u.version.clone()),
+                release_notes: u.body.clone(),
+                release_date: u.date.map(|d| d.to_string()),
+            }),
+            None => Ok(CheckForUpdatesResponse {
+                update_available: false,
+                current_version: app.package_info().version.to_string(),
+                latest_version: None,
+                release_notes: None,
+                release_date: None,
+            }),
+        }
     }
 }
 
@@ -344,54 +354,62 @@ pub struct InstallUpdateRequest {}
 /// Downloads and installs the latest update from the updater endpoint (re-checks remote).
 #[tauri::command]
 pub async fn install_update(app: AppHandle, request: InstallUpdateRequest) -> Result<(), String> {
-    let _ = request;
-    let updater = ranked_updater(&app).await?;
-    let update = updater.check().await.map_err(|e| e.to_string())?;
-    let Some(update) = update else {
-        return Err("No update available".to_string());
-    };
-    let app_handle = app.clone();
-    let progress = Arc::new(Mutex::new((0u64, None::<u64>)));
-    let progress_chunk = Arc::clone(&progress);
-    let app_chunk = app_handle.clone();
-    let bytes = update
-        .download(
-            move |chunk_len, content_len| {
-                let (downloaded, total) = {
-                    let mut g = progress_chunk
-                        .lock()
-                        .expect("update progress mutex poisoned");
-                    g.0 = g.0.saturating_add(chunk_len as u64);
-                    g.1 = g.1.or(content_len);
-                    (g.0, g.1)
-                };
-                let _ = app_chunk.emit(
-                    UPDATE_PROGRESS_EVENT,
-                    UpdateProgressPayload { downloaded, total },
-                );
-            },
-            {
-                let app_done = app_handle.clone();
-                let progress_done = Arc::clone(&progress);
-                move || {
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (app, request);
+        Err("Application updates are not available through the Desktop updater on HarmonyOS PC; use a signed HAP deployment".to_string())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let _ = request;
+        let updater = ranked_updater(&app).await?;
+        let update = updater.check().await.map_err(|e| e.to_string())?;
+        let Some(update) = update else {
+            return Err("No update available".to_string());
+        };
+        let app_handle = app.clone();
+        let progress = Arc::new(Mutex::new((0u64, None::<u64>)));
+        let progress_chunk = Arc::clone(&progress);
+        let app_chunk = app_handle.clone();
+        let bytes = update
+            .download(
+                move |chunk_len, content_len| {
                     let (downloaded, total) = {
-                        let g = progress_done
+                        let mut g = progress_chunk
                             .lock()
                             .expect("update progress mutex poisoned");
+                        g.0 = g.0.saturating_add(chunk_len as u64);
+                        g.1 = g.1.or(content_len);
                         (g.0, g.1)
                     };
-                    let _ = app_done.emit(
+                    let _ = app_chunk.emit(
                         UPDATE_PROGRESS_EVENT,
                         UpdateProgressPayload { downloaded, total },
                     );
-                }
-            },
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-    tokio::task::spawn_blocking(move || update.install(bytes).map_err(|e| e.to_string()))
-        .await
-        .map_err(|e| e.to_string())?
+                },
+                {
+                    let app_done = app_handle.clone();
+                    let progress_done = Arc::clone(&progress);
+                    move || {
+                        let (downloaded, total) = {
+                            let g = progress_done
+                                .lock()
+                                .expect("update progress mutex poisoned");
+                            (g.0, g.1)
+                        };
+                        let _ = app_done.emit(
+                            UPDATE_PROGRESS_EVENT,
+                            UpdateProgressPayload { downloaded, total },
+                        );
+                    }
+                },
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+        tokio::task::spawn_blocking(move || update.install(bytes).map_err(|e| e.to_string()))
+            .await
+            .map_err(|e| e.to_string())?
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -744,6 +762,9 @@ pub async fn minimize_to_tray(
     app: tauri::AppHandle,
     startup_trace: State<'_, DesktopStartupTrace>,
 ) -> Result<(), String> {
+    #[cfg(target_env = "ohos")]
+    return Err("Minimize to tray is not supported on HarmonyOS PC".to_string());
+    #[cfg(not(target_env = "ohos"))]
     if let Err(error) = crate::tray::setup_tray(&app, &startup_trace) {
         log::warn!("Failed to initialize tray before minimizing: {}", error);
     }
@@ -765,6 +786,12 @@ pub async fn set_tray_unread_count(
     app: tauri::AppHandle,
     request: SetTrayUnreadCountRequest,
 ) -> Result<(), String> {
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = app;
+        return crate::tray::set_unread_count(request.count).await;
+    }
+    #[cfg(not(target_env = "ohos"))]
     crate::tray::set_unread_count(&app, request.count)
 }
 
@@ -774,6 +801,11 @@ pub async fn initialize_tray_after_startup(
     app: tauri::AppHandle,
     startup_trace: State<'_, DesktopStartupTrace>,
 ) -> Result<(), String> {
+    #[cfg(target_env = "ohos")]
+    {
+        return crate::tray::perform("initialize".into()).await;
+    }
+    #[cfg(not(target_env = "ohos"))]
     crate::tray::setup_tray(&app, &startup_trace).map_err(|e| e.to_string())
 }
 
@@ -785,59 +817,93 @@ pub async fn startup_window_control(
     app: tauri::AppHandle,
     request: StartupWindowControlRequest,
 ) -> Result<StartupWindowControlResponse, String> {
-    let Some(window) = app.get_webview_window("main") else {
-        return Err("Main window not found".to_string());
-    };
-
-    let mut is_maximized = window.is_maximized().unwrap_or(false);
-    match request.action {
-        StartupWindowControlAction::GetState => {}
-        StartupWindowControlAction::Minimize => {
-            window.minimize().map_err(|error| {
-                format!("Failed to minimize main window during startup: {}", error)
-            })?;
-        }
-        StartupWindowControlAction::ToggleMaximize => {
-            if is_maximized {
-                window.unmaximize().map_err(|error| {
-                    format!("Failed to restore main window during startup: {}", error)
-                })?;
-            } else {
-                window.maximize().map_err(|error| {
-                    format!("Failed to maximize main window during startup: {}", error)
-                })?;
-            }
-            is_maximized = !is_maximized;
-        }
-        StartupWindowControlAction::Close => {
-            let behavior = state
-                .config_service
-                .get_config::<String>(Some("app.close_button_behavior"))
-                .await
-                .unwrap_or_else(|_| "minimize_to_tray".to_string());
-
-            if behavior == "quit" {
-                log::info!("Quit requested from startup window control");
-                crate::save_main_window_state(&app, "startup_window_control_quit");
+    #[cfg(target_env = "ohos")]
+    {
+        use crate::ohos::window::{perform, WindowAction};
+        let _ = startup_trace;
+        let action = match request.action {
+            StartupWindowControlAction::GetState => WindowAction::GetState,
+            StartupWindowControlAction::Minimize => WindowAction::Minimize,
+            StartupWindowControlAction::ToggleMaximize => WindowAction::ToggleMaximize,
+            StartupWindowControlAction::Close => {
+                let behavior = state
+                    .config_service
+                    .get_config::<String>(Some("app.close_button_behavior"))
+                    .await
+                    .unwrap_or_else(|_| "minimize_to_tray".to_string());
+                if behavior != "quit" {
+                    return Err(
+                        "Minimize to tray is unavailable on HarmonyOS PC; use minimize or Quit"
+                            .to_string(),
+                    );
+                }
+                let is_maximized = perform(WindowAction::GetState).await?;
                 crate::perform_process_exit_cleanup().await;
                 crate::crash_diagnostics::mark_clean_shutdown("startup_window_control");
-                log::info!(
+                app.exit(0);
+                return Ok(StartupWindowControlResponse { is_maximized });
+            }
+        };
+        perform(action)
+            .await
+            .map(|is_maximized| StartupWindowControlResponse { is_maximized })
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let Some(window) = app.get_webview_window("main") else {
+            return Err("Main window not found".to_string());
+        };
+
+        let mut is_maximized = window.is_maximized().unwrap_or(false);
+        match request.action {
+            StartupWindowControlAction::GetState => {}
+            StartupWindowControlAction::Minimize => {
+                window.minimize().map_err(|error| {
+                    format!("Failed to minimize main window during startup: {}", error)
+                })?;
+            }
+            StartupWindowControlAction::ToggleMaximize => {
+                if is_maximized {
+                    window.unmaximize().map_err(|error| {
+                        format!("Failed to restore main window during startup: {}", error)
+                    })?;
+                } else {
+                    window.maximize().map_err(|error| {
+                        format!("Failed to maximize main window during startup: {}", error)
+                    })?;
+                }
+                is_maximized = !is_maximized;
+            }
+            StartupWindowControlAction::Close => {
+                let behavior = state
+                    .config_service
+                    .get_config::<String>(Some("app.close_button_behavior"))
+                    .await
+                    .unwrap_or_else(|_| "minimize_to_tray".to_string());
+
+                if behavior == "quit" {
+                    log::info!("Quit requested from startup window control");
+                    crate::save_main_window_state(&app, "startup_window_control_quit");
+                    crate::perform_process_exit_cleanup().await;
+                    crate::crash_diagnostics::mark_clean_shutdown("startup_window_control");
+                    log::info!(
                     "Desktop exit authorized after graceful shutdown: reason=startup_window_control"
                 );
-                app.exit(0);
-            } else {
-                if let Err(error) = crate::tray::setup_tray(&app, &startup_trace) {
-                    log::warn!("Failed to initialize tray before startup close: {}", error);
+                    app.exit(0);
+                } else {
+                    if let Err(error) = crate::tray::setup_tray(&app, &startup_trace) {
+                        log::warn!("Failed to initialize tray before startup close: {}", error);
+                    }
+                    window.hide().map_err(|error| {
+                        format!("Failed to hide main window during startup close: {}", error)
+                    })?;
+                    log::info!("Main window hidden from startup window control");
                 }
-                window.hide().map_err(|error| {
-                    format!("Failed to hide main window during startup close: {}", error)
-                })?;
-                log::info!("Main window hidden from startup window control");
             }
         }
-    }
 
-    Ok(StartupWindowControlResponse { is_maximized })
+        Ok(StartupWindowControlResponse { is_maximized })
+    }
 }
 
 /// Toggle OS-level fullscreen for the Desktop main window.
@@ -870,35 +936,65 @@ pub async fn toggle_main_window_fullscreen(
     app: tauri::AppHandle,
     request: ToggleMainWindowFullscreenRequest,
 ) -> Result<ToggleMainWindowFullscreenResponse, String> {
-    let _ = request;
-    let Some(window) = app.get_webview_window("main") else {
-        return Err("Main window not found".to_string());
-    };
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (app, request);
+        Err("Fullscreen is not implemented by the HarmonyOS PC window adapter".to_string())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let _ = request;
+        let Some(window) = app.get_webview_window("main") else {
+            return Err("Main window not found".to_string());
+        };
 
-    let current_fullscreen = window
-        .is_fullscreen()
-        .map_err(|error| format!("Failed to read main window fullscreen state: {}", error))?;
-    let current_maximized = window
-        .is_maximized()
-        .map_err(|error| format!("Failed to read main window maximize state: {}", error))?;
-    let restore_maximized_after_fullscreen = *main_window_fullscreen_restore_maximized()
-        .lock()
-        .map_err(|_| "Main window fullscreen restore state is unavailable".to_string())?;
+        let current_fullscreen = window
+            .is_fullscreen()
+            .map_err(|error| format!("Failed to read main window fullscreen state: {}", error))?;
+        let current_maximized = window
+            .is_maximized()
+            .map_err(|error| format!("Failed to read main window maximize state: {}", error))?;
+        let restore_maximized_after_fullscreen = *main_window_fullscreen_restore_maximized()
+            .lock()
+            .map_err(|_| "Main window fullscreen restore state is unavailable".to_string())?;
 
-    let transition = plan_main_window_fullscreen_transition(
-        current_fullscreen,
-        current_maximized,
-        restore_maximized_after_fullscreen,
-        should_apply_maximized_fullscreen_monitor_bounds(),
-    );
+        let transition = plan_main_window_fullscreen_transition(
+            current_fullscreen,
+            current_maximized,
+            restore_maximized_after_fullscreen,
+            should_apply_maximized_fullscreen_monitor_bounds(),
+        );
 
-    if transition.next_fullscreen {
-        if let Err(error) = window.set_fullscreen(true) {
-            return Err(format!("Failed to enter main window fullscreen: {}", error));
+        if transition.next_fullscreen {
+            if let Err(error) = window.set_fullscreen(true) {
+                return Err(format!("Failed to enter main window fullscreen: {}", error));
+            }
+
+            if transition.should_apply_monitor_bounds_after_enter {
+                apply_main_window_fullscreen_monitor_bounds(&app, &window)?;
+            }
+
+            *main_window_fullscreen_restore_maximized()
+                .lock()
+                .map_err(|_| "Main window fullscreen restore state is unavailable".to_string())? =
+                transition.next_restore_maximized_after_fullscreen;
+
+            return Ok(read_main_window_fullscreen_response(&window, true, false));
         }
 
-        if transition.should_apply_monitor_bounds_after_enter {
-            apply_main_window_fullscreen_monitor_bounds(&app, &window)?;
+        window
+            .set_fullscreen(false)
+            .map_err(|error| format!("Failed to exit main window fullscreen: {}", error))?;
+
+        let mut restored_maximized = false;
+        if transition.should_restore_maximized_after_exit {
+            let is_already_maximized = window.is_maximized().unwrap_or(false);
+            if !is_already_maximized {
+                window.maximize().map_err(|error| {
+                    format!("Failed to restore maximize after fullscreen: {}", error)
+                })?;
+            }
+            restored_maximized = true;
         }
 
         *main_window_fullscreen_restore_maximized()
@@ -906,34 +1002,12 @@ pub async fn toggle_main_window_fullscreen(
             .map_err(|_| "Main window fullscreen restore state is unavailable".to_string())? =
             transition.next_restore_maximized_after_fullscreen;
 
-        return Ok(read_main_window_fullscreen_response(&window, true, false));
+        Ok(read_main_window_fullscreen_response(
+            &window,
+            false,
+            restored_maximized,
+        ))
     }
-
-    window
-        .set_fullscreen(false)
-        .map_err(|error| format!("Failed to exit main window fullscreen: {}", error))?;
-
-    let mut restored_maximized = false;
-    if transition.should_restore_maximized_after_exit {
-        let is_already_maximized = window.is_maximized().unwrap_or(false);
-        if !is_already_maximized {
-            window.maximize().map_err(|error| {
-                format!("Failed to restore maximize after fullscreen: {}", error)
-            })?;
-        }
-        restored_maximized = true;
-    }
-
-    *main_window_fullscreen_restore_maximized()
-        .lock()
-        .map_err(|_| "Main window fullscreen restore state is unavailable".to_string())? =
-        transition.next_restore_maximized_after_fullscreen;
-
-    Ok(read_main_window_fullscreen_response(
-        &window,
-        false,
-        restored_maximized,
-    ))
 }
 
 fn apply_main_window_fullscreen_monitor_bounds(
@@ -979,7 +1053,13 @@ pub async fn send_system_notification(
         return send_clickable_windows_notification(app, request);
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (app, request);
+        Err("System notifications are not implemented by the HarmonyOS PC adapter".to_string())
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_env = "ohos")))]
     {
         use tauri_plugin_notification::NotificationExt;
 

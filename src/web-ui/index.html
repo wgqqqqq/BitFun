@@ -459,7 +459,9 @@
           }, 1200);
         }
 
-        if (controls && window.__OPENBITFUN_SHOW_STARTUP_WINDOW_CONTROLS__) {
+        if (controls && window.__OPENBITFUN_SHOW_STARTUP_WINDOW_CONTROLS__
+          && (!window.__OPENBITFUN_HOST_CAPABILITIES__
+            || window.__OPENBITFUN_HOST_CAPABILITIES__.nativeWindowControls !== false)) {
           var isWindows = (
             (typeof navigator.userAgent === 'string' && navigator.userAgent.toUpperCase().includes('WINDOWS'))
             || (typeof navigator.platform === 'string' && navigator.platform.toUpperCase().includes('WIN'))

@@ -3,6 +3,7 @@
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Instant;
 
+#[cfg(not(target_env = "ohos"))]
 use dark_light::Mode;
 use log::{debug, error, warn};
 use openbitfun_core::infrastructure::try_get_path_manager_arc;
@@ -299,6 +300,13 @@ impl AppearanceConfig {
     fn resolve_builtin_appearance_id(appearance_id: &str) -> &str {
         if appearance_id == "system" {
             let manifest = Self::startup_appearance_bootstrap_manifest();
+            #[cfg(target_env = "ohos")]
+            return if crate::ohos::system_dark_mode() {
+                manifest.default_dark_appearance_id.as_str()
+            } else {
+                manifest.default_light_appearance_id.as_str()
+            };
+            #[cfg(not(target_env = "ohos"))]
             return match dark_light::detect() {
                 Mode::Dark => manifest.default_dark_appearance_id.as_str(),
                 Mode::Light | Mode::Default => manifest.default_light_appearance_id.as_str(),
@@ -317,7 +325,7 @@ impl AppearanceConfig {
         let startup_locale = &bootstrap_config.locale;
         let startup_locale_json =
             serde_json::to_string(&startup_locale).unwrap_or_else(|_| "\"zh-CN\"".to_string());
-        let show_startup_window_controls = !cfg!(target_os = "macos");
+        let show_startup_window_controls = !cfg!(any(target_os = "macos", target_env = "ohos"));
         let native_sidebar_material = cfg!(any(target_os = "windows", target_os = "macos"));
         let startup_trace_id_json = serde_json::to_string(startup_trace_id)
             .unwrap_or_else(|_| "\"desktop-unknown\"".to_string());
@@ -497,14 +505,14 @@ mod startup_appearance_tests {
 }
 
 fn use_development_frontend() -> bool {
-    #[cfg(debug_assertions)]
+    #[cfg(all(debug_assertions, not(target_env = "ohos")))]
     {
         // Isolated E2E can exercise the production protocol using a debug
         // executable and dist assets, without launching a development server.
         !(std::env::var("OPENBITFUN_E2E_PACKAGED_FRONTEND").as_deref() == Ok("1")
             && std::env::var("OPENBITFUN_E2E_STORAGE_GUARD").as_deref() == Ok("1"))
     }
-    #[cfg(not(debug_assertions))]
+    #[cfg(any(not(debug_assertions), target_env = "ohos"))]
     {
         false
     }
@@ -526,6 +534,13 @@ pub fn create_main_window(
         startup_trace_id,
         &bootstrap_config,
         workspace_startup_state.as_ref(),
+    );
+    // These are controller-local delivery capabilities, independent of a peer runtime.
+    let init_script = format!(
+        "Object.defineProperty(window, '__OPENBITFUN_HOST_CAPABILITIES__', {{ value: Object.freeze({{ desktopUpdater: {}, nativeWindowControls: {} }}), writable: false, configurable: false }});\n{}",
+        !cfg!(target_env = "ohos"),
+        !cfg!(target_env = "ohos"),
+        init_script,
     );
     startup_trace.record_step(
         "native_step_end",
@@ -586,12 +601,9 @@ pub fn create_main_window(
             crate::MAIN_WINDOW_DEFAULT_WIDTH,
             crate::MAIN_WINDOW_DEFAULT_HEIGHT,
         )
-        .center()
         .resizable(true)
-        .fullscreen(false)
         .visible(false)
         .background_color(bg_color)
-        .accept_first_mouse(true)
         .initialization_script(&init_script)
         .on_page_load({
             let startup_trace_id = startup_trace_id.to_string();
@@ -634,7 +646,12 @@ pub fn create_main_window(
             );
     }
 
-    #[cfg(debug_assertions)]
+    #[cfg(not(target_env = "ohos"))]
+    {
+        builder = builder.center().fullscreen(false).accept_first_mouse(true);
+    }
+
+    #[cfg(all(debug_assertions, not(target_env = "ohos")))]
     if !use_development_frontend() {
         // Product-path isolation alone does not isolate WKWebView storage.
         // Default to a private store. Windows persistence tests explicitly opt
@@ -748,49 +765,78 @@ fn show_main_window_for_startup(
     startup_trace: &DesktopStartupTrace,
     reapply_maximized: bool,
 ) {
-    let show_started_at = Instant::now();
-    if let Err(error) = window.show() {
-        warn!("Failed to show main window during startup: {}", error);
-        return;
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (window, total_started_at);
+        let trace = startup_trace.clone();
+        tauri::async_runtime::spawn(async move {
+            use crate::ohos::window::{perform, WindowAction};
+            let started = Instant::now();
+            match perform(WindowAction::Show).await {
+                Ok(_) => {
+                    trace.record_elapsed_step("native_window", "show_window", started);
+                }
+                Err(error) => {
+                    log::error!("Failed to show HarmonyOS main window: {}", error);
+                    return;
+                }
+            }
+            if reapply_maximized {
+                if let Err(error) = perform(WindowAction::Maximize).await {
+                    log::warn!(
+                        "Failed to restore HarmonyOS main window maximize state: {}",
+                        error
+                    );
+                }
+            }
+        });
     }
-    startup_trace.record_elapsed_step("native_window", "show_window", show_started_at);
-    debug!(
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let show_started_at = Instant::now();
+        if let Err(error) = window.show() {
+            warn!("Failed to show main window during startup: {}", error);
+            return;
+        }
+        startup_trace.record_elapsed_step("native_window", "show_window", show_started_at);
+        debug!(
         "Main window startup show step completed: step=show duration_ms={} since_create_start_ms={}",
         show_started_at.elapsed().as_millis(),
         total_started_at.elapsed().as_millis()
     );
 
-    let focus_started_at = Instant::now();
-    if let Err(error) = window.set_focus() {
-        warn!("Failed to focus main window during startup: {}", error);
-    } else {
-        startup_trace.record_elapsed_step("native_window", "focus_window", focus_started_at);
-        debug!(
+        let focus_started_at = Instant::now();
+        if let Err(error) = window.set_focus() {
+            warn!("Failed to focus main window during startup: {}", error);
+        } else {
+            startup_trace.record_elapsed_step("native_window", "focus_window", focus_started_at);
+            debug!(
             "Main window startup show step completed: step=focus duration_ms={} since_create_start_ms={}",
             focus_started_at.elapsed().as_millis(),
             total_started_at.elapsed().as_millis()
         );
-    }
+        }
 
-    // Maximize only after the window is visible: maximizing a hidden
-    // undecorated window on Windows is dropped on show and leaves a bogus
-    // normal-placement rect behind (see `window_state_support`).
-    if reapply_maximized {
-        match window.is_maximized() {
-            Ok(true) => {}
-            Ok(false) => {
-                if let Err(error) = window.maximize() {
-                    log::warn!(
+        // Maximize only after the window is visible: maximizing a hidden
+        // undecorated window on Windows is dropped on show and leaves a bogus
+        // normal-placement rect behind (see `window_state_support`).
+        if reapply_maximized {
+            match window.is_maximized() {
+                Ok(true) => {}
+                Ok(false) => {
+                    if let Err(error) = window.maximize() {
+                        log::warn!(
                         "Failed to re-apply persisted maximized state after main window show: {}",
                         error
                     );
+                    }
                 }
-            }
-            Err(error) => {
-                log::warn!(
-                    "Failed to query main window maximized state after show: {}",
-                    error
-                )
+                Err(error) => {
+                    log::warn!(
+                        "Failed to query main window maximized state after show: {}",
+                        error
+                    )
+                }
             }
         }
     }
@@ -968,32 +1014,39 @@ fn resize_agent_companion_window(
 
 #[tauri::command]
 pub async fn show_agent_companion_desktop_pet(app: tauri::AppHandle) -> Result<(), String> {
-    let started_at = Instant::now();
-    let _guard = agent_companion_window_ops().lock().await;
-    debug!("Agent companion window show requested");
-
-    // Reuse any existing window: never destroy here. A previous implementation destroyed
-    // whenever `is_visible` was false, which raced with another `show` that had built the
-    // window but not called `show()` yet (or with `hide`), producing duplicate pets or
-    // stuck windows.
-    if let Some(window) = app.get_webview_window(AGENT_COMPANION_WINDOW_LABEL) {
-        if let Err(e) = window.unminimize() {
-            warn!("Failed to unminimize Agent companion window: {}", e);
-        }
-        position_agent_companion_window(&app, &window);
-        window.show().map_err(|e| {
-            error!("Failed to show Agent companion window: {}", e);
-            format!("Failed to show Agent companion window: {}", e)
-        })?;
-        debug!(
-            "Agent companion window reused: total_duration_ms={}",
-            started_at.elapsed().as_millis()
-        );
-        return Ok(());
+    #[cfg(target_env = "ohos")]
+    {
+        let _guard = agent_companion_window_ops().lock().await;
+        crate::ohos::companion::show(&app, app_url(&app, "?openbitfunWindow=agent-companion")).await
     }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let started_at = Instant::now();
+        let _guard = agent_companion_window_ops().lock().await;
+        debug!("Agent companion window show requested");
 
-    let url = app_url(&app, "?openbitfunWindow=agent-companion");
-    let mut builder = tauri::WebviewWindowBuilder::new(&app, AGENT_COMPANION_WINDOW_LABEL, url)
+        // Reuse any existing window: never destroy here. A previous implementation destroyed
+        // whenever `is_visible` was false, which raced with another `show` that had built the
+        // window but not called `show()` yet (or with `hide`), producing duplicate pets or
+        // stuck windows.
+        if let Some(window) = app.get_webview_window(AGENT_COMPANION_WINDOW_LABEL) {
+            if let Err(e) = window.unminimize() {
+                warn!("Failed to unminimize Agent companion window: {}", e);
+            }
+            position_agent_companion_window(&app, &window);
+            window.show().map_err(|e| {
+                error!("Failed to show Agent companion window: {}", e);
+                format!("Failed to show Agent companion window: {}", e)
+            })?;
+            debug!(
+                "Agent companion window reused: total_duration_ms={}",
+                started_at.elapsed().as_millis()
+            );
+            return Ok(());
+        }
+
+        let url = app_url(&app, "?openbitfunWindow=agent-companion");
+        let mut builder = tauri::WebviewWindowBuilder::new(&app, AGENT_COMPANION_WINDOW_LABEL, url)
         .title("OpenBitFun Agent Companion")
         .inner_size(
             AGENT_COMPANION_WINDOW_MIN_SIZE,
@@ -1028,37 +1081,38 @@ pub async fn show_agent_companion_desktop_pet(app: tauri::AppHandle) -> Result<(
             }
         });
 
-    builder = builder.disable_drag_drop_handler();
+        builder = builder.disable_drag_drop_handler();
 
-    let build_started_at = Instant::now();
-    let window = builder.build().map_err(|e| {
-        error!(
-            "Failed to create Agent companion window: error={} duration_ms={}",
-            e,
-            build_started_at.elapsed().as_millis()
-        );
-        format!("Failed to create Agent companion window: {}", e)
-    })?;
-    debug!(
+        let build_started_at = Instant::now();
+        let window = builder.build().map_err(|e| {
+            error!(
+                "Failed to create Agent companion window: error={} duration_ms={}",
+                e,
+                build_started_at.elapsed().as_millis()
+            );
+            format!("Failed to create Agent companion window: {}", e)
+        })?;
+        debug!(
         "Agent companion window creation step completed: step=build duration_ms={} total_duration_ms={}",
         build_started_at.elapsed().as_millis(),
         started_at.elapsed().as_millis()
     );
 
-    position_agent_companion_window(&app, &window);
+        position_agent_companion_window(&app, &window);
 
-    let show_started_at = Instant::now();
-    window.show().map_err(|e| {
-        error!("Failed to show Agent companion window: {}", e);
-        format!("Failed to show Agent companion window: {}", e)
-    })?;
-    debug!(
-        "Agent companion window shown: show_duration_ms={} total_duration_ms={}",
-        show_started_at.elapsed().as_millis(),
-        started_at.elapsed().as_millis()
-    );
+        let show_started_at = Instant::now();
+        window.show().map_err(|e| {
+            error!("Failed to show Agent companion window: {}", e);
+            format!("Failed to show Agent companion window: {}", e)
+        })?;
+        debug!(
+            "Agent companion window shown: show_duration_ms={} total_duration_ms={}",
+            show_started_at.elapsed().as_millis(),
+            started_at.elapsed().as_millis()
+        );
 
-    Ok(())
+        Ok(())
+    }
 }
 
 #[tauri::command]
@@ -1067,6 +1121,15 @@ pub async fn resize_agent_companion_desktop_pet(
     width: f64,
     height: f64,
 ) -> Result<(), String> {
+    #[cfg(target_env = "ohos")]
+    {
+        let _guard = agent_companion_window_ops().lock().await;
+        return crate::ohos::companion::perform(
+            serde_json::json!({"action":"resize", "width":width, "height":height}),
+        )
+        .await
+        .map(|_| ());
+    }
     let _guard = agent_companion_window_ops().lock().await;
     if let Some(window) = app.get_webview_window(AGENT_COMPANION_WINDOW_LABEL) {
         let app_for_resize = app.clone();
@@ -1085,6 +1148,11 @@ pub async fn resize_agent_companion_desktop_pet(
 
 #[tauri::command]
 pub async fn hide_agent_companion_desktop_pet(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_env = "ohos")]
+    {
+        let _guard = agent_companion_window_ops().lock().await;
+        return crate::ohos::companion::hide(&app).await;
+    }
     let _guard = agent_companion_window_ops().lock().await;
     if let Some(window) = app.get_webview_window(AGENT_COMPANION_WINDOW_LABEL) {
         if let Ok(scale_factor) = window.scale_factor() {
@@ -1102,52 +1170,62 @@ pub async fn hide_agent_companion_desktop_pet(app: tauri::AppHandle) -> Result<(
 
 #[tauri::command]
 pub async fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
-    let total_started_at = Instant::now();
-    if let Some(main_window) = app.get_webview_window("main") {
-        main_window
-            .unminimize()
-            .map_err(|error| error.to_string())?;
-        if let Err(error) = crate::window_state_support::repair_for_activation(&main_window) {
-            warn!(
-                "Failed to repair main window geometry during activation: {}",
-                error
-            );
-        }
-        let step_started_at = Instant::now();
-        main_window.show().map_err(|e| {
-            error!("Failed to show main window: {}", e);
-            format!("Failed to show main window: {}", e)
-        })?;
-        debug!(
-            "Main window show step completed: step=show duration_ms={}",
-            step_started_at.elapsed().as_millis()
-        );
-
-        #[cfg(target_os = "macos")]
-        {
-            crate::cancel_main_window_close_request_on_macos();
-            crate::mark_main_window_hidden_on_macos(false);
-        }
-
-        let step_started_at = Instant::now();
-        main_window.set_focus().map_err(|e| {
-            error!("Failed to focus main window: {}", e);
-            format!("Failed to focus main window: {}", e)
-        })?;
-        debug!(
-            "Main window show step completed: step=focus duration_ms={}",
-            step_started_at.elapsed().as_millis()
-        );
-    } else {
-        error!("Main window not found");
-        return Err("Main window not found".to_string());
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = app;
+        crate::ohos::window::perform(crate::ohos::window::WindowAction::Show)
+            .await
+            .map(|_| ())
     }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let total_started_at = Instant::now();
+        if let Some(main_window) = app.get_webview_window("main") {
+            main_window
+                .unminimize()
+                .map_err(|error| error.to_string())?;
+            if let Err(error) = crate::window_state_support::repair_for_activation(&main_window) {
+                warn!(
+                    "Failed to repair main window geometry during activation: {}",
+                    error
+                );
+            }
+            let step_started_at = Instant::now();
+            main_window.show().map_err(|e| {
+                error!("Failed to show main window: {}", e);
+                format!("Failed to show main window: {}", e)
+            })?;
+            debug!(
+                "Main window show step completed: step=show duration_ms={}",
+                step_started_at.elapsed().as_millis()
+            );
 
-    debug!(
-        "Main window shown: total_duration_ms={}",
-        total_started_at.elapsed().as_millis()
-    );
-    Ok(())
+            #[cfg(target_os = "macos")]
+            {
+                crate::cancel_main_window_close_request_on_macos();
+                crate::mark_main_window_hidden_on_macos(false);
+            }
+
+            let step_started_at = Instant::now();
+            main_window.set_focus().map_err(|e| {
+                error!("Failed to focus main window: {}", e);
+                format!("Failed to focus main window: {}", e)
+            })?;
+            debug!(
+                "Main window show step completed: step=focus duration_ms={}",
+                step_started_at.elapsed().as_millis()
+            );
+        } else {
+            error!("Main window not found");
+            return Err("Main window not found".to_string());
+        }
+
+        debug!(
+            "Main window shown: total_duration_ms={}",
+            total_started_at.elapsed().as_millis()
+        );
+        Ok(())
+    }
 }
 
 #[cfg(test)]

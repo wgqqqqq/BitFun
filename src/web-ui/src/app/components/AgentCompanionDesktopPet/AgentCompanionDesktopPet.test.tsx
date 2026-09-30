@@ -369,10 +369,11 @@ describe('AgentCompanionDesktopPet', () => {
     const menuItems = Array.from(
       container.querySelectorAll<HTMLButtonElement>('[data-openbitfun-menu-item]'),
     );
-    expect(menuItems.map(item => item.textContent)).toEqual(['Switch pet', 'Close pet']);
+    const switchPet = menuItems.find(item => item.textContent === 'Switch pet');
+    expect(switchPet).toBeDefined();
 
     act(() => {
-      menuItems[0]!.click();
+      switchPet!.click();
     });
 
     expect(emitMock).toHaveBeenCalledWith(PET_COMMAND_EVENT, { type: 'open-pet-settings' });

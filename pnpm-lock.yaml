@@ -44,6 +44,9 @@ importers:
       cross-env:
         specifier: ^10.1.0
         version: 10.1.0
+      json5:
+        specifier: 2.2.3
+        version: 2.2.3
       sass:
         specifier: ^1.93.2
         version: 1.97.3

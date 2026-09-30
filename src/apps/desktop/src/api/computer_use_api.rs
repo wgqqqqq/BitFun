@@ -1,7 +1,9 @@
 //! Tauri commands for Computer use (permissions + settings deep links).
 
 use crate::api::app_state::AppState;
+#[cfg(not(target_env = "ohos"))]
 use crate::computer_use::DesktopComputerUseHost;
+#[cfg(not(target_env = "ohos"))]
 use openbitfun_core::agentic::tools::computer_use_host::ComputerUseHost;
 use openbitfun_core::service::config::types::AIConfig;
 #[cfg(target_os = "windows")]
@@ -29,31 +31,56 @@ pub struct ComputerUseOpenSettingsRequest {
 pub async fn computer_use_get_status(
     state: State<'_, AppState>,
 ) -> Result<ComputerUseStatusResponse, String> {
-    let ai: AIConfig = state
-        .config_service
-        .get_config(Some("ai"))
-        .await
-        .map_err(|e| e.to_string())?;
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = state;
+        Ok(ComputerUseStatusResponse {
+            computer_use_enabled: false,
+            accessibility_granted: false,
+            screen_capture_granted: false,
+            platform_note: Some(
+                "Native computer automation is not implemented on HarmonyOS PC".to_string(),
+            ),
+        })
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let ai: AIConfig = state
+            .config_service
+            .get_config(Some("ai"))
+            .await
+            .map_err(|e| e.to_string())?;
 
-    let host = DesktopComputerUseHost::new();
-    let snap = host
-        .permission_snapshot()
-        .await
-        .map_err(|e| e.to_string())?;
+        let host = DesktopComputerUseHost::new();
+        let snap = host
+            .permission_snapshot()
+            .await
+            .map_err(|e| e.to_string())?;
 
-    Ok(ComputerUseStatusResponse {
-        computer_use_enabled: ai.computer_use_enabled,
-        accessibility_granted: snap.accessibility_granted,
-        screen_capture_granted: snap.screen_capture_granted,
-        platform_note: snap.platform_note,
-    })
+        Ok(ComputerUseStatusResponse {
+            computer_use_enabled: ai.computer_use_enabled,
+            accessibility_granted: snap.accessibility_granted,
+            screen_capture_granted: snap.screen_capture_granted,
+            platform_note: snap.platform_note,
+        })
+    }
 }
 
 #[tauri::command]
 pub async fn computer_use_request_permissions() -> Result<(), String> {
-    let host = DesktopComputerUseHost::new();
-    host.prompt_for_missing_permissions();
-    Ok(())
+    #[cfg(target_env = "ohos")]
+    {
+        Err(
+            "Native computer automation permissions are not implemented on HarmonyOS PC"
+                .to_string(),
+        )
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let host = DesktopComputerUseHost::new();
+        host.prompt_for_missing_permissions();
+        Ok(())
+    }
 }
 
 #[tauri::command]

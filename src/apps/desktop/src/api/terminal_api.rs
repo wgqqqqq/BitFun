@@ -47,9 +47,20 @@ impl TerminalState {
 
         if !*initialized {
             let mut config = TerminalConfig::default();
+            #[cfg(target_env = "ohos")]
+            {
+                config.default_shell = Some(match verify_harmony_system_zsh().await {
+                    Ok(()) => "/system/bin/zsh".to_string(),
+                    Err(error) => {
+                        verify_harmony_system_shell("/system/bin/sh").await?;
+                        warn!("HarmonyOS zsh unavailable; selecting basic sh terminal without shell integration: {error}");
+                        "/system/bin/sh".to_string()
+                    }
+                });
+            }
 
             // Set scripts directory to app data dir: {config_dir}/openbitfun/temp/scripts
-            let scripts_dir = Self::get_scripts_dir();
+            let scripts_dir = Self::get_scripts_dir()?;
             config.shell_integration.scripts_dir = Some(scripts_dir);
 
             match try_get_path_manager_arc() {
@@ -89,12 +100,20 @@ impl TerminalState {
 
     /// Get the scripts directory path for shell integration
     /// Uses the same path structure as PathManager
-    fn get_scripts_dir() -> PathBuf {
-        dirs::config_dir()
+    fn get_scripts_dir() -> Result<PathBuf, String> {
+        #[cfg(target_env = "ohos")]
+        {
+            // GUI applications cannot write to the PC user's global config directory.
+            return try_get_path_manager_arc()
+                .map(|paths| paths.temp_dir().join("scripts"))
+                .map_err(|error| format!("Terminal app-private storage is unavailable: {error}"));
+        }
+        #[cfg(not(target_env = "ohos"))]
+        Ok(dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join(openbitfun_core_types::product_identity::data_namespace())
             .join("temp")
-            .join("scripts")
+            .join("scripts"))
     }
 }
 
@@ -639,6 +658,11 @@ pub async fn terminal_create(
         .await;
     }
 
+    #[cfg(target_env = "ohos")]
+    if request.shell_id.is_none() && request.shell_type.as_deref() == Some("zsh") {
+        verify_harmony_system_zsh().await?;
+    }
+
     let api = state.get_or_init_api().await?;
 
     let parsed_shell_type = request.shell_type.and_then(|s| parse_shell_type(&s));
@@ -676,6 +700,32 @@ pub async fn terminal_create(
     }
     register_terminal_stream(&session.id).await?;
     Ok(SessionResponse::from(session))
+}
+
+#[cfg(target_env = "ohos")]
+pub(crate) async fn verify_harmony_system_zsh() -> Result<(), String> {
+    verify_harmony_system_shell("/system/bin/zsh").await
+}
+
+#[cfg(target_env = "ohos")]
+async fn verify_harmony_system_shell(shell: &str) -> Result<(), String> {
+    use std::process::Stdio;
+    let mut command = openbitfun_core::util::process_manager::create_tokio_command(shell);
+    command
+        .args(["-f", "-c", "exit 0"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    let output = tokio::time::timeout(std::time::Duration::from_secs(3), command.output())
+        .await
+        .map_err(|_| "HarmonyOS system shell startup verification timed out".to_string())?
+        .map_err(|error| format!("HarmonyOS system shell {shell} cannot start: {error}"))?;
+    if !output.status.success() {
+        let reason = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("HarmonyOS PC terminal is unavailable: system shell {shell} failed to load in this application. Its native dependencies must be adapted before terminal sessions can start. {}", reason.trim()));
+    }
+    Ok(())
 }
 
 #[tauri::command]

@@ -47,6 +47,21 @@ afterEach(() => {
 });
 
 describe('staged app update', () => {
+  it('does not restore, download, or install on a host without desktop updates', async () => {
+    vi.stubGlobal('__OPENBITFUN_HOST_CAPABILITIES__', { desktopUpdater: false });
+    await state().initialize();
+    await state().startInstall();
+    expect(state()).toMatchObject({ status: 'idle', error: null, promptOpen: false });
+    useUpdateInstallStore.setState({ status: 'ready', version: '2.0.0' });
+    state().requestInstall();
+    expect(state().promptOpen).toBe(false);
+    useUpdateInstallStore.setState({ promptOpen: true });
+    await state().confirmInstall();
+    expect(mocks.pending).not.toHaveBeenCalled();
+    expect(mocks.download).not.toHaveBeenCalled();
+    expect(mocks.install).not.toHaveBeenCalled();
+  });
+
   it('starts development without cached discovery or automatic checks and still allows a manual check', async () => {
     vi.stubEnv('DEV', true);
     writeAppUpdateSnapshot({ result: available(), checkedAt: Date.now() });

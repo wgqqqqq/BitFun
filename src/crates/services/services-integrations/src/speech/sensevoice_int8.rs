@@ -1,18 +1,24 @@
+#[cfg(not(target_env = "ohos"))]
 use super::audio::pcm16_le_to_f32_samples;
 use super::recognizer::{SpeechRecognizer, SpeechRecognizerWarmupRequest};
 use super::types::{SpeechTranscribeRequest, SpeechTranscriptionResult};
 use super::{OpenBitFunError, OpenBitFunResult};
 use async_trait::async_trait;
+#[cfg(not(target_env = "ohos"))]
 use sherpa_onnx::{OfflineRecognizer, OfflineRecognizerConfig, OfflineSenseVoiceModelConfig};
+#[cfg(not(target_env = "ohos"))]
 use std::path::{Path, PathBuf};
+#[cfg(not(target_env = "ohos"))]
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 #[derive(Clone, Default)]
 pub(super) struct SenseVoiceInt8Recognizer {
+    #[cfg(not(target_env = "ohos"))]
     cache: Arc<Mutex<Option<CachedSenseVoiceRecognizer>>>,
 }
 
+#[cfg(not(target_env = "ohos"))]
 struct CachedSenseVoiceRecognizer {
     model_path: PathBuf,
     tokens_path: PathBuf,
@@ -26,6 +32,7 @@ impl SenseVoiceInt8Recognizer {
     }
 }
 
+#[cfg(not(target_env = "ohos"))]
 #[async_trait]
 impl SpeechRecognizer for SenseVoiceInt8Recognizer {
     async fn warmup(&self, request: SpeechRecognizerWarmupRequest) -> OpenBitFunResult<()> {
@@ -76,6 +83,30 @@ impl SpeechRecognizer for SenseVoiceInt8Recognizer {
     }
 }
 
+#[cfg(target_env = "ohos")]
+#[async_trait]
+impl SpeechRecognizer for SenseVoiceInt8Recognizer {
+    async fn warmup(&self, _request: SpeechRecognizerWarmupRequest) -> OpenBitFunResult<()> {
+        Err(OpenBitFunError::service(
+            "SenseVoice speech recognition is not supported on this platform",
+        ))
+    }
+
+    async fn unload(&self) -> OpenBitFunResult<()> {
+        Ok(())
+    }
+
+    async fn transcribe(
+        &self,
+        _request: SpeechTranscribeRequest,
+    ) -> OpenBitFunResult<SpeechTranscriptionResult> {
+        Err(OpenBitFunError::service(
+            "SenseVoice speech recognition is not supported on this platform",
+        ))
+    }
+}
+
+#[cfg(not(target_env = "ohos"))]
 fn transcribe_blocking(
     request: SpeechTranscribeRequest,
     cache: Arc<Mutex<Option<CachedSenseVoiceRecognizer>>>,
@@ -123,6 +154,7 @@ fn transcribe_blocking(
     })
 }
 
+#[cfg(not(target_env = "ohos"))]
 fn ensure_model_files(model_path: &Path, tokens_path: &Path) -> OpenBitFunResult<()> {
     if !model_path.is_file() || !tokens_path.is_file() {
         return Err(OpenBitFunError::NotFound(
@@ -132,6 +164,7 @@ fn ensure_model_files(model_path: &Path, tokens_path: &Path) -> OpenBitFunResult
     Ok(())
 }
 
+#[cfg(not(target_env = "ohos"))]
 fn ensure_cached_recognizer(
     cache: &mut Option<CachedSenseVoiceRecognizer>,
     model_path: PathBuf,
@@ -159,6 +192,7 @@ fn ensure_cached_recognizer(
         .ok_or_else(|| OpenBitFunError::service("Speech recognizer cache is empty"))
 }
 
+#[cfg(not(target_env = "ohos"))]
 fn create_recognizer(
     model_path: &Path,
     tokens_path: &Path,

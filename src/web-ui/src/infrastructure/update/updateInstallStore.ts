@@ -4,7 +4,7 @@ import { systemAPI, type CheckForUpdatesResponse } from '@/infrastructure/api/se
 import { installUpdateWithProgress, type UpdateDownloadProgressPayload } from './installUpdateWithProgress';
 import { isUpdateVersionChangedError } from './updateErrorMessage';
 import { isNewerAppVersion, normalizeAppUpdateResult } from './appUpdateVersion';
-import { canAutoCheckForAppUpdates } from './tauriEnv';
+import { canAutoCheckForAppUpdates, canCheckForAppUpdates } from './tauriEnv';
 import {
   getSkippedVersion, readAppUpdateSnapshot, recordDailyPromptDismissed,
   recordSkipThisVersion, restoreVersionReminder, shouldShowDailyUpdatePrompt,
@@ -88,6 +88,7 @@ export const useUpdateInstallStore = create<UpdateInstallState>((set, get) => ({
   notice: null, noticeRevision: 0, detailsOpen: false, releaseNotesOpen: false,
 
   initialize: async () => {
+    if (!canCheckForAppUpdates()) return;
     if (get().initialized) return;
     if (initialization) return initialization;
     initialization = (async () => {
@@ -119,6 +120,7 @@ export const useUpdateInstallStore = create<UpdateInstallState>((set, get) => ({
   },
 
   checkForUpdates: async (source = 'manual', force = false) => {
+    if (!canCheckForAppUpdates()) return;
     const automatic = source !== 'manual';
     if (automatic && !canAutoCheckForAppUpdates()) return;
     await get().initialize();
@@ -220,6 +222,7 @@ export const useUpdateInstallStore = create<UpdateInstallState>((set, get) => ({
 
   // Prepare a signed package only. No download outcome can authorize installation.
   startInstall: async (replacePending = false, expectedVersion) => {
+    if (!canCheckForAppUpdates()) return;
     await get().initialize();
     if (['downloading', 'installing'].includes(get().status)) return;
     if (get().status === 'ready' && !replacePending) return;
@@ -247,6 +250,7 @@ export const useUpdateInstallStore = create<UpdateInstallState>((set, get) => ({
   },
 
   requestInstall: () => {
+    if (!canCheckForAppUpdates()) return;
     const { status, version, downloadVersion } = get();
     if (status !== 'ready' || !version) return;
     get().restoreReminder(version);
@@ -255,6 +259,7 @@ export const useUpdateInstallStore = create<UpdateInstallState>((set, get) => ({
     });
   },
   confirmInstall: async () => {
+    if (!canCheckForAppUpdates()) return;
     const { status, version, promptOpen } = get();
     if (status !== 'ready' || !version || !promptOpen) return;
     set({ status: 'installing', error: null });

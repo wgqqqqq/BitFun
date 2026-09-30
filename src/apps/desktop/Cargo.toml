@@ -18,6 +18,10 @@ cc = { workspace = true }
 tauri-build = { workspace = true }
 serde_json = { workspace = true }
 
+[target.'cfg(target_env = "ohos")'.dependencies]
+napi-ohos = { version = "1.1" }
+napi-derive-ohos = { version = "1.1" }
+
 [dependencies]
 openbitfun-services-core = { path = "../../crates/services/services-core", features = ["pet-packages"] }
 # Internal crates
@@ -37,14 +41,8 @@ openbitfun-acp = { path = "../../crates/interfaces/acp", default-features = fals
 # Tauri
 tauri = { workspace = true, features = ["unstable", "macos-private-api", "tray-icon"] }
 tauri-plugin-opener = { workspace = true }
-tauri-plugin-dialog = { workspace = true }
 tauri-plugin-fs = { workspace = true }
 tauri-plugin-log = { workspace = true }
-tauri-plugin-autostart = { workspace = true }
-tauri-plugin-notification = { workspace = true }
-tauri-plugin-updater = { workspace = true }
-tauri-plugin-single-instance = { workspace = true }
-keepawake = { workspace = true }
 # Keep Tauri's transitive time resolution on the known-good release.
 time = { workspace = true }
 brotli-decompressor = { workspace = true }
@@ -62,7 +60,6 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 regex = { workspace = true }
 dirs = { workspace = true }
-dark-light = { workspace = true }
 similar = { workspace = true }
 ignore = { workspace = true }
 mime_guess = { workspace = true }
@@ -156,7 +153,7 @@ default = []
 # Never enabled in release profile intended for end users.
 devtools = ["tauri/devtools", "openbitfun-webdriver/embedded"]
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(all(target_os = "linux", not(target_env = "ohos")))'.dependencies]
 atspi = { workspace = true, features = ["zbus"] }
 gstreamer = { workspace = true }
 gstreamer-app = { workspace = true }
@@ -170,3 +167,13 @@ name = "computer_use_native_roundtrip"
 path = "tests/computer_use_native_roundtrip.rs"
 harness = false
 required-features = ["devtools"]
+[target.'cfg(not(target_env = "ohos"))'.dependencies]
+dark-light = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
+tauri-plugin-autostart = { workspace = true }
+tauri-plugin-notification = { workspace = true }
+tauri-plugin-single-instance = { workspace = true }
+tauri-plugin-updater = { workspace = true }
+screenshots = { workspace = true }
+enigo = { workspace = true }
+keepawake = { workspace = true }

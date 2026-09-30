@@ -90,6 +90,7 @@ impl Default for SleepPreventionState {
     }
 }
 
+#[cfg(not(target_env = "ohos"))]
 fn start_worker() -> Result<mpsc::Sender<SleepPreventionRequest>, String> {
     let (sender, receiver) = mpsc::channel();
     std::thread::Builder::new()
@@ -99,6 +100,7 @@ fn start_worker() -> Result<mpsc::Sender<SleepPreventionRequest>, String> {
     Ok(sender)
 }
 
+#[cfg(not(target_env = "ohos"))]
 fn run_worker(receiver: mpsc::Receiver<SleepPreventionRequest>) {
     let mut inhibitor = None;
 
@@ -111,6 +113,7 @@ fn run_worker(receiver: mpsc::Receiver<SleepPreventionRequest>) {
     }
 }
 
+#[cfg(not(target_env = "ohos"))]
 fn set_inhibitor_enabled(
     inhibitor: &mut Option<keepawake::KeepAwake>,
     enabled: bool,
@@ -447,4 +450,9 @@ mod tests {
             &ConfigUpdateEvent::ModelConfigurationUpdated
         ));
     }
+}
+
+#[cfg(target_env = "ohos")]
+fn start_worker() -> Result<mpsc::Sender<SleepPreventionRequest>, String> {
+    Err("System sleep prevention is not implemented on HarmonyOS PC".to_string())
 }

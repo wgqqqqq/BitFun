@@ -510,6 +510,9 @@
       "interrupted": "已中斷"
     },
     "menu": {
+      "enlarge": "放大",
+      "shrink": "縮小",
+      "resetSize": "恢復預設大小",
       "switchPet": "切換寵物",
       "closePet": "關閉寵物",
       "closeBubble": "關閉該氣泡"
