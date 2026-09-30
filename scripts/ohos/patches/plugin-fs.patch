@@ -1,0 +1,29 @@
+--- a/plugins/fs/src/lib.rs
++++ b/plugins/fs/src/lib.rs
+@@ -28,7 +28,7 @@
+ mod android;
+ mod commands;
+ mod config;
+-#[cfg(desktop)]
++#[cfg(any(desktop, target_env = "ohos"))]
+ mod desktop;
+ mod error;
+ mod file_path;
+@@ -42,7 +42,7 @@
+ 
+ #[cfg(target_os = "android")]
+ pub use android::Fs;
+-#[cfg(desktop)]
++#[cfg(any(desktop, target_env = "ohos"))]
+ pub use desktop::Fs;
+ #[cfg(target_os = "ios")]
+ pub use ios::Fs;
+@@ -500,7 +500,7 @@
+                 let fs = ios::init(app, api)?;
+                 app.manage(fs);
+             }
+-            #[cfg(desktop)]
++            #[cfg(any(desktop, target_env = "ohos"))]
+             app.manage(Fs(app.clone()));
+ 
+             app.manage(scope);

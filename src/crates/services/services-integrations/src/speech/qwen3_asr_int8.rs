@@ -1,18 +1,24 @@
+#[cfg(not(target_env = "ohos"))]
 use super::audio::pcm16_le_to_f32_samples;
 use super::recognizer::{SpeechRecognizer, SpeechRecognizerWarmupRequest};
 use super::types::{SpeechTranscribeRequest, SpeechTranscriptionResult};
 use super::{OpenBitFunError, OpenBitFunResult};
 use async_trait::async_trait;
+#[cfg(not(target_env = "ohos"))]
 use sherpa_onnx::{OfflineQwen3ASRModelConfig, OfflineRecognizer, OfflineRecognizerConfig};
+#[cfg(not(target_env = "ohos"))]
 use std::path::{Path, PathBuf};
+#[cfg(not(target_env = "ohos"))]
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 #[derive(Clone, Default)]
 pub(super) struct Qwen3AsrInt8Recognizer {
+    #[cfg(not(target_env = "ohos"))]
     cache: Arc<Mutex<Option<CachedQwen3AsrRecognizer>>>,
 }
 
+#[cfg(not(target_env = "ohos"))]
 struct CachedQwen3AsrRecognizer {
     conv_frontend_path: PathBuf,
     encoder_path: PathBuf,
@@ -27,6 +33,7 @@ impl Qwen3AsrInt8Recognizer {
     }
 }
 
+#[cfg(not(target_env = "ohos"))]
 #[async_trait]
 impl SpeechRecognizer for Qwen3AsrInt8Recognizer {
     async fn warmup(&self, request: SpeechRecognizerWarmupRequest) -> OpenBitFunResult<()> {
@@ -74,6 +81,30 @@ impl SpeechRecognizer for Qwen3AsrInt8Recognizer {
     }
 }
 
+#[cfg(target_env = "ohos")]
+#[async_trait]
+impl SpeechRecognizer for Qwen3AsrInt8Recognizer {
+    async fn warmup(&self, _request: SpeechRecognizerWarmupRequest) -> OpenBitFunResult<()> {
+        Err(OpenBitFunError::service(
+            "Qwen3-ASR speech recognition is not supported on this platform",
+        ))
+    }
+
+    async fn unload(&self) -> OpenBitFunResult<()> {
+        Ok(())
+    }
+
+    async fn transcribe(
+        &self,
+        _request: SpeechTranscribeRequest,
+    ) -> OpenBitFunResult<SpeechTranscriptionResult> {
+        Err(OpenBitFunError::service(
+            "Qwen3-ASR speech recognition is not supported on this platform",
+        ))
+    }
+}
+
+#[cfg(not(target_env = "ohos"))]
 #[derive(Debug)]
 struct Qwen3Paths {
     conv_frontend: PathBuf,
@@ -82,6 +113,7 @@ struct Qwen3Paths {
     tokenizer: PathBuf,
 }
 
+#[cfg(not(target_env = "ohos"))]
 fn qwen3_paths(model_dir: &Path) -> Qwen3Paths {
     Qwen3Paths {
         conv_frontend: model_dir.join("conv_frontend.onnx"),
@@ -91,6 +123,7 @@ fn qwen3_paths(model_dir: &Path) -> Qwen3Paths {
     }
 }
 
+#[cfg(not(target_env = "ohos"))]
 fn transcribe_blocking(
     request: SpeechTranscribeRequest,
     cache: Arc<Mutex<Option<CachedQwen3AsrRecognizer>>>,
@@ -132,6 +165,7 @@ fn transcribe_blocking(
     })
 }
 
+#[cfg(not(target_env = "ohos"))]
 fn ensure_model_files(paths: &Qwen3Paths) -> OpenBitFunResult<()> {
     if !paths.conv_frontend.is_file()
         || !paths.encoder.is_file()
@@ -148,6 +182,7 @@ fn ensure_model_files(paths: &Qwen3Paths) -> OpenBitFunResult<()> {
     Ok(())
 }
 
+#[cfg(not(target_env = "ohos"))]
 fn ensure_cached_recognizer(
     cache: &mut Option<CachedQwen3AsrRecognizer>,
     paths: Qwen3Paths,
@@ -175,6 +210,7 @@ fn ensure_cached_recognizer(
         .ok_or_else(|| OpenBitFunError::service("Speech recognizer cache is empty"))
 }
 
+#[cfg(not(target_env = "ohos"))]
 fn create_recognizer(paths: &Qwen3Paths) -> OpenBitFunResult<OfflineRecognizer> {
     let mut config = OfflineRecognizerConfig::default();
     config.model_config.qwen3_asr = OfflineQwen3ASRModelConfig {

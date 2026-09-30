@@ -160,7 +160,7 @@ export class SystemAPI {
     try {
       await openUrl(url);
     } catch (error) {
-      log.error('Failed to open external URL', { url, error });
+      log.error('Failed to open external URL', { error });
       throw new Error(`Failed to open external URL: ${error}`);
     }
   }

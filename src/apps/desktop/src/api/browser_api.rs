@@ -393,87 +393,98 @@ pub async fn browser_webview_create(
     app: tauri::AppHandle,
     request: WebviewCreateRequest,
 ) -> Result<(), String> {
-    validate_browser_label(&request.label)?;
-    validate_webview_bounds(request.x, request.y, request.width, request.height)?;
-
-    let url = request
-        .url
-        .parse::<tauri::Url>()
-        .map_err(|e| format!("invalid url: {e}"))?;
-    match url.scheme() {
-        "http" | "https" => {}
-        scheme => return Err(format!("unsupported protocol: {scheme}")),
-    }
-
-    let window = app
-        .get_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
-    let mut builder =
-        tauri::webview::WebviewBuilder::new(request.label, tauri::WebviewUrl::External(url))
-            .initialization_script(video_decoder_compatibility_script())
-            // Navigation behavior must also exist before a background session
-            // has ever mounted a frontend panel, and after every document load.
-            .initialization_script(include_str!(
-                "../../../../shared/browser/blankTargetIntercept.js"
-            ))
-            .transparent(false)
-            .background_color(tauri::window::Color(0, 0, 0, 255));
-
-    // Session automation must continue while its presentation is hidden.
-    // WebKit otherwise suspends hidden documents after a period of inactivity.
-    if request.conversation_id.is_some() {
-        builder = builder
-            .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled);
-    }
-
-    #[cfg(any(debug_assertions, feature = "devtools"))]
+    #[cfg(target_env = "ohos")]
     {
-        builder = builder.devtools(true);
-    }
-
-    let webview = window
-        .add_child(
-            builder,
-            tauri::LogicalPosition::new(request.x, request.y),
-            tauri::LogicalSize::new(request.width, request.height),
+        let _ = (app, request);
+        Err(
+            "Embedded browser child WebViews are not implemented by the HarmonyOS PC adapter"
+                .to_string(),
         )
-        .map_err(|e| format!("failed to create browser webview: {e}"))?;
-
-    webview
-        .hide()
-        .map_err(|e| format!("failed to hide browser webview before positioning: {e}"))?;
-    let target_url = webview.url().map(|url| url.to_string()).unwrap_or_default();
-    register_browser_target(
-        webview.label(),
-        &target_url,
-        request.open_request_id,
-        request.conversation_id,
-    );
-    #[cfg(target_os = "macos")]
-    {
-        let label = webview.label().to_string();
-        let app = app.clone();
-        webview.with_webview(move |native| {
-            // Tauri's native handle is the WryWebView created by this adapter.
-            let native = unsafe { &*(native.inner() as *const wry::WryWebView) };
-            native.set_navigation_state_handler(move |state| {
-                use tauri::Emitter;
-                let failure = match &state {
-                    wry::NavigationState::Failed { domain, code, message } => {
-                        Some(format!("Navigation failed: {message} ({domain}, {code})"))
-                    }
-                    _ => None,
-                };
-                update_browser_target_navigation(&label, state);
-                if let Some(error) = failure {
-                    openbitfun_core::agentic::tools::browser_control::builtin_browser::publish_builtin_browser_navigation_failed(&label, &error);
-                    let _ = app.emit_to("main", crate::BROWSER_WEBVIEW_PAGE_LOAD_EVENT,
-                        serde_json::json!({ "label": label, "event": "failed", "url": "", "error": error }));
-                }
-            });
-        }).map_err(|error| format!("observe browser navigation failed: {error}"))?;
     }
-    Ok(())
+    #[cfg(not(target_env = "ohos"))]
+    {
+        validate_browser_label(&request.label)?;
+        validate_webview_bounds(request.x, request.y, request.width, request.height)?;
+
+        let url = request
+            .url
+            .parse::<tauri::Url>()
+            .map_err(|e| format!("invalid url: {e}"))?;
+        match url.scheme() {
+            "http" | "https" => {}
+            scheme => return Err(format!("unsupported protocol: {scheme}")),
+        }
+
+        let window = app
+            .get_window("main")
+            .ok_or_else(|| "main window not found".to_string())?;
+        let mut builder =
+            tauri::webview::WebviewBuilder::new(request.label, tauri::WebviewUrl::External(url))
+                .initialization_script(video_decoder_compatibility_script())
+                // Navigation behavior must also exist before a background session
+                // has ever mounted a frontend panel, and after every document load.
+                .initialization_script(include_str!(
+                    "../../../../shared/browser/blankTargetIntercept.js"
+                ))
+                .transparent(false)
+                .background_color(tauri::window::Color(0, 0, 0, 255));
+
+        // Session automation must continue while its presentation is hidden.
+        // WebKit otherwise suspends hidden documents after a period of inactivity.
+        if request.conversation_id.is_some() {
+            builder = builder
+                .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled);
+        }
+
+        #[cfg(any(debug_assertions, feature = "devtools"))]
+        {
+            builder = builder.devtools(true);
+        }
+
+        let webview = window
+            .add_child(
+                builder,
+                tauri::LogicalPosition::new(request.x, request.y),
+                tauri::LogicalSize::new(request.width, request.height),
+            )
+            .map_err(|e| format!("failed to create browser webview: {e}"))?;
+
+        webview
+            .hide()
+            .map_err(|e| format!("failed to hide browser webview before positioning: {e}"))?;
+        let target_url = webview.url().map(|url| url.to_string()).unwrap_or_default();
+        register_browser_target(
+            webview.label(),
+            &target_url,
+            request.open_request_id,
+            request.conversation_id,
+        );
+        #[cfg(target_os = "macos")]
+        {
+            let label = webview.label().to_string();
+            let app = app.clone();
+            webview.with_webview(move |native| {
+                // Tauri's native handle is the WryWebView created by this adapter.
+                let native = unsafe { &*(native.inner() as *const wry::WryWebView) };
+                native.set_navigation_state_handler(move |state| {
+                    use tauri::Emitter;
+                    let failure = match &state {
+                        wry::NavigationState::Failed { domain, code, message } => {
+                            Some(format!("Navigation failed: {message} ({domain}, {code})"))
+                        }
+                        _ => None,
+                    };
+                    update_browser_target_navigation(&label, state);
+                    if let Some(error) = failure {
+                        openbitfun_core::agentic::tools::browser_control::builtin_browser::publish_builtin_browser_navigation_failed(&label, &error);
+                        let _ = app.emit_to("main", crate::BROWSER_WEBVIEW_PAGE_LOAD_EVENT,
+                            serde_json::json!({ "label": label, "event": "failed", "url": "", "error": error }));
+                    }
+                });
+            }).map_err(|error| format!("observe browser navigation failed: {error}"))?;
+        }
+        Ok(())
+    }
 }
 
 /// Advertise which built-in browser surface the Agent should target. This is
@@ -642,18 +653,31 @@ pub async fn browser_webview_set_bounds(
     app: tauri::AppHandle,
     request: WebviewBoundsRequest,
 ) -> Result<(), String> {
-    validate_webview_bounds(request.x, request.y, request.width, request.height)?;
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (app, request);
+        Err(
+            "Embedded browser child WebViews are not implemented by the HarmonyOS PC adapter"
+                .to_string(),
+        )
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        validate_webview_bounds(request.x, request.y, request.width, request.height)?;
 
-    let webview = app
-        .get_webview(&request.label)
-        .ok_or_else(|| format!("Webview not found: {}", request.label))?;
+        let webview = app
+            .get_webview(&request.label)
+            .ok_or_else(|| format!("Webview not found: {}", request.label))?;
 
-    webview
-        .set_bounds(tauri::Rect {
-            position: tauri::Position::Logical(tauri::LogicalPosition::new(request.x, request.y)),
-            size: tauri::Size::Logical(tauri::LogicalSize::new(request.width, request.height)),
-        })
-        .map_err(|e| format!("set bounds failed: {e}"))
+        webview
+            .set_bounds(tauri::Rect {
+                position: tauri::Position::Logical(tauri::LogicalPosition::new(
+                    request.x, request.y,
+                )),
+                size: tauri::Size::Logical(tauri::LogicalSize::new(request.width, request.height)),
+            })
+            .map_err(|e| format!("set bounds failed: {e}"))
+    }
 }
 
 /// Return the current URL of a browser webview.

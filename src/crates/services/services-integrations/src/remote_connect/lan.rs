@@ -4,8 +4,14 @@
 //! construction so product assembly does not depend on OS network crates.
 
 use anyhow::{anyhow, Result};
+#[cfg(not(target_env = "ohos"))]
 use local_ip_address::list_afinet_netifas;
+#[cfg(target_env = "ohos")]
+#[path = "lan_ohos.rs"]
+mod ohos;
 use log::info;
+#[cfg(target_env = "ohos")]
+use ohos::list_afinet_netifas;
 use std::net::IpAddr;
 
 /// A local network interface with its IPv4 address.

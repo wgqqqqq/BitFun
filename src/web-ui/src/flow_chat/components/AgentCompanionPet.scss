@@ -93,9 +93,8 @@
   }
 
   &__petdex--dragging {
-    animation:
-      openbitfun-petdex-walk 0.96s steps(var(--openbitfun-petdex-frames)) infinite,
-      openbitfun-petdex-dragging 0.48s linear infinite;
+    // Keep the running frames continuous without rocking the whole sprite.
+    animation: openbitfun-petdex-walk 0.96s steps(var(--openbitfun-petdex-frames)) infinite;
   }
 }
 

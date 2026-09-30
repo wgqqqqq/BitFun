@@ -178,6 +178,7 @@
     "@vitejs/plugin-react": "^4.6.0",
     "copyfiles": "^2.4.1",
     "cross-env": "^10.1.0",
+    "json5": "2.2.3",
     "sass": "^1.93.2",
     "sharp": "^0.34.3",
     "typescript": "~5.8.3",

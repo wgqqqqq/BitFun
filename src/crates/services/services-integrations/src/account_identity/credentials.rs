@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_env = "ohos")))]
 use std::sync::{Mutex, OnceLock};
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_env = "ohos")))]
 const KEYRING_SERVICE: &str = "openbitfun.miniapp-market.v1";
 const CREDENTIAL_ENTRY: &str = "github-oauth";
 
@@ -15,13 +15,13 @@ pub struct StoredMarketCredentials {
     pub refresh_expires_at: i64,
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_env = "ohos")))]
 fn keyring_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_env = "ohos")))]
 fn open_entry() -> Result<keyring_core::Entry, String> {
     if keyring_core::get_default_store().is_none() {
         #[cfg(target_os = "windows")]
@@ -65,6 +65,10 @@ fn macos_credential_vault(
 }
 
 pub async fn load_market_credentials() -> Result<Option<StoredMarketCredentials>, String> {
+    #[cfg(target_env = "ohos")]
+    {
+        return super::ohos_credentials::load().await;
+    }
     #[cfg(target_os = "macos")]
     {
         let Some(secret) = macos_credential_vault()?
@@ -78,7 +82,7 @@ pub async fn load_market_credentials() -> Result<Option<StoredMarketCredentials>
             .map(Some)
             .map_err(|error| format!("parse market credentials: {error}"));
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_env = "ohos")))]
     {
         tokio::task::spawn_blocking(move || {
             let _guard = keyring_lock()
@@ -100,6 +104,11 @@ pub async fn load_market_credentials() -> Result<Option<StoredMarketCredentials>
 }
 
 pub async fn save_market_credentials(credentials: &StoredMarketCredentials) -> Result<(), String> {
+    #[cfg(target_env = "ohos")]
+    {
+        return super::ohos_credentials::save(credentials.clone()).await;
+    }
+    #[cfg(not(target_env = "ohos"))]
     let secret = serde_json::to_vec(credentials)
         .map_err(|error| format!("serialize market credentials: {error}"))?;
     #[cfg(target_os = "macos")]
@@ -109,7 +118,7 @@ pub async fn save_market_credentials(credentials: &StoredMarketCredentials) -> R
             .await
             .map_err(|error| format!("write market credentials: {error:#}"));
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_env = "ohos")))]
     {
         tokio::task::spawn_blocking(move || {
             let _guard = keyring_lock()
@@ -125,6 +134,10 @@ pub async fn save_market_credentials(credentials: &StoredMarketCredentials) -> R
 }
 
 pub async fn clear_market_credentials() -> Result<(), String> {
+    #[cfg(target_env = "ohos")]
+    {
+        return super::ohos_credentials::clear().await;
+    }
     #[cfg(target_os = "macos")]
     {
         return macos_credential_vault()?
@@ -132,7 +145,7 @@ pub async fn clear_market_credentials() -> Result<(), String> {
             .await
             .map_err(|error| format!("delete market credentials: {error:#}"));
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_env = "ohos")))]
     {
         tokio::task::spawn_blocking(move || {
             let _guard = keyring_lock()
@@ -145,5 +158,19 @@ pub async fn clear_market_credentials() -> Result<(), String> {
         })
         .await
         .map_err(|error| format!("join market credential delete: {error}"))?
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StoredMarketCredentials;
+    #[test]
+    fn stored_credential_shape_remains_compatible() {
+        let legacy = r#"{"accessToken":"test-access","accessExpiresAt":123,"refreshToken":"test-refresh","refreshExpiresAt":456}"#;
+        let value: StoredMarketCredentials = serde_json::from_str(legacy).unwrap();
+        assert_eq!(
+            serde_json::to_value(value).unwrap(),
+            serde_json::from_str::<serde_json::Value>(legacy).unwrap()
+        );
     }
 }

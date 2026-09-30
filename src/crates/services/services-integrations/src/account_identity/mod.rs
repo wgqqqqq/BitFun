@@ -1,6 +1,8 @@
 //! Shared GitHub identity used by every OpenBitFun product surface.
 mod credentials;
 mod flow;
+#[cfg(target_env = "ohos")]
+mod ohos_credentials;
 pub use credentials::{
     clear_market_credentials, load_market_credentials, save_market_credentials,
     StoredMarketCredentials,

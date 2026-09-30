@@ -1,0 +1,9 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "OpenBitFun PC native entry",
+  "dependencies": {
+    "@ohos-rs/ability": "file:../ability",
+    "libopenbitfun_desktop_lib.so": "file:./src/main/cpp/types/libopenbitfun_desktop_lib"
+  }
+}

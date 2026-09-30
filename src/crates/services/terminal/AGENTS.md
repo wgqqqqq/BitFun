@@ -24,6 +24,7 @@ infrastructure, not a product command or UI layer.
 cargo check -p terminal-core
 cargo test -p terminal-core --lib exec:: # process output, encoding, polling and lifecycle
 cargo test -p terminal-core --lib workspace_origin_contract_tests # terminal response compatibility
+cargo test -p terminal-core --lib unintegrated_session_rejects_execution # basic-shell execution gate
 node scripts/check-core-boundaries.mjs
 ```
 

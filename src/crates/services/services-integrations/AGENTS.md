@@ -306,3 +306,11 @@ cargo test --locked -p openbitfun-services-integrations --no-default-features --
 The attachment fixtures exercise real local file IO and a simulated POSIX remote
 filesystem, including offline rejection. They do not establish live WeChat, SSH,
 Peer Device, or Detached Dispatch coverage.
+For LAN address selection and relay URL compatibility:
+
+```bash
+cargo test --locked -p openbitfun-services-integrations --no-default-features --features remote-connect --lib remote_connect::lan::tests::
+```
+
+OHOS NetworkKit enumeration additionally requires a signed HAP with
+`ohos.permission.GET_NETWORK_INFO`; host tests do not verify that system boundary.

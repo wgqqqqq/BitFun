@@ -3,6 +3,7 @@
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Instant;
 
+#[cfg(not(target_env = "ohos"))]
 use dark_light::Mode;
 use log::{debug, error, warn};
 use openbitfun_core::infrastructure::try_get_path_manager_arc;
@@ -317,6 +318,13 @@ impl AppearanceConfig {
     fn resolve_builtin_appearance_id(appearance_id: &str) -> &str {
         if appearance_id == "system" {
             let manifest = Self::startup_appearance_bootstrap_manifest();
+            #[cfg(target_env = "ohos")]
+            return if crate::ohos::system_dark_mode() {
+                manifest.default_dark_appearance_id.as_str()
+            } else {
+                manifest.default_light_appearance_id.as_str()
+            };
+            #[cfg(not(target_env = "ohos"))]
             return match dark_light::detect() {
                 Mode::Dark => manifest.default_dark_appearance_id.as_str(),
                 Mode::Light | Mode::Default => manifest.default_light_appearance_id.as_str(),
@@ -336,17 +344,18 @@ impl AppearanceConfig {
         let startup_locale = &bootstrap_config.locale;
         let startup_locale_json =
             serde_json::to_string(&startup_locale).unwrap_or_else(|_| "\"zh-CN\"".to_string());
-        let show_startup_window_controls = !cfg!(target_os = "macos");
+        let show_startup_window_controls = !cfg!(any(target_os = "macos", target_env = "ohos"));
         // The Linux shell paints the frame radius itself because WebKitGTK keeps
         // the GTK frame square on Wayland. Advertise that so neither this
         // bootstrap nor the Web UI paints an opaque page background over the
         // transparent corners.
-        let native_frame_attribute = if cfg!(target_os = "linux") {
+        let native_frame_attribute = if cfg!(all(target_os = "linux", not(target_env = "ohos"))) {
             "root.setAttribute('data-openbitfun-native-frame', 'client');"
         } else {
             ""
         };
-        let transparent_page_background = native_sidebar_material || cfg!(target_os = "linux");
+        let transparent_page_background =
+            native_sidebar_material || cfg!(all(target_os = "linux", not(target_env = "ohos")));
         let startup_trace_id_json = serde_json::to_string(startup_trace_id)
             .unwrap_or_else(|_| "\"desktop-unknown\"".to_string());
         let bootstrap_log_level_json = serde_json::to_string(crate::logging::level_to_str(
@@ -528,14 +537,14 @@ mod startup_appearance_tests {
 }
 
 fn use_development_frontend() -> bool {
-    #[cfg(debug_assertions)]
+    #[cfg(all(debug_assertions, not(target_env = "ohos")))]
     {
         // Isolated E2E can exercise the production protocol using a debug
         // executable and dist assets, without launching a development server.
         !(std::env::var("OPENBITFUN_E2E_PACKAGED_FRONTEND").as_deref() == Ok("1")
             && std::env::var("OPENBITFUN_E2E_STORAGE_GUARD").as_deref() == Ok("1"))
     }
-    #[cfg(not(debug_assertions))]
+    #[cfg(any(not(debug_assertions), target_env = "ohos"))]
     {
         false
     }
@@ -558,6 +567,13 @@ pub fn create_main_window(
         &bootstrap_config,
         workspace_startup_state.as_ref(),
         native_sidebar_material,
+    );
+    // These are controller-local delivery capabilities, independent of a peer runtime.
+    let init_script = format!(
+        "Object.defineProperty(window, '__OPENBITFUN_HOST_CAPABILITIES__', {{ value: Object.freeze({{ desktopUpdater: {}, nativeWindowControls: {} }}), writable: false, configurable: false }});\n{}",
+        !cfg!(target_env = "ohos"),
+        !cfg!(target_env = "ohos"),
+        init_script,
     );
     startup_trace.record_step(
         "native_step_end",
@@ -613,9 +629,7 @@ pub fn create_main_window(
             crate::MAIN_WINDOW_DEFAULT_WIDTH,
             crate::MAIN_WINDOW_DEFAULT_HEIGHT,
         )
-        .center()
         .resizable(true)
-        .fullscreen(false)
         .visible(false)
         .accept_first_mouse(true)
         .initialization_script(&init_script)
@@ -656,14 +670,19 @@ pub fn create_main_window(
 
     // The Linux window is transparent because the shell draws the frame radius
     // itself: WebKitGTK keeps the GTK frame square on Wayland.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         builder = builder
             .transparent(true)
             .background_color(tauri::window::Color(0, 0, 0, 0));
     }
 
-    #[cfg(debug_assertions)]
+    #[cfg(not(target_env = "ohos"))]
+    {
+        builder = builder.center().fullscreen(false).accept_first_mouse(true);
+    }
+
+    #[cfg(all(debug_assertions, not(target_env = "ohos")))]
     if !use_development_frontend() {
         // Product-path isolation alone does not isolate WKWebView storage.
         // Default to a private store. Windows persistence tests explicitly opt
@@ -703,7 +722,7 @@ pub fn create_main_window(
     // The Linux frontend renders window controls and drag regions, so GTK's
     // header bar would add a second title bar. tao keeps a hidden CSD header on
     // Wayland so the compositor does not paint server-side decorations instead.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         builder = builder.decorations(false);
     }
@@ -789,49 +808,78 @@ fn show_main_window_for_startup(
     startup_trace: &DesktopStartupTrace,
     reapply_maximized: bool,
 ) {
-    let show_started_at = Instant::now();
-    if let Err(error) = window.show() {
-        warn!("Failed to show main window during startup: {}", error);
-        return;
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (window, total_started_at);
+        let trace = startup_trace.clone();
+        tauri::async_runtime::spawn(async move {
+            use crate::ohos::window::{perform, WindowAction};
+            let started = Instant::now();
+            match perform(WindowAction::Show).await {
+                Ok(_) => {
+                    trace.record_elapsed_step("native_window", "show_window", started);
+                }
+                Err(error) => {
+                    log::error!("Failed to show HarmonyOS main window: {}", error);
+                    return;
+                }
+            }
+            if reapply_maximized {
+                if let Err(error) = perform(WindowAction::Maximize).await {
+                    log::warn!(
+                        "Failed to restore HarmonyOS main window maximize state: {}",
+                        error
+                    );
+                }
+            }
+        });
     }
-    startup_trace.record_elapsed_step("native_window", "show_window", show_started_at);
-    debug!(
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let show_started_at = Instant::now();
+        if let Err(error) = window.show() {
+            warn!("Failed to show main window during startup: {}", error);
+            return;
+        }
+        startup_trace.record_elapsed_step("native_window", "show_window", show_started_at);
+        debug!(
         "Main window startup show step completed: step=show duration_ms={} since_create_start_ms={}",
         show_started_at.elapsed().as_millis(),
         total_started_at.elapsed().as_millis()
     );
 
-    let focus_started_at = Instant::now();
-    if let Err(error) = window.set_focus() {
-        warn!("Failed to focus main window during startup: {}", error);
-    } else {
-        startup_trace.record_elapsed_step("native_window", "focus_window", focus_started_at);
-        debug!(
+        let focus_started_at = Instant::now();
+        if let Err(error) = window.set_focus() {
+            warn!("Failed to focus main window during startup: {}", error);
+        } else {
+            startup_trace.record_elapsed_step("native_window", "focus_window", focus_started_at);
+            debug!(
             "Main window startup show step completed: step=focus duration_ms={} since_create_start_ms={}",
             focus_started_at.elapsed().as_millis(),
             total_started_at.elapsed().as_millis()
         );
-    }
+        }
 
-    // Maximize only after the window is visible: maximizing a hidden
-    // undecorated window on Windows is dropped on show and leaves a bogus
-    // normal-placement rect behind (see `window_state_support`).
-    if reapply_maximized {
-        match window.is_maximized() {
-            Ok(true) => {}
-            Ok(false) => {
-                if let Err(error) = window.maximize() {
-                    log::warn!(
+        // Maximize only after the window is visible: maximizing a hidden
+        // undecorated window on Windows is dropped on show and leaves a bogus
+        // normal-placement rect behind (see `window_state_support`).
+        if reapply_maximized {
+            match window.is_maximized() {
+                Ok(true) => {}
+                Ok(false) => {
+                    if let Err(error) = window.maximize() {
+                        log::warn!(
                         "Failed to re-apply persisted maximized state after main window show: {}",
                         error
                     );
+                    }
                 }
-            }
-            Err(error) => {
-                log::warn!(
-                    "Failed to query main window maximized state after show: {}",
-                    error
-                )
+                Err(error) => {
+                    log::warn!(
+                        "Failed to query main window maximized state after show: {}",
+                        error
+                    )
+                }
             }
         }
     }
@@ -1075,7 +1123,7 @@ fn watch_agent_companion_window_scale(app: &tauri::AppHandle, window: &tauri::We
 ///
 /// GTK applies keep-above on map, and a reused window may have been raised
 /// behind the main window while it was hidden, so both show paths re-apply it.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "ohos")))]
 fn enforce_agent_companion_window_stacking(window: &tauri::WebviewWindow) {
     if let Err(error) = window.set_always_on_top(true) {
         warn!(
@@ -1087,118 +1135,126 @@ fn enforce_agent_companion_window_stacking(window: &tauri::WebviewWindow) {
 
 #[tauri::command]
 pub async fn show_agent_companion_desktop_pet(app: tauri::AppHandle) -> Result<(), String> {
-    let started_at = Instant::now();
-    let _guard = agent_companion_window_ops().lock().await;
-    debug!("Agent companion window show requested");
+    #[cfg(target_env = "ohos")]
+    {
+        let _guard = agent_companion_window_ops().lock().await;
+        crate::ohos::companion::show(&app, app_url(&app, "?openbitfunWindow=agent-companion")).await
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let started_at = Instant::now();
+        let _guard = agent_companion_window_ops().lock().await;
+        debug!("Agent companion window show requested");
 
-    // Reuse any existing window: never destroy here. A previous implementation destroyed
-    // whenever `is_visible` was false, which raced with another `show` that had built the
-    // window but not called `show()` yet (or with `hide`), producing duplicate pets or
-    // stuck windows.
-    if let Some(window) = app.get_webview_window(AGENT_COMPANION_WINDOW_LABEL) {
-        if let Err(e) = window.unminimize() {
-            warn!("Failed to unminimize Agent companion window: {}", e);
+        // Reuse any existing window: never destroy here. A previous implementation destroyed
+        // whenever `is_visible` was false, which raced with another `show` that had built the
+        // window but not called `show()` yet (or with `hide`), producing duplicate pets or
+        // stuck windows.
+        if let Some(window) = app.get_webview_window(AGENT_COMPANION_WINDOW_LABEL) {
+            if let Err(e) = window.unminimize() {
+                warn!("Failed to unminimize Agent companion window: {}", e);
+            }
+            position_agent_companion_window(&app, &window);
+            window.show().map_err(|e| {
+                error!("Failed to show Agent companion window: {}", e);
+                format!("Failed to show Agent companion window: {}", e)
+            })?;
+            #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+            enforce_agent_companion_window_stacking(&window);
+            debug!(
+                "Agent companion window reused: total_duration_ms={}",
+                started_at.elapsed().as_millis()
+            );
+            return Ok(());
         }
+
+        let url = app_url(&app, "?openbitfunWindow=agent-companion");
+        let mut builder = tauri::WebviewWindowBuilder::new(&app, AGENT_COMPANION_WINDOW_LABEL, url)
+            .title("OpenBitFun Agent Companion")
+            .inner_size(
+                AGENT_COMPANION_WINDOW_MIN_SIZE,
+                AGENT_COMPANION_WINDOW_MIN_SIZE,
+            )
+            .max_inner_size(
+                AGENT_COMPANION_WINDOW_MAX_WIDTH,
+                AGENT_COMPANION_WINDOW_MAX_HEIGHT,
+            )
+            .min_inner_size(1.0, 1.0)
+            .resizable(false)
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .shadow(false)
+            .visible(false)
+            .accept_first_mouse(true)
+            .background_color(tauri::window::Color(0, 0, 0, 0))
+            .on_page_load({
+                move |_window, payload| {
+                    let event = match payload.event() {
+                        PageLoadEvent::Started => "started",
+                        PageLoadEvent::Finished => "finished",
+                    };
+                    debug!(
+                        "Agent companion window page load event: event={}, url={}, since_show_request_ms={}",
+                        event,
+                        payload.url(),
+                        started_at.elapsed().as_millis()
+                    );
+                }
+            });
+
+        builder = builder.disable_drag_drop_handler();
+
+        // Wayland compositors drop GTK's keep-above request, so the only stacking
+        // relationship the platform can still guarantee is "above its parent".
+        // Attaching the pet to the main window keeps the app's own page from covering
+        // it there, while `always_on_top` keeps floating it above other applications
+        // on X11, where the window manager honors the hint.
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
+        if let Some(main_window) = app.get_window("main") {
+            match main_window.gtk_window() {
+                Ok(parent) => builder = builder.transient_for_raw(&parent),
+                Err(error) => warn!(
+                    "Failed to read the main window GTK handle for Agent companion stacking: {}",
+                    error
+                ),
+            }
+        }
+
+        let build_started_at = Instant::now();
+        let window = builder.build().map_err(|e| {
+            error!(
+                "Failed to create Agent companion window: error={} duration_ms={}",
+                e,
+                build_started_at.elapsed().as_millis()
+            );
+            format!("Failed to create Agent companion window: {}", e)
+        })?;
+        debug!(
+            "Agent companion window creation step completed: step=build duration_ms={} total_duration_ms={}",
+            build_started_at.elapsed().as_millis(),
+            started_at.elapsed().as_millis()
+        );
+
         position_agent_companion_window(&app, &window);
+        watch_agent_companion_window_scale(&app, &window);
+
+        let show_started_at = Instant::now();
         window.show().map_err(|e| {
             error!("Failed to show Agent companion window: {}", e);
             format!("Failed to show Agent companion window: {}", e)
         })?;
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
         enforce_agent_companion_window_stacking(&window);
         debug!(
-            "Agent companion window reused: total_duration_ms={}",
+            "Agent companion window shown: show_duration_ms={} total_duration_ms={}",
+            show_started_at.elapsed().as_millis(),
             started_at.elapsed().as_millis()
         );
-        return Ok(());
+
+        Ok(())
     }
-
-    let url = app_url(&app, "?openbitfunWindow=agent-companion");
-    let mut builder = tauri::WebviewWindowBuilder::new(&app, AGENT_COMPANION_WINDOW_LABEL, url)
-        .title("OpenBitFun Agent Companion")
-        .inner_size(
-            AGENT_COMPANION_WINDOW_MIN_SIZE,
-            AGENT_COMPANION_WINDOW_MIN_SIZE,
-        )
-        .max_inner_size(
-            AGENT_COMPANION_WINDOW_MAX_WIDTH,
-            AGENT_COMPANION_WINDOW_MAX_HEIGHT,
-        )
-        .min_inner_size(1.0, 1.0)
-        .resizable(false)
-        .decorations(false)
-        .transparent(true)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .shadow(false)
-        .visible(false)
-        .accept_first_mouse(true)
-        .background_color(tauri::window::Color(0, 0, 0, 0))
-        .on_page_load({
-            move |_window, payload| {
-                let event = match payload.event() {
-                    PageLoadEvent::Started => "started",
-                    PageLoadEvent::Finished => "finished",
-                };
-                debug!(
-                    "Agent companion window page load event: event={}, url={}, since_show_request_ms={}",
-                    event,
-                    payload.url(),
-                    started_at.elapsed().as_millis()
-                );
-            }
-        });
-
-    builder = builder.disable_drag_drop_handler();
-
-    // Wayland compositors drop GTK's keep-above request, so the only stacking
-    // relationship the platform can still guarantee is "above its parent".
-    // Attaching the pet to the main window keeps the app's own page from covering
-    // it there, while `always_on_top` keeps floating it above other applications
-    // on X11, where the window manager honors the hint.
-    #[cfg(target_os = "linux")]
-    if let Some(main_window) = app.get_window("main") {
-        match main_window.gtk_window() {
-            Ok(parent) => builder = builder.transient_for_raw(&parent),
-            Err(error) => warn!(
-                "Failed to read the main window GTK handle for Agent companion stacking: {}",
-                error
-            ),
-        }
-    }
-
-    let build_started_at = Instant::now();
-    let window = builder.build().map_err(|e| {
-        error!(
-            "Failed to create Agent companion window: error={} duration_ms={}",
-            e,
-            build_started_at.elapsed().as_millis()
-        );
-        format!("Failed to create Agent companion window: {}", e)
-    })?;
-    debug!(
-        "Agent companion window creation step completed: step=build duration_ms={} total_duration_ms={}",
-        build_started_at.elapsed().as_millis(),
-        started_at.elapsed().as_millis()
-    );
-
-    position_agent_companion_window(&app, &window);
-    watch_agent_companion_window_scale(&app, &window);
-
-    let show_started_at = Instant::now();
-    window.show().map_err(|e| {
-        error!("Failed to show Agent companion window: {}", e);
-        format!("Failed to show Agent companion window: {}", e)
-    })?;
-    #[cfg(target_os = "linux")]
-    enforce_agent_companion_window_stacking(&window);
-    debug!(
-        "Agent companion window shown: show_duration_ms={} total_duration_ms={}",
-        show_started_at.elapsed().as_millis(),
-        started_at.elapsed().as_millis()
-    );
-
-    Ok(())
 }
 
 #[tauri::command]
@@ -1207,6 +1263,15 @@ pub async fn resize_agent_companion_desktop_pet(
     width: f64,
     height: f64,
 ) -> Result<(), String> {
+    #[cfg(target_env = "ohos")]
+    {
+        let _guard = agent_companion_window_ops().lock().await;
+        return crate::ohos::companion::perform(
+            serde_json::json!({"action":"resize", "width":width, "height":height}),
+        )
+        .await
+        .map(|_| ());
+    }
     let _guard = agent_companion_window_ops().lock().await;
     if let Some(window) = app.get_webview_window(AGENT_COMPANION_WINDOW_LABEL) {
         let app_for_resize = app.clone();
@@ -1225,6 +1290,11 @@ pub async fn resize_agent_companion_desktop_pet(
 
 #[tauri::command]
 pub async fn hide_agent_companion_desktop_pet(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_env = "ohos")]
+    {
+        let _guard = agent_companion_window_ops().lock().await;
+        return crate::ohos::companion::hide(&app).await;
+    }
     let _guard = agent_companion_window_ops().lock().await;
     if let Some(window) = app.get_webview_window(AGENT_COMPANION_WINDOW_LABEL) {
         if let Ok(scale_factor) = window.scale_factor() {
@@ -1242,54 +1312,64 @@ pub async fn hide_agent_companion_desktop_pet(app: tauri::AppHandle) -> Result<(
 
 #[tauri::command]
 pub async fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
-    let total_started_at = Instant::now();
-    // Embedded browsers add child WebViews, so the main host is no longer a
-    // single-WebView window. Look up the native window independently of its views.
-    if let Some(main_window) = app.get_window("main") {
-        main_window
-            .unminimize()
-            .map_err(|error| error.to_string())?;
-        if let Err(error) = crate::window_state_support::repair_for_activation(&main_window) {
-            warn!(
-                "Failed to repair main window geometry during activation: {}",
-                error
-            );
-        }
-        let step_started_at = Instant::now();
-        main_window.show().map_err(|e| {
-            error!("Failed to show main window: {}", e);
-            format!("Failed to show main window: {}", e)
-        })?;
-        debug!(
-            "Main window show step completed: step=show duration_ms={}",
-            step_started_at.elapsed().as_millis()
-        );
-
-        #[cfg(target_os = "macos")]
-        {
-            crate::cancel_main_window_close_request_on_macos(&app);
-            crate::mark_main_window_hidden_on_macos(false);
-        }
-
-        let step_started_at = Instant::now();
-        main_window.set_focus().map_err(|e| {
-            error!("Failed to focus main window: {}", e);
-            format!("Failed to focus main window: {}", e)
-        })?;
-        debug!(
-            "Main window show step completed: step=focus duration_ms={}",
-            step_started_at.elapsed().as_millis()
-        );
-    } else {
-        error!("Main window not found");
-        return Err("Main window not found".to_string());
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = app;
+        crate::ohos::window::perform(crate::ohos::window::WindowAction::Show)
+            .await
+            .map(|_| ())
     }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let total_started_at = Instant::now();
+        // Embedded browsers add child WebViews, so the main host is no longer a
+        // single-WebView window. Look up the native window independently of its views.
+        if let Some(main_window) = app.get_window("main") {
+            main_window
+                .unminimize()
+                .map_err(|error| error.to_string())?;
+            if let Err(error) = crate::window_state_support::repair_for_activation(&main_window) {
+                warn!(
+                    "Failed to repair main window geometry during activation: {}",
+                    error
+                );
+            }
+            let step_started_at = Instant::now();
+            main_window.show().map_err(|e| {
+                error!("Failed to show main window: {}", e);
+                format!("Failed to show main window: {}", e)
+            })?;
+            debug!(
+                "Main window show step completed: step=show duration_ms={}",
+                step_started_at.elapsed().as_millis()
+            );
 
-    debug!(
-        "Main window shown: total_duration_ms={}",
-        total_started_at.elapsed().as_millis()
-    );
-    Ok(())
+            #[cfg(target_os = "macos")]
+            {
+                crate::cancel_main_window_close_request_on_macos(&app);
+                crate::mark_main_window_hidden_on_macos(false);
+            }
+
+            let step_started_at = Instant::now();
+            main_window.set_focus().map_err(|e| {
+                error!("Failed to focus main window: {}", e);
+                format!("Failed to focus main window: {}", e)
+            })?;
+            debug!(
+                "Main window show step completed: step=focus duration_ms={}",
+                step_started_at.elapsed().as_millis()
+            );
+        } else {
+            error!("Main window not found");
+            return Err("Main window not found".to_string());
+        }
+
+        debug!(
+            "Main window shown: total_duration_ms={}",
+            total_started_at.elapsed().as_millis()
+        );
+        Ok(())
+    }
 }
 
 #[cfg(test)]

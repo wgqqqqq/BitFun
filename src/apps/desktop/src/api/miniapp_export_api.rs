@@ -77,27 +77,35 @@ fn ensure_export_host_window<R: tauri::Runtime>(
     width: u32,
     height: u32,
 ) -> Result<tauri::WebviewWindow<R>, String> {
-    if let Some(window) = app.get_webview_window(EXPORT_HOST_LABEL) {
-        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
-            width as f64,
-            height as f64,
-        )));
-        let _ = window.hide();
-        return Ok(window);
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (app, width, height);
+        Err("MiniApp export requires a secondary WebView, unavailable on HarmonyOS PC".to_string())
     }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        if let Some(window) = app.get_webview_window(EXPORT_HOST_LABEL) {
+            let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+                width as f64,
+                height as f64,
+            )));
+            let _ = window.hide();
+            return Ok(window);
+        }
 
-    let blank = "about:blank"
-        .parse::<tauri::Url>()
-        .map_err(|error| format!("Invalid blank URL: {error}"))?;
-    let window = WebviewWindowBuilder::new(app, EXPORT_HOST_LABEL, WebviewUrl::External(blank))
-        .visible(false)
-        .inner_size(width as f64, height as f64)
-        .decorations(false)
-        .skip_taskbar(true)
-        .build()
-        .map_err(|error| format!("Failed to create export host webview: {error}"))?;
-    let _ = window.hide();
-    Ok(window)
+        let blank = "about:blank"
+            .parse::<tauri::Url>()
+            .map_err(|error| format!("Invalid blank URL: {error}"))?;
+        let window = WebviewWindowBuilder::new(app, EXPORT_HOST_LABEL, WebviewUrl::External(blank))
+            .visible(false)
+            .inner_size(width as f64, height as f64)
+            .decorations(false)
+            .skip_taskbar(true)
+            .build()
+            .map_err(|error| format!("Failed to create export host webview: {error}"))?;
+        let _ = window.hide();
+        Ok(window)
+    }
 }
 
 async fn with_export_webview<R: tauri::Runtime, F, Fut, T>(

@@ -464,6 +464,12 @@ impl FrontendWorkbenchManager {
     }
 
     fn begin_apply(self: &Arc<Self>, draft_id: &str) -> Result<String, String> {
+        // Reject before copying assets or modifying the persisted transaction.
+        #[cfg(target_env = "ohos")]
+        return Err(
+            "Frontend replacement requires a confirmation window, unavailable on HarmonyOS PC"
+                .to_string(),
+        );
         validate_uuid(draft_id, "draft_id")?;
         let draft_path = self.drafts_dir().join(draft_id);
         let base_path = self.drafts_dir().join(format!("{draft_id}.json"));
@@ -1344,21 +1350,31 @@ fn show_confirmation_window(
     transaction_id: &str,
     manager: Arc<FrontendWorkbenchManager>,
 ) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window(CONFIRM_WINDOW_LABEL) {
-        let _ = window.close();
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (app, transaction_id, manager);
+        Err(
+            "Frontend replacement requires a confirmation window, unavailable on HarmonyOS PC"
+                .to_string(),
+        )
     }
-    let url = confirmation_window_url(transaction_id);
-    let window = WebviewWindowBuilder::new(app, CONFIRM_WINDOW_LABEL, url)
-        .title("Review OpenBitFun frontend update")
-        .inner_size(440.0, 286.0)
-        .resizable(false)
-        .always_on_top(true)
-        .center()
-        .focused(true)
-        .build()
-        .map_err(|error| format!("Failed to open frontend confirmation window: {error}"))?;
-    let closed_transaction_id = transaction_id.to_string();
-    window.on_window_event(move |event| {
+    #[cfg(not(target_env = "ohos"))]
+    {
+        if let Some(window) = app.get_webview_window(CONFIRM_WINDOW_LABEL) {
+            let _ = window.close();
+        }
+        let url = confirmation_window_url(transaction_id);
+        let window = WebviewWindowBuilder::new(app, CONFIRM_WINDOW_LABEL, url)
+            .title("Review OpenBitFun frontend update")
+            .inner_size(440.0, 286.0)
+            .resizable(false)
+            .always_on_top(true)
+            .center()
+            .focused(true)
+            .build()
+            .map_err(|error| format!("Failed to open frontend confirmation window: {error}"))?;
+        let closed_transaction_id = transaction_id.to_string();
+        window.on_window_event(move |event| {
         if !matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
             return;
         }
@@ -1376,7 +1392,8 @@ fn show_confirmation_window(
             }
         });
     });
-    Ok(())
+        Ok(())
+    }
 }
 
 fn confirmation_window_url(transaction_id: &str) -> WebviewUrl {

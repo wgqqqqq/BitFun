@@ -4,6 +4,7 @@ import {
   isTauriRuntime,
   isWindowsDesktopRuntime,
   supportsNativeWindowControls,
+  supportsNativeWindowDragging,
 } from './environment';
 
 const setTauriInternals = (value: unknown) => {
@@ -43,6 +44,16 @@ describe('runtime environment', () => {
 
     expect(isTauriRuntime()).toBe(true);
     expect(supportsNativeWindowControls()).toBe(true);
+  });
+
+  it('leaves controls and dragging to the system-decorated local host', () => {
+    vi.stubGlobal('window', {
+      __TAURI_INTERNALS__: { invoke: vi.fn(), metadata: { currentWindow: { label: 'main' } } },
+      __OPENBITFUN_HOST_CAPABILITIES__: { nativeWindowControls: false },
+    });
+    expect(isTauriRuntime()).toBe(true);
+    expect(supportsNativeWindowControls()).toBe(false);
+    expect(supportsNativeWindowDragging()).toBe(false);
   });
 
   it('detects Windows only for a complete Tauri desktop runtime', () => {

@@ -1,0 +1,5 @@
+{
+  "name": "libopenbitfun_desktop_lib.so",
+  "version": "1.0.0",
+  "types": "./index.d.ts"
+}

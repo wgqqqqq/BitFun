@@ -3,6 +3,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { canAutoCheckForAppUpdates, canCheckForAppUpdates } from './tauriEnv';
 
 describe('app update runtime availability', () => {
+  it('disables desktop updates for a packaged HarmonyOS host', () => {
+    vi.stubEnv('DEV', false);
+    vi.stubGlobal('window', { __TAURI__: {}, __OPENBITFUN_HOST_CAPABILITIES__: { desktopUpdater: false } });
+    expect(canCheckForAppUpdates()).toBe(false);
+  });
+
+  it('enables updates when the local host explicitly supports them', () => {
+    vi.stubEnv('DEV', false);
+    vi.stubGlobal('window', { __TAURI__: {}, __OPENBITFUN_HOST_CAPABILITIES__: { desktopUpdater: true } });
+    expect(canCheckForAppUpdates()).toBe(true);
+  });
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
