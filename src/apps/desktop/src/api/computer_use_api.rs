@@ -5,6 +5,7 @@ use openbitfun_agent_tools::computer_use_permissions::{
     ComputerPermissionKind, ComputerPermissionReceipt, ComputerPermissionRequest,
     ComputerPermissions,
 };
+#[cfg(not(target_env = "ohos"))]
 use openbitfun_core::service::config::types::AIConfig;
 use openbitfun_core::util::process_manager;
 use serde::{Deserialize, Serialize};
@@ -31,43 +32,99 @@ pub struct ComputerUseOpenSettingsRequest {
 pub async fn computer_use_get_status(
     state: State<'_, AppState>,
 ) -> Result<ComputerUseStatusResponse, String> {
-    let ai: AIConfig = state
-        .config_service
-        .get_config(Some("ai"))
-        .await
-        .map_err(|e| e.to_string())?;
+    #[cfg(target_env = "ohos")]
+    {
+        use openbitfun_agent_tools::computer_use_permissions::{
+            ComputerPermission, ComputerPermissionState,
+        };
+        let _ = state;
+        Ok(ComputerUseStatusResponse {
+            computer_use_enabled: false,
+            accessibility_granted: false,
+            screen_capture_granted: false,
+            platform_note: Some(
+                "Native computer automation is not implemented on HarmonyOS PC".into(),
+            ),
+            permissions: ComputerPermissions {
+                platform: "ohos".into(),
+                process_id: std::process::id(),
+                executable: std::env::current_exe()
+                    .ok()
+                    .map(|path| path.display().to_string()),
+                permissions: [
+                    ComputerPermissionKind::Accessibility,
+                    ComputerPermissionKind::ScreenRecording,
+                    ComputerPermissionKind::InputPosting,
+                    ComputerPermissionKind::InputMonitoring,
+                ]
+                .into_iter()
+                .map(|kind| ComputerPermission {
+                    kind,
+                    state: ComputerPermissionState::Unavailable,
+                    requestable: false,
+                    settings_url: None,
+                    detail: "Native computer automation is not implemented on HarmonyOS PC".into(),
+                })
+                .collect(),
+                prompts_requested: false,
+            },
+        })
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let ai: AIConfig = state
+            .config_service
+            .get_config(Some("ai"))
+            .await
+            .map_err(|e| e.to_string())?;
 
-    let permissions = crate::computer_use::permissions::status().await;
+        let permissions = crate::computer_use::permissions::status().await;
 
-    Ok(ComputerUseStatusResponse {
-        computer_use_enabled: ai.computer_use_enabled,
-        accessibility_granted: permissions.usable(ComputerPermissionKind::Accessibility),
-        screen_capture_granted: permissions.usable(ComputerPermissionKind::ScreenRecording),
-        platform_note: Some(
-            permissions
-                .permissions
-                .iter()
-                .map(|permission| permission.detail.as_str())
-                .collect::<Vec<_>>()
-                .join(" "),
-        ),
-        permissions,
-    })
+        Ok(ComputerUseStatusResponse {
+            computer_use_enabled: ai.computer_use_enabled,
+            accessibility_granted: permissions.usable(ComputerPermissionKind::Accessibility),
+            screen_capture_granted: permissions.usable(ComputerPermissionKind::ScreenRecording),
+            platform_note: Some(
+                permissions
+                    .permissions
+                    .iter()
+                    .map(|permission| permission.detail.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            ),
+            permissions,
+        })
+    }
 }
 
 #[tauri::command]
 pub async fn computer_use_request_permissions() -> Result<(), String> {
-    // Compatibility command: older clients still invoke this from a user gesture.
-    crate::computer_use::permissions::request(ComputerPermissionKind::Accessibility).await?;
-    crate::computer_use::permissions::request(ComputerPermissionKind::ScreenRecording).await?;
-    Ok(())
+    #[cfg(target_env = "ohos")]
+    {
+        Err("Native computer automation permissions are not implemented on HarmonyOS PC".into())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        // Compatibility command: older clients still invoke this from a user gesture.
+        crate::computer_use::permissions::request(ComputerPermissionKind::Accessibility).await?;
+        crate::computer_use::permissions::request(ComputerPermissionKind::ScreenRecording).await?;
+        Ok(())
+    }
 }
 
 #[tauri::command]
 pub async fn computer_use_request_permission(
     request: ComputerPermissionRequest,
 ) -> Result<ComputerPermissionReceipt, String> {
-    crate::computer_use::permissions::request(request.kind).await
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = request;
+        Err("Native computer automation permissions are not implemented on HarmonyOS PC".into())
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        crate::computer_use::permissions::request(request.kind).await
+    }
 }
 
 #[tauri::command]
@@ -122,6 +179,7 @@ pub async fn computer_use_open_system_settings(
 }
 
 /// Resource state is owned by the executing Desktop, not a newly constructed host.
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_control_status(
 ) -> Result<openbitfun_agent_tools::computer_use_control::ControlSnapshot, String> {
@@ -131,6 +189,7 @@ pub async fn computer_use_control_status(
 pub struct ComputerUseControlRequest {
     pub generation: u64,
 }
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_control_stop(
     request: ComputerUseControlRequest,
@@ -145,6 +204,7 @@ pub async fn computer_use_control_stop(
     .await
     .map_err(|e| e.to_string())?
 }
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_control_preview(
     request: ComputerUseControlRequest,
@@ -168,11 +228,13 @@ pub struct ComputerUseShareControlRequest {
     #[serde(default)]
     pub remember: bool,
 }
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_share_targets(
 ) -> Result<Vec<openbitfun_agent_tools::computer_use_control::ShareTarget>, String> {
     crate::computer_use::share_targets().await
 }
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_share_start(
     state: State<'_, AppState>,
@@ -184,6 +246,7 @@ pub async fn computer_use_share_start(
     crate::computer_use::share_grants::apply_remembered(computer_use_grants_path(&state), snapshot)
         .await
 }
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_share_control(
     state: State<'_, AppState>,
@@ -203,6 +266,7 @@ pub async fn computer_use_share_control(
     }
 }
 
+#[cfg(not(target_env = "ohos"))]
 fn computer_use_grants_path(state: &AppState) -> std::path::PathBuf {
     state
         .workspace_service
@@ -219,6 +283,7 @@ pub struct ComputerUseShareRequest {
     #[serde(default)]
     pub mode: openbitfun_agent_tools::computer_use_control::ControlMode,
 }
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_share_request(
     request: ComputerUseShareRequest,
@@ -229,16 +294,19 @@ pub async fn computer_use_share_request(
         request.mode,
     )
 }
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_share_grants(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::computer_use::grants::GrantRecord>, String> {
     crate::computer_use::share_grants::list(computer_use_grants_path(&state)).await
 }
+#[cfg(not(target_env = "ohos"))]
 #[derive(Debug, Deserialize)]
 pub struct ComputerUseForgetGrantRequest {
     pub identity: crate::computer_use::grants::GrantIdentity,
 }
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_share_forget_grant(
     state: State<'_, AppState>,
@@ -248,6 +316,7 @@ pub async fn computer_use_share_forget_grant(
         .await
 }
 
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_share_observe(
     request: crate::computer_use::shared_preview::SharedPreviewRequest,
@@ -255,9 +324,15 @@ pub async fn computer_use_share_observe(
     crate::computer_use::shared_preview::observe(request).await
 }
 
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_share_input(
     request: crate::computer_use::shared_preview::SharedInputRequest,
 ) -> Result<openbitfun_agent_tools::computer_use_control::ControlSnapshot, String> {
     crate::computer_use::shared_preview::input(request).await
 }
+
+#[cfg(target_env = "ohos")]
+mod ohos_control;
+#[cfg(target_env = "ohos")]
+pub use ohos_control::*;

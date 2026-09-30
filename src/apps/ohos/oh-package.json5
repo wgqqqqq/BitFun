@@ -1,0 +1,7 @@
+{
+  "name": "openbitfun-pc",
+  "version": "1.0.0",
+  "modelVersion": "6.1.0",
+  "description": "OpenBitFun local HarmonyOS PC host",
+  "dependencies": {}
+}

@@ -130,7 +130,12 @@ pub(super) fn posix_shell_candidates_for(shell_type: &ShellType) -> Vec<ShellCan
         .into_iter()
         .map(|path| ShellCandidate::new(path, shell_type.clone(), ShellDiscoverySource::Path))
         .collect::<Vec<_>>();
-    for directory in ["/usr/local/bin", "/usr/bin", "/bin"] {
+    let directories = if cfg!(target_env = "ohos") {
+        vec!["/system/bin", "/bin", "/usr/bin"]
+    } else {
+        vec!["/usr/local/bin", "/usr/bin", "/bin"]
+    };
+    for directory in directories {
         candidates.push(ShellCandidate::new(
             PathBuf::from(directory).join(executable),
             shell_type.clone(),

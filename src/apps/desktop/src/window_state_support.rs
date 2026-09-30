@@ -151,39 +151,50 @@ pub(crate) fn restore(window: &tauri::WebviewWindow) -> bool {
 }
 
 fn restore_inner(window: &tauri::Window) -> Result<bool, String> {
-    let app = window.app_handle();
-    let state = app.state::<MainWindowState>();
-    let desktop = Desktop::read(window)?;
-    let path = state_path(app)?;
-    let (document, _) = read_document(&path)?;
-    let plan = restore_plan(&document, &desktop);
-    if plan.repair {
-        log::warn!(
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = window;
+        Err(
+            "Window geometry restoration is not implemented by the HarmonyOS PC adapter"
+                .to_string(),
+        )
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let app = window.app_handle();
+        let state = app.state::<MainWindowState>();
+        let desktop = Desktop::read(window)?;
+        let path = state_path(app)?;
+        let (document, _) = read_document(&path)?;
+        let plan = restore_plan(&document, &desktop);
+        if plan.repair {
+            log::warn!(
             "Repairing persisted main window geometry: saved_width={} saved_height={} restored={:?}",
             document["main"]["width"],
             document["main"]["height"],
             plan.geometry
         );
-    }
-    apply_geometry(window, plan.geometry, &desktop)?;
-    *state.normal.lock().map_err(|error| error.to_string())? = Some(plan.geometry);
-    if plan.repair {
-        let _write = state.writes.lock().map_err(|error| error.to_string())?;
-        let (mut document, original) = read_document(&path)?;
-        update_document(&mut document, plan.geometry, None);
-        if let Err(error) = write_document(&path, &document, original.as_deref()) {
-            log::warn!(
-                "Main window geometry repaired in memory but could not be persisted: {error}"
-            );
         }
+        apply_geometry(window, plan.geometry, &desktop)?;
+        *state.normal.lock().map_err(|error| error.to_string())? = Some(plan.geometry);
+        if plan.repair {
+            let _write = state.writes.lock().map_err(|error| error.to_string())?;
+            let (mut document, original) = read_document(&path)?;
+            update_document(&mut document, plan.geometry, None);
+            if let Err(error) = write_document(&path, &document, original.as_deref()) {
+                log::warn!(
+                    "Main window geometry repaired in memory but could not be persisted: {error}"
+                );
+            }
+        }
+        window
+            .set_fullscreen(plan.fullscreen)
+            .map_err(|error| error.to_string())?;
+        state.ready.store(true, Ordering::Release);
+        // Windows must not maximize a hidden undecorated window. Fullscreen takes
+        // precedence for this launch; its saved maximize preference is kept on disk.
+        Ok(plan.maximized && !plan.fullscreen)
     }
-    window
-        .set_fullscreen(plan.fullscreen)
-        .map_err(|error| error.to_string())?;
-    state.ready.store(true, Ordering::Release);
-    // Windows must not maximize a hidden undecorated window. Fullscreen takes
-    // precedence for this launch; its saved maximize preference is kept on disk.
-    Ok(plan.maximized && !plan.fullscreen)
 }
 
 fn apply_geometry(
@@ -227,28 +238,39 @@ pub(crate) fn remember_normal(window: &tauri::Window) {
 }
 
 pub(crate) fn save(app: &tauri::AppHandle, reason: &str) -> Result<(), String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or("Main window not found")?;
-    let window = window.as_ref().window();
-    let snapshot = capture(&window)?;
-    let desktop = Desktop::read(&window)?;
-    let state = app.state::<MainWindowState>();
-    let mut normal = state.normal.lock().map_err(|error| error.to_string())?;
-    if snapshot.is_normal() {
-        if !desktop.valid(snapshot.geometry) {
-            return Err(format!(
-                "Rejected main window snapshot: reason={reason}, snapshot={snapshot:?}"
-            ));
-        }
-        *normal = Some(snapshot.geometry);
+    #[cfg(target_env = "ohos")]
+    {
+        let _ = (app, reason);
+        Err(
+            "Window geometry persistence is not implemented by the HarmonyOS PC adapter"
+                .to_string(),
+        )
     }
-    let geometry = *normal;
-    drop(normal);
-    // No native calls under the writer lock. Persist exactly the sample validated.
-    let path = state_path(app)?;
-    let _write = state.writes.lock().map_err(|error| error.to_string())?;
-    persist_snapshot(&path, snapshot, geometry, &desktop)
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let window = app
+            .get_webview_window("main")
+            .ok_or("Main window not found")?;
+        let window = window.as_ref().window();
+        let snapshot = capture(&window)?;
+        let desktop = Desktop::read(&window)?;
+        let state = app.state::<MainWindowState>();
+        let mut normal = state.normal.lock().map_err(|error| error.to_string())?;
+        if snapshot.is_normal() {
+            if !desktop.valid(snapshot.geometry) {
+                return Err(format!(
+                    "Rejected main window snapshot: reason={reason}, snapshot={snapshot:?}"
+                ));
+            }
+            *normal = Some(snapshot.geometry);
+        }
+        let geometry = *normal;
+        drop(normal);
+        // No native calls under the writer lock. Persist exactly the sample validated.
+        let path = state_path(app)?;
+        let _write = state.writes.lock().map_err(|error| error.to_string())?;
+        persist_snapshot(&path, snapshot, geometry, &desktop)
+    }
 }
 
 fn persist_snapshot(

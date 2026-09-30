@@ -466,37 +466,44 @@ pub async fn miniapp_market_capture_window(
     app: AppHandle,
     window: WebviewWindow,
 ) -> Result<String, String> {
-    let position = window
-        .outer_position()
-        .map_err(|error| format!("Could not read the OpenBitFun window position: {error}"))?;
-    let size = window
-        .outer_size()
-        .map_err(|error| format!("Could not read the OpenBitFun window size: {error}"))?;
-    if size.width < 320 || size.height < 240 {
-        return Err(
-            "The OpenBitFun window is too small to capture a review screenshot.".to_string(),
-        );
-    }
-
-    let capture_dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|error| format!("Could not resolve the private cache directory: {error}"))?
-        .join("miniapp-market-captures");
-    tokio::fs::create_dir_all(&capture_dir)
-        .await
-        .map_err(|error| format!("Could not create the screenshot directory: {error}"))?;
-    #[cfg(unix)]
+    #[cfg(target_env = "ohos")]
     {
-        use std::os::unix::fs::PermissionsExt;
-        tokio::fs::set_permissions(&capture_dir, std::fs::Permissions::from_mode(0o700))
-            .await
-            .map_err(|error| format!("Could not secure the screenshot directory: {error}"))?;
+        let _ = (app, window);
+        Err("MiniApp window capture is not implemented on HarmonyOS PC".to_string())
     }
-    let path = capture_dir.join(format!("{}.jpg", uuid::Uuid::new_v4()));
-    let output_path = path.clone();
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let position = window
+            .outer_position()
+            .map_err(|error| format!("Could not read the OpenBitFun window position: {error}"))?;
+        let size = window
+            .outer_size()
+            .map_err(|error| format!("Could not read the OpenBitFun window size: {error}"))?;
+        if size.width < 320 || size.height < 240 {
+            return Err(
+                "The OpenBitFun window is too small to capture a review screenshot.".to_string(),
+            );
+        }
 
-    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let capture_dir = app
+            .path()
+            .app_cache_dir()
+            .map_err(|error| format!("Could not resolve the private cache directory: {error}"))?
+            .join("miniapp-market-captures");
+        tokio::fs::create_dir_all(&capture_dir)
+            .await
+            .map_err(|error| format!("Could not create the screenshot directory: {error}"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            tokio::fs::set_permissions(&capture_dir, std::fs::Permissions::from_mode(0o700))
+                .await
+                .map_err(|error| format!("Could not secure the screenshot directory: {error}"))?;
+        }
+        let path = capture_dir.join(format!("{}.jpg", uuid::Uuid::new_v4()));
+        let output_path = path.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<(), String> {
         let center_x = position.x.saturating_add((size.width / 2) as i32);
         let center_y = position.y.saturating_add((size.height / 2) as i32);
         let screen = screenshots::Screen::from_point(center_x, center_y)
@@ -529,7 +536,8 @@ pub async fn miniapp_market_capture_window(
     .await
     .map_err(|error| format!("Screenshot capture task failed: {error}"))??;
 
-    Ok(path.to_string_lossy().into_owned())
+        Ok(path.to_string_lossy().into_owned())
+    }
 }
 
 #[tauri::command]

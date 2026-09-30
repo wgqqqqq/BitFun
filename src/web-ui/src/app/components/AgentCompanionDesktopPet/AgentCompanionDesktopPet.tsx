@@ -1,3 +1,5 @@
+import { clampCompanionScale, readCompanionScale, saveCompanionScale, pinchCompanionScale, MIN_COMPANION_SCALE, MAX_COMPANION_SCALE } from '@/infrastructure/config/services/AgentCompanionScaleService';
+import { getCompanionWindow, getCompanionPointerPosition, isHarmonyCompanionHost } from '../../../infrastructure/config/services/AgentCompanionHostService';
 import { ArrowUp as LucideArrowUp, PencilLine as LucidePencilLine, X as LucideX } from 'lucide-react';
 import { OverflowText, Menu, MenuItem, ScrollArea } from '@openbitfun/ui';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -48,7 +50,8 @@ const IS_WINDOWS_WEBVIEW = /\bWindows\b/i.test(window.navigator.userAgent);
 const IS_MACOS_WEBVIEW = /\bMacintosh\b/i.test(window.navigator.userAgent);
 // AppKit's native drag returns immediately and may consume mouse-up. Keep pointer
 // capture on macOS too, so running direction and drag lifetime follow the pointer.
-const USE_CONTROLLED_PET_DRAG = IS_WINDOWS_WEBVIEW || IS_MACOS_WEBVIEW;
+const IS_HARMONY_COMPANION = isHarmonyCompanionHost();
+const USE_CONTROLLED_PET_DRAG = IS_WINDOWS_WEBVIEW || IS_MACOS_WEBVIEW || IS_HARMONY_COMPANION;
 const PET_COMMAND_EVENT = 'agent-companion://pet-command';
 const MENU_EDGE_MARGIN = 4;
 
@@ -135,6 +138,16 @@ export const AgentCompanionDesktopPet: React.FC = () => {
   const [pet, setPet] = useState<AgentCompanionPetSelection | null>(
     () => aiExperienceConfigService.getSettings().agent_companion_pet ?? null,
   );
+  const [petScale, setPetScale] = useState(readCompanionScale);
+  const petScaleRef = useRef(petScale);
+  const touchPointsRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{ distance: number; scale: number } | null>(null);
+  const changePetScale = (value: number, persist = false) => {
+    const next = clampCompanionScale(value);
+    petScaleRef.current = next;
+    setPetScale(next);
+    if (persist) saveCompanionScale(next);
+  };
   const [mood, setMood] = useState<AgentCompanionMood>('rest');
   const [tasks, setTasks] = useState<AgentCompanionTaskStatus[]>([]);
   const previousTasksRef = useRef<AgentCompanionTaskStatus[] | null>(null);
@@ -201,11 +214,13 @@ export const AgentCompanionDesktopPet: React.FC = () => {
   // Task activity and explicit dismissals own visibility. Depending on the
   // main window's focus made new tasks appear only after touching the pet.
   const displayTasks = [...visibleTasks].reverse();
-  const activePetSize = pet && petFrameSize
+  const basePetSize = pet && petFrameSize
     ? petFrameSize
     : pet
       ? DEFAULT_PETDEX_DISPLAY_SIZE
       : { width: DEFAULT_PET_SIZE, height: DEFAULT_PET_SIZE };
+
+  const activePetSize = { width: basePetSize.width * petScale, height: basePetSize.height * petScale };
 
   useEffect(() => {
     let disposed = false;
@@ -213,7 +228,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
     document.body.classList.add('openbitfun-agent-companion-window-body');
 
     const hidePetWindowForInactiveSettings = () => {
-      void getCurrentWindow().hide().catch(error => {
+      void getCompanionWindow().hide().catch(error => {
         log.warn('Failed to hide inactive Agent companion window', error);
       });
     };
@@ -427,6 +442,24 @@ export const AgentCompanionDesktopPet: React.FC = () => {
   const visibleTaskCountRef = useRef(0);
   // Only the inline composer changes bubble layout; floating menus do not.
   const composingSessionId = overlay?.kind === 'composer' ? overlay.sessionId : null;
+  const harmonyPetMenuOpen = IS_HARMONY_COMPANION && overlay?.kind === 'pet-menu';
+  const pendingSizeRef = useRef<{ width: number; height: number } | null>(null);
+  const resizingRef = useRef(false);
+  const flushWindowSize = async () => {
+    if (resizingRef.current) return;
+    resizingRef.current = true;
+    try {
+      while (pendingSizeRef.current) {
+        const size = pendingSizeRef.current;
+        pendingSizeRef.current = null;
+        await api.invoke('resize_agent_companion_desktop_pet', size);
+      }
+    } catch (error) {
+      log.warn('Failed to resize Agent companion window', error);
+    } finally {
+      resizingRef.current = false;
+    }
+  };
 
   useLayoutEffect(() => {
     // Written here (not during render) so an abandoned/double render cannot
@@ -447,12 +480,12 @@ export const AgentCompanionDesktopPet: React.FC = () => {
       : visibleBubbleHeight;
     // The buffer is chrome around the content, so it is added after clamping:
     // the window still never exceeds WINDOW_MAX_HEIGHT.
-    const nextHeight = (bubbleCount > 0
+    const contentHeight = bubbleCount > 0
       ? Math.max(
         activePetSize.height,
         Math.min(WINDOW_MAX_HEIGHT - WINDOW_VERTICAL_BUFFER * 2, targetBubbleHeight),
       )
-      : activePetSize.height) + WINDOW_VERTICAL_BUFFER * 2;
+      : activePetSize.height;
     const measuredBubbleWidth = bubbleCount > 0 ? BUBBLE_WIDTH : 0;
     const measuredDockWidth = bubbleCount > 0
       ? measuredBubbleWidth + WINDOW_HORIZONTAL_GAP + activePetSize.width + WINDOW_EDGE_BUFFER
@@ -461,9 +494,16 @@ export const AgentCompanionDesktopPet: React.FC = () => {
         dockRef.current?.scrollWidth ?? 0,
         dockRef.current?.getBoundingClientRect().width ?? 0,
       );
-    const nextWidth = Math.max(
+    const contentWidth = Math.max(
       activePetSize.width,
-      Math.min(WINDOW_MAX_WIDTH, Math.ceil(measuredDockWidth)),
+      Math.min(IS_HARMONY_COMPANION ? 720 : WINDOW_MAX_WIDTH, Math.ceil(measuredDockWidth)),
+    );
+
+    // A small pet must still expose every menu action. Restore the tight window on close.
+    const nextWidth = Math.max(contentWidth, harmonyPetMenuOpen ? 180 : 0);
+    const nextHeight = Math.max(
+      contentHeight + WINDOW_VERTICAL_BUFFER * 2,
+      harmonyPetMenuOpen ? 224 : 0,
     );
 
     if (!Number.isFinite(nextWidth) || !Number.isFinite(nextHeight)) {
@@ -474,17 +514,12 @@ export const AgentCompanionDesktopPet: React.FC = () => {
       return;
     }
 
-    void api.invoke('resize_agent_companion_desktop_pet', {
-        width: nextWidth,
-        height: nextHeight,
-      })
-      .catch(error => {
-        log.warn('Failed to resize Agent companion window', error);
-      });
-  }, [activePetSize.height, activePetSize.width, composingSessionId, visibleTasks]);
+    pendingSizeRef.current = { width: nextWidth, height: nextHeight };
+    void flushWindowSize();
+  }, [activePetSize.height, activePetSize.width, composingSessionId, visibleTasks, harmonyPetMenuOpen]);
 
   useEffect(() => {
-    if (IS_WINDOWS_WEBVIEW && !trackPetLook) {
+    if (IS_HARMONY_COMPANION || (IS_WINDOWS_WEBVIEW && !trackPetLook)) {
       return;
     }
 
@@ -724,7 +759,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
     setComposerValue('');
     setIsSendingComposer(false);
     setOverlay({ kind: 'composer', sessionId });
-    void getCurrentWindow().setFocus()
+    void getCompanionWindow().setFocus()
       .catch(error => {
         log.warn('Failed to focus Agent companion window for composer', error);
       });
@@ -789,8 +824,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
   const isMenuOverlay = overlay?.kind === 'pet-menu' || overlay?.kind === 'bubble-menu';
 
   // Place the menu at the cursor, kept fully inside the window. The window is
-  // deliberately not resized for a menu: growing it moves every anchored
-  // element for a frame, which reads as the whole pet flashing.
+  // expanded when needed to keep the size controls reachable even at minimum scale.
   useLayoutEffect(() => {
     if (!isMenuOverlay || !menuAnchor) {
       setMenuPosition(null);
@@ -846,6 +880,22 @@ export const AgentCompanionDesktopPet: React.FC = () => {
     if (event.button !== 0) {
       return;
     }
+    if (event.pointerType === 'touch') {
+      touchPointsRef.current.set(event.pointerId, getCompanionPointerPosition(event));
+      try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* already released */ }
+      if (touchPointsRef.current.size >= 2) {
+        event.preventDefault();
+        pointerDragRef.current?.cancel();
+        pointerDragRef.current = null;
+        stopDragRef.current?.();
+        stopDragRef.current = null;
+        petPointerSessionRef.current = null;
+        setIsDraggingPet(false);
+        const [a, b] = [...touchPointsRef.current.values()];
+        pinchRef.current = { distance: Math.hypot(a.x - b.x, a.y - b.y), scale: petScaleRef.current };
+        return;
+      }
+    }
     // WebKit can start a native text/image selection before our drag threshold
     // is reached. Cancel that default at pointer-down, while retaining capture.
     event.preventDefault();
@@ -860,12 +910,12 @@ export const AgentCompanionDesktopPet: React.FC = () => {
       startY: event.clientY,
       dragStarted: false,
     };
-    if (IS_MACOS_WEBVIEW) {
+    if (IS_MACOS_WEBVIEW || IS_HARMONY_COMPANION) {
       const target = event.currentTarget;
       const session = petPointerSessionRef.current;
       pointerDragRef.current?.cancel();
       pointerDragRef.current = prepareAgentCompanionPointerDrag(
-        { x: event.screenX, y: event.screenY },
+        getCompanionPointerPosition(event),
         setDragDirection,
         error => {
           log.warn('Failed to move Agent companion window', error);
@@ -881,12 +931,21 @@ export const AgentCompanionDesktopPet: React.FC = () => {
   };
 
   const onPetPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (touchPointsRef.current.has(event.pointerId)) {
+      touchPointsRef.current.set(event.pointerId, getCompanionPointerPosition(event));
+    }
+    if (pinchRef.current) {
+      event.preventDefault();
+      const [a, b] = [...touchPointsRef.current.values()];
+      if (a && b) changePetScale(pinchCompanionScale(pinchRef.current.scale, pinchRef.current.distance, Math.hypot(a.x - b.x, a.y - b.y)));
+      return;
+    }
     const session = petPointerSessionRef.current;
     if (!session || event.pointerId !== session.pointerId) {
       return;
     }
     if (session.dragStarted) {
-      pointerDragRef.current?.move({ x: event.screenX, y: event.screenY });
+      pointerDragRef.current?.move(getCompanionPointerPosition(event));
       return;
     }
     const dx = event.clientX - session.startX;
@@ -896,11 +955,12 @@ export const AgentCompanionDesktopPet: React.FC = () => {
     }
     session.dragStarted = true;
     event.preventDefault();
-    setDragDirection(dx < 0 ? 'left' : 'right');
+    // Before the first move the window is stationary, so choose the initial facing immediately.
+    if (Math.abs(dx) >= PET_DRAG_THRESHOLD_PX) setDragDirection(dx < 0 ? 'left' : 'right');
     setIsDraggingPet(true);
     setReaction(null);
-    if (IS_MACOS_WEBVIEW) {
-      pointerDragRef.current?.move({ x: event.screenX, y: event.screenY });
+    if (IS_MACOS_WEBVIEW || IS_HARMONY_COMPANION) {
+      pointerDragRef.current?.move(getCompanionPointerPosition(event));
       return;
     }
     if (IS_WINDOWS_WEBVIEW) {
@@ -925,14 +985,26 @@ export const AgentCompanionDesktopPet: React.FC = () => {
       });
   };
 
+  const endPinchPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    touchPointsRef.current.delete(event.pointerId);
+    if (!pinchRef.current) return false;
+    // Do not turn the remaining finger into a drag or a click after pinching.
+    if (touchPointsRef.current.size === 0) {
+      pinchRef.current = null;
+      saveCompanionScale(petScaleRef.current);
+    }
+    return true;
+  };
+
   const onPetPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (endPinchPointer(event)) return;
     const session = petPointerSessionRef.current;
     if (!session || event.pointerId !== session.pointerId) {
       return;
     }
     const shouldShowMain = !session.dragStarted;
     if (session.dragStarted && pointerDragRef.current) {
-      pointerDragRef.current.move({ x: event.screenX, y: event.screenY });
+      pointerDragRef.current.move(getCompanionPointerPosition(event));
       pointerDragRef.current.finish();
       pointerDragRef.current = null;
     }
@@ -944,6 +1016,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
   };
 
   const onPetPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (endPinchPointer(event)) return;
     const session = petPointerSessionRef.current;
     if (!session || event.pointerId !== session.pointerId) {
       return;
@@ -986,6 +1059,9 @@ export const AgentCompanionDesktopPet: React.FC = () => {
     : null;
   const menuItems = overlay?.kind === 'pet-menu'
     ? [
+      { key: 'enlarge', label: t('agentCompanion.menu.enlarge'), disabled: petScale >= MAX_COMPANION_SCALE, onClick: () => changePetScale(petScale + 0.25, true) },
+      { key: 'shrink', label: t('agentCompanion.menu.shrink'), disabled: petScale <= MIN_COMPANION_SCALE, onClick: () => changePetScale(petScale - 0.25, true) },
+      { key: 'reset-size', label: t('agentCompanion.menu.resetSize'), onClick: () => changePetScale(1, true) },
       { key: 'switch-pet', label: t('agentCompanion.menu.switchPet'), onClick: openPetSettings },
       { key: 'close-pet', label: t('agentCompanion.menu.closePet'), onClick: closeDesktopPet },
     ]
@@ -999,7 +1075,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
 
   return (
     <main
-      className={`openbitfun-agent-companion-window${isMenuOverlay ? ' openbitfun-agent-companion-window--menu-open' : ''}${IS_WINDOWS_WEBVIEW ? ' openbitfun-agent-companion-window--native-hover' : ''}`}
+      className={`openbitfun-agent-companion-window${isMenuOverlay ? ' openbitfun-agent-companion-window--menu-open' : ''}${IS_WINDOWS_WEBVIEW || IS_HARMONY_COMPANION ? ' openbitfun-agent-companion-window--native-hover' : ''}`}
       onContextMenu={onContextMenu}
       data-openbitfun-component="agent-companion-desktop-pet"
       data-openbitfun-part="root"
@@ -1025,6 +1101,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
             <MenuItem
               key={menuItem.key}
               tone={menuItem.key === 'close-pet' ? 'danger' : 'neutral'}
+              disabled={'disabled' in menuItem && menuItem.disabled}
               onClick={menuItem.onClick}
             >
               {menuItem.label}
@@ -1170,6 +1247,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
             onLostPointerCapture={onPetPointerCancel}
             onContextMenu={onPetContextMenu}
            data-openbitfun-component="agent-companion-desktop-pet" data-openbitfun-part="hitbox" data-openbitfun-state={hasAttentionTask ? 'attention' : undefined}>
+            <div style={{ '--openbitfun-agent-companion-pet-width': `${basePetSize.width}px`, '--openbitfun-agent-companion-pet-height': `${basePetSize.height}px`, width: basePetSize.width, height: basePetSize.height, transform: `scale(${petScale})`, transformOrigin: 'bottom right', position: 'absolute', right: 0, bottom: 0 } as React.CSSProperties}>
             <AgentCompanionPet
               mood={displayMood}
               dragDirection={dragDirection}
@@ -1183,6 +1261,7 @@ export const AgentCompanionDesktopPet: React.FC = () => {
               onPetFrameSizeChange={handlePetFrameSizeChange}
               className="openbitfun-agent-companion-window__pet"
              data-openbitfun-component="agent-companion-desktop-pet" data-openbitfun-part="pet"/>
+            </div>
           </div>
         </div>
       </div>

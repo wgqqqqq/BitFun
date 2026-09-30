@@ -1,12 +1,13 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { prepareAgentCompanionPointerDrag } from './AgentCompanionPointerDragService';
-const mocks = vi.hoisted(() => ({ position: vi.fn(), scale: vi.fn(), move: vi.fn() }));
+const mocks = vi.hoisted(() => ({ position: vi.fn(), scale: vi.fn(), move: vi.fn(), native: false }));
 vi.mock('@tauri-apps/api/window', () => ({
   LogicalPosition: class { constructor(public x: number, public y: number) {} },
-  getCurrentWindow: () => ({ outerPosition: mocks.position, scaleFactor: mocks.scale, setPosition: mocks.move }),
+  getCurrentWindow: () => ({ usesNativePointer: mocks.native, outerPosition: mocks.position, scaleFactor: mocks.scale, setPosition: mocks.move }),
 }));
 const settle = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 beforeEach(() => {
+  mocks.native = false;
   mocks.position.mockReset().mockResolvedValue({ x: 7360, y: 1824 });
   mocks.scale.mockReset().mockResolvedValue(2);
   mocks.move.mockReset().mockResolvedValue(undefined);
@@ -62,4 +63,40 @@ it('reports move failures and stops accepting subsequent movement', async () => 
   drag.move({ x: 60, y: 40 }); await settle();
   expect(error).toHaveBeenCalledOnce();
   expect(mocks.move).toHaveBeenCalledOnce();
+});
+
+it('ignores direction jitter but accepts a gradual intentional reversal without delaying movement', async () => {
+  const direction = vi.fn();
+  const drag = prepareAgentCompanionPointerDrag({ x: 100, y: 100 }, direction, vi.fn());
+  await settle();
+  for (const x of [120, 119, 121, 118, 122]) { drag.move({ x, y: 110 }); await settle(); }
+  expect(direction.mock.calls).toEqual([['right']]);
+  expect(mocks.move).toHaveBeenCalledTimes(5);
+  for (const x of [119, 116, 113, 110]) { drag.move({ x, y: 110 }); await settle(); }
+  expect(direction.mock.calls).toEqual([['right'], ['left']]);
+  expect(mocks.move).toHaveBeenCalledTimes(9);
+});
+
+it('uses coherent native coordinates for facing even when WebView coordinates jump backward', async () => {
+  mocks.native = true;
+  mocks.move.mockResolvedValueOnce({ pointer: { x: 520, y: 100 }, grabX: 500 })
+    .mockResolvedValueOnce({ pointer: { x: 535, y: 100 }, grabX: 500 });
+  const direction = vi.fn();
+  const drag = prepareAgentCompanionPointerDrag({ x: 500, y: 100 }, direction, vi.fn());
+  await settle();
+  drag.move({ x: 525, y: 100 }); await settle();
+  drag.move({ x: 490, y: 100 }); await settle();
+  expect(direction.mock.calls).toEqual([['right']]);
+});
+
+it('stops pending pointer movement after the native host transfers the window', async () => {
+  mocks.native = true;
+  mocks.move.mockResolvedValue({ transferred: true });
+  const direction = vi.fn();
+  const drag = prepareAgentCompanionPointerDrag({ x: 500, y: 100 }, direction, vi.fn());
+  await settle();
+  drag.move({ x: 520, y: 200 }); await settle();
+  drag.move({ x: 200, y: 20 }); await settle();
+  expect(mocks.move).toHaveBeenCalledOnce();
+  expect(direction).not.toHaveBeenCalled();
 });

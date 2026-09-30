@@ -70,6 +70,16 @@ describe('pet sprite renderer', () => {
     expect(sprite().style.animationName).toBe('');
   });
 
+  it('keeps the running animation node alive when drag direction changes', async () => {
+    await act(async () => root.render(<AgentCompanionPet pet={pet} mood="dragging" dragDirection="left" />));
+    const runningSprite = sprite();
+    await act(async () => root.render(<AgentCompanionPet pet={pet} mood="dragging" dragDirection="right" action="jumping" />));
+    expect(sprite()).toBe(runningSprite);
+    expect(sprite().style.animation).not.toBe('none');
+    expect(sprite().style.backgroundPositionY).toBe('10%');
+    expect(sprite().dataset.petAction).toBeUndefined();
+    expect(resolvePet).toHaveBeenCalledOnce();
+  });
   it.each([1, 2])('plays all three standard actions with v%s frame geometry and keeps drag priority', async version => {
     vi.useFakeTimers();
     vi.stubGlobal('Image', class {

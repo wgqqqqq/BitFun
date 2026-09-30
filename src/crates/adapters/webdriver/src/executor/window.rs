@@ -7,6 +7,7 @@ use crate::platform::WindowRect;
 use crate::server::response::WebDriverErrorResponse;
 
 impl BridgeExecutor {
+    #[cfg(not(target_env = "ohos"))]
     pub(crate) async fn get_window_rect(&self) -> Result<WindowRect, WebDriverErrorResponse> {
         let window = self.webview_window()?;
         let position = window.outer_position().map_err(|error| {
@@ -26,6 +27,7 @@ impl BridgeExecutor {
         })
     }
 
+    #[cfg(not(target_env = "ohos"))]
     pub(crate) async fn set_window_rect(
         &self,
         rect: WindowRect,
@@ -70,6 +72,7 @@ impl BridgeExecutor {
         self.get_window_rect().await
     }
 
+    #[cfg(not(target_env = "ohos"))]
     pub(crate) async fn maximize_window(&self) -> Result<WindowRect, WebDriverErrorResponse> {
         self.webview_window()?.maximize().map_err(|error| {
             WebDriverErrorResponse::unknown_error(format!("Failed to maximize window: {error}"))
@@ -78,6 +81,7 @@ impl BridgeExecutor {
         self.get_window_rect().await
     }
 
+    #[cfg(not(target_env = "ohos"))]
     pub(crate) async fn minimize_window(&self) -> Result<(), WebDriverErrorResponse> {
         self.webview_window()?.minimize().map_err(|error| {
             WebDriverErrorResponse::unknown_error(format!("Failed to minimize window: {error}"))
@@ -85,6 +89,7 @@ impl BridgeExecutor {
         Ok(())
     }
 
+    #[cfg(not(target_env = "ohos"))]
     pub(crate) async fn fullscreen_window(&self) -> Result<WindowRect, WebDriverErrorResponse> {
         self.webview_window()?
             .set_fullscreen(true)
@@ -95,5 +100,27 @@ impl BridgeExecutor {
             })?;
         tokio::time::sleep(Duration::from_millis(100)).await;
         self.get_window_rect().await
+    }
+}
+
+#[cfg(target_env = "ohos")]
+impl BridgeExecutor {
+    pub(crate) async fn get_window_rect(&self) -> Result<WindowRect, WebDriverErrorResponse> {
+        Err(WebDriverErrorResponse::unsupported_operation("Native window geometry and state are not implemented by the OpenHarmony WebDriver bridge"))
+    }
+    pub(crate) async fn set_window_rect(
+        &self,
+        _rect: WindowRect,
+    ) -> Result<WindowRect, WebDriverErrorResponse> {
+        Err(WebDriverErrorResponse::unsupported_operation("Native window geometry and state are not implemented by the OpenHarmony WebDriver bridge"))
+    }
+    pub(crate) async fn maximize_window(&self) -> Result<WindowRect, WebDriverErrorResponse> {
+        Err(WebDriverErrorResponse::unsupported_operation("Native window geometry and state are not implemented by the OpenHarmony WebDriver bridge"))
+    }
+    pub(crate) async fn minimize_window(&self) -> Result<(), WebDriverErrorResponse> {
+        Err(WebDriverErrorResponse::unsupported_operation("Native window geometry and state are not implemented by the OpenHarmony WebDriver bridge"))
+    }
+    pub(crate) async fn fullscreen_window(&self) -> Result<WindowRect, WebDriverErrorResponse> {
+        Err(WebDriverErrorResponse::unsupported_operation("Native window geometry and state are not implemented by the OpenHarmony WebDriver bridge"))
     }
 }

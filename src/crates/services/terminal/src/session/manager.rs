@@ -1083,6 +1083,17 @@ impl SessionManager {
                 }
             };
 
+            // Completion and exit status require the integration protocol. Never
+            // send a command that this API cannot observe completing.
+            if sessions.read().await.contains_key(&session_id)
+                && !session_integrations.read().await.contains_key(&session_id)
+            {
+                send(CommandStreamEvent::Error {
+                    message: "Structured command execution is unavailable for this terminal: shell integration is not enabled. Interactive terminal input remains available.".into(),
+                }).await;
+                return;
+            }
+
             // Wait for session to be ready before executing command
             if let Err(e) =
                 Self::wait_for_session_ready_static(&sessions, &session_integrations, &session_id)
@@ -1680,6 +1691,36 @@ impl Drop for SessionManager {
 #[cfg(test)]
 mod tests {
     use super::{compute_stream_output_delta, CommandCompletionReason};
+
+    #[tokio::test]
+    async fn unintegrated_session_rejects_execution_before_waiting_or_writing() {
+        let scripts = tempfile::tempdir().unwrap();
+        let mut config = super::TerminalConfig::default();
+        config.shell_integration.scripts_dir = Some(scripts.path().into());
+        let manager = super::SessionManager::new(config);
+        manager.sessions.write().await.insert(
+            "basic".into(),
+            super::TerminalSession::new(
+                "basic".into(),
+                "Basic shell".into(),
+                super::ShellType::Sh,
+                scripts.path().to_string_lossy().into_owned(),
+                80,
+                24,
+                super::SessionSource::default(),
+            ),
+        );
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            manager.execute_command("basic", "exit 73"),
+        )
+        .await
+        .expect("must not wait for shell readiness");
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("shell integration is not enabled"));
+    }
 
     #[test]
     fn stream_output_delta_returns_utf8_suffix_without_cutting_chars() {

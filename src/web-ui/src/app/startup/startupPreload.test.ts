@@ -52,6 +52,24 @@ describe('startup preload shell', () => {
     dom.window.close();
   });
 
+  it('keeps startup controls hidden when the local host supplies system decorations', () => {
+    const invoke = vi.fn();
+    const dom = new JSDOM(readIndexHtml(), {
+      url: 'http://localhost:1422/',
+      runScripts: 'dangerously',
+      beforeParse(window) {
+        Object.assign(window, {
+          __OPENBITFUN_SHOW_STARTUP_WINDOW_CONTROLS__: true,
+          __OPENBITFUN_HOST_CAPABILITIES__: { nativeWindowControls: false },
+          __TAURI_INTERNALS__: { invoke },
+        });
+      },
+    });
+    expect(dom.window.document.querySelector<HTMLElement>('[data-startup-window-controls]')?.hidden).toBe(true);
+    expect(invoke).not.toHaveBeenCalled();
+    dom.window.close();
+  });
+
   it('uses injected startup locale text and mirrors native window-control state', async () => {
     let isMaximized = true;
     const invoke = vi.fn().mockImplementation((_command, payload) => {

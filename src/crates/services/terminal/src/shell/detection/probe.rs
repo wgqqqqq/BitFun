@@ -23,6 +23,12 @@ impl ShellDetector {
         Self::run_version_probe(path, &["--version"])
     }
 
+    #[cfg(target_env = "ohos")]
+    pub(super) fn probe_shell_execution(path: &Path) -> bool {
+        Self::run_version_probe(path, &["-c", "printf OBF_SHELL_READY"]).as_deref()
+            == Some("OBF_SHELL_READY")
+    }
+
     fn run_version_probe(path: &Path, args: &[&str]) -> Option<String> {
         let mut command = Command::new(path);
         command

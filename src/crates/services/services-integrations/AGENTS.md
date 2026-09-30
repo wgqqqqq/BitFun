@@ -205,3 +205,12 @@ For models.dev snapshot reuse, last-valid recovery, and background refresh:
 ```bash
 cargo test --locked -p openbitfun-services-integrations --no-default-features --features models-dev --lib models_dev::tests
 ```
+
+For LAN address selection and relay URL compatibility:
+
+```bash
+cargo test --locked -p openbitfun-services-integrations --no-default-features --features remote-connect --lib remote_connect::lan::tests::
+```
+
+OHOS NetworkKit enumeration additionally requires a signed HAP with
+`ohos.permission.GET_NETWORK_INFO`; host tests do not verify that system boundary.

@@ -1,0 +1,6 @@
+{
+  "identifier": "ohos-companion",
+  "description": "Native operations are restricted to the companion WebView.",
+  "webviews": ["agent-companion-pet"],
+  "permissions": ["companion:allow-operation"]
+}

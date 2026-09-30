@@ -5,7 +5,12 @@ export function isTauriRuntime(): boolean {
 
 /** Manual update actions are available in every desktop build. */
 export function canCheckForAppUpdates(): boolean {
-  return isTauriRuntime();
+  if (!isTauriRuntime()) return false;
+  const host = window as Window & {
+    __OPENBITFUN_HOST_CAPABILITIES__?: { desktopUpdater?: boolean };
+  };
+  // Older desktop hosts do not advertise this field. Preserve their update path.
+  return host.__OPENBITFUN_HOST_CAPABILITIES__?.desktopUpdater !== false;
 }
 
 /** Development builds skip background discovery. */

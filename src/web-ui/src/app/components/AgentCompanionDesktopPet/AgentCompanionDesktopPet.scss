@@ -166,8 +166,8 @@
   }
 
   &__pet {
-    width: min(var(--openbitfun-agent-companion-pet-width), 100vw);
-    height: min(var(--openbitfun-agent-companion-pet-height), 100vh);
+    width: var(--openbitfun-agent-companion-pet-width);
+    height: var(--openbitfun-agent-companion-pet-height);
     max-width: var(--openbitfun-agent-companion-pet-width);
     max-height: var(--openbitfun-agent-companion-pet-height);
     transform-origin: center bottom;

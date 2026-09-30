@@ -1,0 +1,148 @@
+--- a/plugins/opener/build.rs
++++ b/plugins/opener/build.rs
+@@ -117,7 +117,7 @@
+         .build();
+ 
+     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+-    let mobile = target_os == "ios" || target_os == "android";
++    let mobile = target_os == "ios" || target_os == "android" || std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("ohos");
+     alias("desktop", !mobile);
+     alias("mobile", mobile);
+ }
+--- a/plugins/opener/src/lib.rs
++++ b/plugins/opener/src/lib.rs
+@@ -6,7 +6,7 @@
+ 
+ use tauri::{plugin::TauriPlugin, Manager, Runtime};
+ 
+-#[cfg(mobile)]
++#[cfg(all(mobile, not(target_env = "ohos")))]
+ use tauri::plugin::PluginHandle;
+ #[cfg(target_os = "android")]
+ const PLUGIN_IDENTIFIER: &str = "app.tauri.opener";
+@@ -32,9 +32,9 @@
+ pub struct Opener<R: Runtime> {
+     // we use `fn() -> R` to silence the unused generic error
+     // while keeping this struct `Send + Sync` without requiring `R` to be
+-    #[cfg(not(mobile))]
++    #[cfg(any(not(mobile), target_env = "ohos"))]
+     _marker: std::marker::PhantomData<fn() -> R>,
+-    #[cfg(mobile)]
++    #[cfg(all(mobile, not(target_env = "ohos")))]
+     mobile_plugin_handle: PluginHandle<R>,
+     require_literal_leading_dot: Option<bool>,
+ }
+@@ -58,7 +58,7 @@
+     /// ## Platform-specific:
+     ///
+     /// - **Android / iOS**: Always opens using default program, unless `with` is provided as "inAppBrowser".
+-    #[cfg(desktop)]
++    #[cfg(any(desktop, target_env = "ohos"))]
+     pub fn open_url(&self, url: impl Into<String>, with: Option<impl Into<String>>) -> Result<()> {
+         crate::open::open(
+             url.into(),
+@@ -84,7 +84,7 @@
+     /// ## Platform-specific:
+     ///
+     /// - **Android / iOS**: Always opens using default program, unless `with` is provided as "inAppBrowser".
+-    #[cfg(mobile)]
++    #[cfg(all(mobile, not(target_env = "ohos")))]
+     pub fn open_url(&self, url: impl Into<String>, with: Option<impl Into<String>>) -> Result<()> {
+         self.mobile_plugin_handle
+             .run_mobile_plugin(
+@@ -112,7 +112,7 @@
+     /// ## Platform-specific:
+     ///
+     /// - **Android / iOS**: Always opens using default program.
+-    #[cfg(desktop)]
++    #[cfg(any(desktop, target_env = "ohos"))]
+     pub fn open_path(
+         &self,
+         path: impl Into<String>,
+@@ -142,7 +142,7 @@
+     /// ## Platform-specific:
+     ///
+     /// - **Android / iOS**: Always opens using default program.
+-    #[cfg(mobile)]
++    #[cfg(all(mobile, not(target_env = "ohos")))]
+     pub fn open_path(
+         &self,
+         path: impl Into<String>,
+@@ -215,9 +215,9 @@
+                 let handle = api.register_ios_plugin(init_plugin_opener)?;
+ 
+                 app.manage(Opener {
+-                    #[cfg(not(mobile))]
++                    #[cfg(any(not(mobile), target_env = "ohos"))]
+                     _marker: std::marker::PhantomData::<fn() -> R>,
+-                    #[cfg(mobile)]
++                    #[cfg(all(mobile, not(target_env = "ohos")))]
+                     mobile_plugin_handle: handle,
+                     require_literal_leading_dot: api
+                         .config()
+--- a/plugins/opener/src/reveal_item_in_dir.rs
++++ b/plugins/opener/src/reveal_item_in_dir.rs
+@@ -15,7 +15,7 @@
+     #[cfg(any(
+         windows,
+         target_os = "macos",
+-        target_os = "linux",
++        all(target_os = "linux", not(target_env = "ohos")),
+         target_os = "dragonfly",
+         target_os = "freebsd",
+         target_os = "netbsd",
+@@ -26,7 +26,7 @@
+     #[cfg(not(any(
+         windows,
+         target_os = "macos",
+-        target_os = "linux",
++        all(target_os = "linux", not(target_env = "ohos")),
+         target_os = "dragonfly",
+         target_os = "freebsd",
+         target_os = "netbsd",
+@@ -55,7 +55,7 @@
+     #[cfg(any(
+         windows,
+         target_os = "macos",
+-        target_os = "linux",
++        all(target_os = "linux", not(target_env = "ohos")),
+         target_os = "dragonfly",
+         target_os = "freebsd",
+         target_os = "netbsd",
+@@ -66,7 +66,7 @@
+     #[cfg(not(any(
+         windows,
+         target_os = "macos",
+-        target_os = "linux",
++        all(target_os = "linux", not(target_env = "ohos")),
+         target_os = "dragonfly",
+         target_os = "freebsd",
+         target_os = "netbsd",
+@@ -201,7 +201,7 @@
+ }
+ 
+ #[cfg(any(
+-    target_os = "linux",
++    all(target_os = "linux", not(target_env = "ohos")),
+     target_os = "dragonfly",
+     target_os = "freebsd",
+     target_os = "netbsd",
+--- a/plugins/opener/src/open.rs
++++ b/plugins/opener/src/open.rs
+@@ -6,6 +6,7 @@
+ 
+ use std::{ffi::OsStr, path::Path};
+ 
++#[cfg(not(target_env = "ohos"))]
+ pub(crate) fn open<P: AsRef<OsStr>, S: AsRef<str>>(path: P, with: Option<S>) -> crate::Result<()> {
+     match with {
+         Some(program) => ::open::with_detached(path, program.as_ref()),
+@@ -59,3 +60,8 @@
+     }
+     open(path, with)
+ }
++
++#[cfg(target_env = "ohos")]
++pub(crate) fn open<P: AsRef<OsStr>, S: AsRef<str>>(_path: P, _with: Option<S>) -> crate::Result<()> {
++    Err(crate::Error::UnsupportedPlatform)
++}

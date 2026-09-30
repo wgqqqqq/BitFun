@@ -74,7 +74,8 @@ pub(super) fn probe_candidate(
 
     if let Some(entry) = cached.as_ref().filter(|entry| {
         entry.fingerprint == fingerprint
-            && (matches!(&entry.outcome, CandidateProbeOutcome::Available(_))
+            && ((entry.fingerprint.is_some()
+                && matches!(&entry.outcome, CandidateProbeOutcome::Available(_)))
                 || entry
                     .retry_after
                     .is_some_and(|retry_after| retry_after > now))
@@ -82,15 +83,18 @@ pub(super) fn probe_candidate(
         return entry.outcome.clone();
     }
 
-    let outcome = if fingerprint.is_some() {
+    let outcome = if fingerprint.is_some() || cfg!(target_env = "ohos") {
+        // HarmonyOS may permit exec of a system shell without exposing its
+        // metadata. The OHOS probe verifies execution, not just a version flag.
         probe()
     } else {
         CandidateProbeOutcome::Unavailable
     };
-    let retry_after = matches!(
-        &outcome,
-        CandidateProbeOutcome::AvailableWithProbeFailure | CandidateProbeOutcome::Unavailable
-    )
+    let retry_after = (fingerprint.is_none()
+        || matches!(
+            &outcome,
+            CandidateProbeOutcome::AvailableWithProbeFailure | CandidateProbeOutcome::Unavailable
+        ))
     .then(|| now + FAILED_PROBE_CACHE_TTL);
     *cached = Some(CachedCandidateProbe {
         fingerprint,
