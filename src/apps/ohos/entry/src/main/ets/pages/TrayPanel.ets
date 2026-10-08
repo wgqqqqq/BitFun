@@ -1,4 +1,4 @@
-import { common } from '@kit.AbilityKit';
+import { bundleManager, common } from '@kit.AbilityKit';
 
 @Entry
 @Component
@@ -7,7 +7,8 @@ struct TrayPanel {
     Row() {
       Button('OpenBitFun').onClick(async () => {
         const context = this.getUIContext().getHostContext() as common.UIExtensionContext;
-        await context.startAbility({ bundleName: 'com.openbitfun.desktop', abilityName: 'EntryAbility' });
+        const bundleName = bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT).name;
+        await context.startAbility({ bundleName, abilityName: 'EntryAbility' });
       })
     }.width('100%').height('100%').justifyContent(FlexAlign.Center)
   }

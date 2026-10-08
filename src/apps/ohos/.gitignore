@@ -6,3 +6,4 @@ signing.local.json
 **/build/
 entry/libs/
 entry/src/main/resources/resfile/
+ability/BuildProfile.ets
