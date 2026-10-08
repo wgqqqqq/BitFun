@@ -211,6 +211,10 @@ test('limits retired identity data to the one-time production migration boundary
 test('allows retired Harmony identifiers only at the upgrade identity boundary', () => {
   const legacyBundle = `com.${retiredLowerName}.app`;
   assert.deepEqual(
+    violationsFor(`"bundleName": "${legacyBundle}"`, 'src/apps/ohos/AppScope/app.json5'),
+    [],
+  );
+  assert.deepEqual(
     violationsFor(
       `static readonly APP_BUNDLE: string = '${legacyBundle}';`,
       'src/apps/mobile/harmonyos/entry/src/main/ets/services/HarmonyUpgradeIdentityContract.ets',
@@ -219,6 +223,10 @@ test('allows retired Harmony identifiers only at the upgrade identity boundary',
   );
   assert.equal(
     violationsFor(`const bundle = '${legacyBundle}';`, 'src/apps/mobile/harmonyos/entry/src/main/ets/services/example.ets').length,
+    1,
+  );
+  assert.equal(
+    violationsFor(`const bundle = '${legacyBundle}';`, 'src/apps/ohos/entry/src/main/ets/example.ets').length,
     1,
   );
 });

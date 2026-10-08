@@ -30,9 +30,9 @@ const retiredIdentityDataBoundaryFiles = new Set([
   'deploy/openbitfun-host/README.md',
   'deploy/openbitfun-host/migrate-market-data-v1.py',
   'src/apps/relay-server/README.md',
-  // HarmonyOS must keep its published bundle id and encrypted-storage names
-  // for in-place upgrades. Runtime identifiers are centralized in one source;
-  // the manifest and backup policy are the only declarative exceptions.
+  // HarmonyOS phone and watch keep their published bundle id and encrypted-storage
+  // names for in-place upgrades. The PC manifest matches their app identity;
+  // its single bundle-name line is allowed by the rule below.
   'src/apps/mobile/harmonyos/AppScope/app.json5',
   'src/apps/mobile/harmonyos/entry/src/main/ets/services/HarmonyUpgradeIdentityContract.ets',
   'src/apps/mobile/harmonyos/entry/src/main/resources/base/profile/backup_config.json',
@@ -102,6 +102,11 @@ const identityRules = Object.freeze([
     description: 'retired product name',
     pattern: new RegExp(retiredProductPatternSource, 'giu'),
     allowedMatch: ({ location }) => {
+      if (location.file === 'src/apps/ohos/AppScope/app.json5'
+        && location.location === 'content'
+        && location.lineText?.trim().match(new RegExp(`^"bundleName"\\s*:\\s*"com\\.${retiredProductToken}\\.app",?$`, 'iu'))) {
+        return true;
+      }
       if (location.file === '.gitignore'
         && location.location === 'content'
         && location.lineText?.trim() === `.${retiredProductToken}/`) {

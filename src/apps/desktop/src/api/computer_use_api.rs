@@ -5,6 +5,7 @@ use crate::api::app_state::AppState;
 use crate::computer_use::DesktopComputerUseHost;
 #[cfg(not(target_env = "ohos"))]
 use openbitfun_core::agentic::tools::computer_use_host::ComputerUseHost;
+#[cfg(not(target_env = "ohos"))]
 use openbitfun_core::service::config::types::AIConfig;
 #[cfg(target_os = "windows")]
 use openbitfun_core::util::process_manager;
@@ -132,15 +133,23 @@ pub async fn computer_use_open_system_settings(
 }
 
 /// Resource state is owned by the executing Desktop, not a newly constructed host.
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_control_status(
 ) -> Result<openbitfun_agent_tools::computer_use_control::ControlSnapshot, String> {
     Ok(crate::computer_use::control_session::snapshot())
 }
+#[cfg(target_env = "ohos")]
+#[tauri::command]
+pub async fn computer_use_control_status(
+) -> Result<openbitfun_agent_tools::computer_use_control::ControlSnapshot, String> {
+    Err("Native computer automation is not implemented on HarmonyOS PC".to_string())
+}
 #[derive(Debug, Deserialize)]
 pub struct ComputerUseControlRequest {
     pub generation: u64,
 }
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_control_stop(
     request: ComputerUseControlRequest,
@@ -155,9 +164,26 @@ pub async fn computer_use_control_stop(
     .await
     .map_err(|e| e.to_string())?
 }
+#[cfg(target_env = "ohos")]
+#[tauri::command]
+pub async fn computer_use_control_stop(
+    request: ComputerUseControlRequest,
+) -> Result<openbitfun_agent_tools::computer_use_control::ControlSnapshot, String> {
+    let _ = request;
+    Err("Native computer automation is not implemented on HarmonyOS PC".to_string())
+}
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub async fn computer_use_control_preview(
     request: ComputerUseControlRequest,
 ) -> Result<Option<crate::computer_use::control_session::ControlPreview>, String> {
     crate::computer_use::control_session::preview(request.generation)
+}
+#[cfg(target_env = "ohos")]
+#[tauri::command]
+pub async fn computer_use_control_preview(
+    request: ComputerUseControlRequest,
+) -> Result<Option<serde_json::Value>, String> {
+    let _ = request;
+    Err("Native computer automation is not implemented on HarmonyOS PC".to_string())
 }
