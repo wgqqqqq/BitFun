@@ -3,6 +3,7 @@ export function configureResourceDirectory(directory: string): void;
 export function registerWindowOperation(callback: (error: Error | null, action: string) => Promise<boolean>): void;
 export function configureSystemDarkMode(dark: boolean): void;
 export function configureDataDirectory(directory: string): void;
+export function configureDeviceDisplayName(name: string): void;
 export function configureTerminalDiagnostics(enabled: boolean): void;
 export function configureWorkspaceAccessDiagnostics(enabled: boolean): void;
 

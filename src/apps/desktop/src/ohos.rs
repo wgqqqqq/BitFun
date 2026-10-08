@@ -18,6 +18,13 @@ pub fn system_dark_mode() -> bool {
     DARK_MODE.load(std::sync::atomic::Ordering::Acquire)
 }
 
+/// The Ability reads the Settings device name before starting the Rust host.
+#[napi_derive_ohos::napi]
+pub fn configure_device_display_name(name: String) -> napi_ohos::Result<()> {
+    openbitfun_services_integrations::remote_connect::device::configure_host_device_name(&name)
+        .map_err(|error| napi_ohos::Error::from_reason(error.to_string()))
+}
+
 #[napi_derive_ohos::napi]
 pub fn configure_terminal_diagnostics(enabled: bool) -> napi_ohos::Result<()> {
     #[cfg(debug_assertions)]
