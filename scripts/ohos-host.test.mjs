@@ -7,10 +7,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const host = path.join(root, 'src/apps/ohos');
 const read = relative => readFileSync(path.join(root, relative), 'utf8');
 
-test('PC package identity and native library match the current Desktop host', () => {
+test('PC package identity matches the HarmonyOS controller and native library matches the Desktop host', () => {
   const app = JSON.parse(read('src/apps/ohos/AppScope/app.json5')).app;
-  const tauri = JSON.parse(read('src/apps/desktop/tauri.conf.json'));
-  assert.equal(app.bundleName, tauri.identifier);
+  const mobile = read('src/apps/mobile/harmonyos/AppScope/app.json5');
+  assert.equal(app.bundleName, mobile.match(/"bundleName"\s*:\s*"([^"]+)"/)[1]);
   const cargo = read('src/apps/desktop/Cargo.toml');
   const library = cargo.match(/\[lib\]\s*name\s*=\s*"([^"]+)"/)[1];
   const entry = read('src/apps/ohos/entry/src/main/ets/entryability/EntryAbility.ets');

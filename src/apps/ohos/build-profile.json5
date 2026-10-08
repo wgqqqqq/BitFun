@@ -26,6 +26,18 @@
   },
   "modules": [
     {
+      "name": "ability",
+      "srcPath": "./ability",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    },
+    {
       "name": "entry",
       "srcPath": "./entry",
       "targets": [

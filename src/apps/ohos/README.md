@@ -23,7 +23,7 @@ node scripts/ohos/hvigor.mjs --mode module -p product=default -p module=entry@de
 
 The packaging command intentionally fails if the current ARM64 native library or staged workbench/extension resources are missing. The check also runs when Hvigor has an older cached package. ArkTS-only compilation and IDE sync do not require those generated runtime files. Set `OPENBITFUN_DEVECO_CONTENTS` for a non-default DevEco installation.
 
-The application id follows the current Desktop identity: `com.openbitfun.desktop`. It does not overwrite the legacy PC install. Legacy data migration is not implemented; keep the existing app and its data.
+The HarmonyOS application id matches the phone and watch projects; see `AppScope/app.json5`. The PC host remains a separate native product with its own 2in1 entry module and Rust runtime; a shared bundle name alone does not enable distributed features. Debug signing must use a profile issued for this bundle and the target PC device.
 
 Configure automatic development signing for this project in DevEco Studio's Project Structure > Signing Configs. Then run `node scripts/ohos/save-signing.mjs` to move generated signing configuration into ignored `signing.local.json`. The Hvigor wrapper temporarily injects it for a build and restores the public profile afterward. Private key and certificate files remain in DevEco's local storage. Never commit the local signing file.
 
