@@ -6,7 +6,7 @@
 //! because macOS private Wi‑Fi addresses and interface order make MAC unstable.
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use anyhow::{anyhow, Context, Result};
 use sha2::{Digest, Sha256};
@@ -15,6 +15,23 @@ use sha2::{Digest, Sha256};
 pub use crate::remote_persistence::DeviceIdentityRecord as DeviceIdentity;
 
 static CACHED_IDENTITY: Mutex<Option<DeviceIdentity>> = Mutex::new(None);
+static HOST_DEVICE_NAME: OnceLock<String> = OnceLock::new();
+
+/// Let a platform host supply its user-facing device name before remote
+/// workers start. The persisted device ID remains independent of this name.
+pub fn configure_host_device_name(name: &str) -> Result<()> {
+    let name = metadata_value(name).ok_or_else(|| anyhow!("invalid host device name"))?;
+    if let Some(existing) = HOST_DEVICE_NAME.get() {
+        return if existing == &name {
+            Ok(())
+        } else {
+            Err(anyhow!("host device name was already configured"))
+        };
+    }
+    HOST_DEVICE_NAME
+        .set(name)
+        .map_err(|_| anyhow!("host device name was already configured"))
+}
 
 #[cfg(test)]
 thread_local! {
@@ -27,14 +44,14 @@ impl DeviceIdentity {
         if let Ok(guard) = CACHED_IDENTITY.lock() {
             if let Some(cached) = guard.as_ref() {
                 let mut identity = cached.clone();
-                identity.device_name = get_hostname();
+                identity.device_name = get_device_name();
                 identity.mac_address = get_mac_address();
                 return Ok(identity);
             }
         }
 
         let mut identity = load_persisted()?.unwrap_or_else(compute_initial_identity);
-        identity.device_name = get_hostname();
+        identity.device_name = get_device_name();
         identity.mac_address = get_mac_address();
         save_persisted(&identity)?;
         cache_identity(identity.clone());
@@ -61,7 +78,7 @@ impl DeviceIdentity {
             identity.device_id
         );
         identity.device_id = device_id.to_string();
-        identity.device_name = get_hostname();
+        identity.device_name = get_device_name();
         identity.mac_address = get_mac_address();
         save_persisted(&identity)?;
         cache_identity(identity.clone());
@@ -103,7 +120,9 @@ pub async fn local_device_metadata() -> serde_json::Value {
         probe("/usr/sbin/sysctl", &["-n", "hw.model"]).await,
         probe("/usr/bin/sw_vers", &["-productVersion"]).await,
     );
-    #[cfg(target_os = "linux")]
+    #[cfg(target_env = "ohos")]
+    let (model, version) = (HOST_DEVICE_NAME.get().cloned(), None);
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     let (model, version) = (
         tokio::fs::read_to_string("/sys/class/dmi/id/product_name")
             .await
@@ -193,11 +212,17 @@ fn is_valid_device_id(device_id: &str) -> bool {
 }
 
 fn compute_initial_identity() -> DeviceIdentity {
-    let device_name = get_hostname();
+    // Keep the legacy ID seed even when a platform supplies a better display
+    // name. An existing login may still refer to the old hostname-derived ID.
+    let hostname = get_hostname();
+    let device_name = get_device_name();
     let mac_address = get_mac_address();
+    initial_identity(&hostname, device_name, mac_address)
+}
 
+fn initial_identity(hostname: &str, device_name: String, mac_address: String) -> DeviceIdentity {
     let mut hasher = Sha256::new();
-    hasher.update(device_name.as_bytes());
+    hasher.update(hostname.as_bytes());
     hasher.update(b":");
     hasher.update(mac_address.as_bytes());
     let hash = hasher.finalize();
@@ -258,6 +283,10 @@ fn get_hostname() -> String {
         .ok()
         .and_then(|h| h.into_string().ok())
         .unwrap_or_else(|| "unknown-host".to_string())
+}
+
+fn get_device_name() -> String {
+    HOST_DEVICE_NAME.get().cloned().unwrap_or_else(get_hostname)
 }
 
 fn get_mac_address() -> String {
@@ -386,6 +415,18 @@ mod tests {
             let id2 = DeviceIdentity::from_current_machine().unwrap();
             assert_eq!(id1.device_id, id2.device_id);
         });
+    }
+
+    #[test]
+    fn display_name_does_not_change_legacy_device_id() {
+        let old = initial_identity("localhost", "localhost".into(), "aa:bb:cc:dd:ee:ff".into());
+        let renamed = initial_identity(
+            "localhost",
+            "HUAWEI MateBook Fold".into(),
+            "aa:bb:cc:dd:ee:ff".into(),
+        );
+        assert_eq!(old.device_id, renamed.device_id);
+        assert_eq!(renamed.device_name, "HUAWEI MateBook Fold");
     }
 
     #[test]

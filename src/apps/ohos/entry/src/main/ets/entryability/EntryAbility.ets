@@ -6,8 +6,9 @@ import { NativeAbility } from '@ohos-rs/ability';
 import { AbilityConstant, Want } from '@kit.AbilityKit';
 import window from '@ohos.window';
 import resourceManager from '@ohos.resourceManager';
+import { deviceInfo, settings } from '@kit.BasicServicesKit';
 import { WorkspaceAccess } from '../WorkspaceAccess';
-import { registerTrayOperation, registerExternalUrlOpener, configureDataDirectory, configureSystemDarkMode, configureResourceDirectory, configureTerminalDiagnostics, configureWorkspaceAccessDiagnostics, registerWorkspaceAccess, registerWindowOperation } from 'libopenbitfun_desktop_lib.so';
+import { registerTrayOperation, registerExternalUrlOpener, configureDataDirectory, configureDeviceDisplayName, configureSystemDarkMode, configureResourceDirectory, configureTerminalDiagnostics, configureWorkspaceAccessDiagnostics, registerWorkspaceAccess, registerWindowOperation } from 'libopenbitfun_desktop_lib.so';
 
 // The library is built from this repository's src/apps/desktop.
 export default class EntryAbility extends NativeAbility {
@@ -35,6 +36,14 @@ export default class EntryAbility extends NativeAbility {
 
   async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): Promise<void> {
     configureDataDirectory(this.context.filesDir);
+    let deviceName: string = '';
+    try {
+      deviceName = settings.getValueSync(this.context, settings.general.DEVICE_NAME, '').trim();
+    } catch (_) {
+      // Some PC images do not expose a user-configured Settings device name.
+    }
+    if (deviceName.toLowerCase() === 'localhost') deviceName = '';
+    configureDeviceDisplayName(deviceName || deviceInfo.marketName || deviceInfo.productModel || 'HarmonyOS PC');
     const companion = new CompanionWindow(this.context);
     this.companion = companion;
     registerCompanionOperation(async (error: Error | null, request: string): Promise<string> => {

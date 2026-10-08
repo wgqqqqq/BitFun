@@ -131,6 +131,7 @@ interface ProvisionDeviceWire {
 interface CloudAccountDeviceWire {
   device_id: string;
   device_name: string;
+  device_model?: string;
   device_kind?: string;
   online: boolean;
   last_seen_at?: number;
@@ -410,7 +411,11 @@ export class CloudAccountClient {
       isHostDeviceRow(device, selfDeviceId));
     return hosts.map((device: CloudAccountDeviceWire): CloudAccountDevice => ({
       deviceId: device.device_id,
-      deviceName: device.device_name || device.device_id,
+      // Older Relays retain the first login name across reconnects. The host
+      // can still refresh its authenticated model metadata on every connect.
+      deviceName: device.device_name.trim().toLowerCase() === 'localhost'
+        ? (device.device_model || device.device_name)
+        : (device.device_name || device.device_id),
       deviceKind: device.device_kind,
       online: device.online,
       lastSeenAt: device.last_seen_at,
