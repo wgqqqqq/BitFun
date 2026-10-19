@@ -13,7 +13,7 @@ pub fn register_external_url_opener(callback: OpenCallback) -> napi_ohos::Result
 }
 
 #[tauri::command]
-async fn open_url(url: String, with: Option<String>) -> Result<(), String> {
+pub(crate) async fn open_url(url: String, with: Option<String>) -> Result<(), String> {
     let parsed = tauri::Url::parse(&url).map_err(|_| "Invalid external URL")?;
     if !matches!(parsed.scheme(), "https" | "http")
         || parsed.host_str().is_none()

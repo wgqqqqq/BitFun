@@ -9,6 +9,37 @@ use tauri::ohos::{openharmony_ability, openharmony_ability_derive};
 
 static DARK_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+// The HAP enters through NativeAbility, bypassing main.rs and its 8 MiB
+// worker-stack setup. Debug Agent/tool futures exceed Tokio's 2 MiB default.
+// Keep one process-lifetime runtime shared by Tauri and all product tasks.
+static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+fn initialize_runtime() {
+    RUNTIME.get_or_init(|| {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .thread_stack_size(8 * 1024 * 1024)
+            .enable_all()
+            .build()
+            .expect("Failed to build HarmonyOS Desktop runtime");
+        tauri::async_runtime::set(runtime.handle().clone());
+        runtime
+    });
+}
+
+#[napi_derive_ohos::napi]
+pub fn configure_runtime_diagnostics(enabled: bool) -> napi_ohos::Result<()> {
+    #[cfg(debug_assertions)]
+    runtime_diagnostics::request(enabled);
+    #[cfg(not(debug_assertions))]
+    if enabled {
+        return Err(napi_ohos::Error::from_reason(
+            "Runtime diagnostics require a debug build",
+        ));
+    }
+    Ok(())
+}
+
 #[napi_derive_ohos::napi]
 pub fn configure_system_dark_mode(dark: bool) {
     DARK_MODE.store(dark, std::sync::atomic::Ordering::Release);
@@ -129,11 +160,12 @@ pub fn bundled_mobile_web_directory() -> Option<PathBuf> {
 
 #[openharmony_ability_derive::ability(
     webview,
-    protocol = "tauri,ipc,asset,isolation,openbitfun-ui"
+    protocol = "tauri,ipc,asset,isolation,openbitfun-ui,openbitfun-miniapp"
 )]
 pub fn openharmony(app: openharmony_ability::OpenHarmonyApp) {
     // Never unwind across the platform callback boundary.
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        initialize_runtime();
         tauri::ohos::APP
             .lock()
             .expect("HarmonyOS application state lock poisoned")
@@ -146,6 +178,10 @@ pub fn openharmony(app: openharmony_ability::OpenHarmonyApp) {
         std::process::abort();
     }
 }
+
+#[cfg(debug_assertions)]
+#[path = "ohos/runtime_diagnostics.rs"]
+pub mod runtime_diagnostics;
 
 #[path = "ohos/window.rs"]
 pub mod window;

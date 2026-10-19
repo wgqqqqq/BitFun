@@ -42,9 +42,20 @@ pub(crate) async fn miniapp_presentation(
     crate::miniapp_desktop::miniapp_presentation(app, webview, request).await
 }
 
+#[cfg(not(target_env = "ohos"))]
 #[tauri::command]
 pub(crate) fn miniapp_shell_call(request: Value) -> Result<Value, String> {
     crate::miniapp_desktop::miniapp_shell_call(request)
+}
+
+#[cfg(target_env = "ohos")]
+#[tauri::command]
+pub(crate) async fn miniapp_shell_call(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: Value,
+) -> Result<Value, String> {
+    crate::miniapp_desktop::ohos::shell_call(&app, webview.label(), request).await
 }
 
 // ============== Request/Response DTOs ==============

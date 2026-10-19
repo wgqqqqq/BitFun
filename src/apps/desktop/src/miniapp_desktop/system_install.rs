@@ -20,7 +20,7 @@ pub(super) fn applications_directory() -> Result<PathBuf, String> {
     Err("System MiniApp launchers are unsupported on this platform".into())
 }
 
-fn records(
+pub(super) fn records(
     data_dir: &Path,
     app_id: &str,
     channel: super::ipc::HostChannel,

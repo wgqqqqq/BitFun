@@ -30,7 +30,7 @@ export function mountTitlebar(element: HTMLElement, options: {
   icons: Record<string, string>;
   locale: string;
   labels: Record<string, string>;
-  platform: 'macos' | 'windows' | 'linux';
+  platform: 'macos' | 'windows' | 'linux' | 'ohos';
   preview?: boolean;
   ready?: boolean;
   onAction?: (action: string) => void;

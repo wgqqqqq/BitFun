@@ -631,7 +631,6 @@ pub fn create_main_window(
         )
         .resizable(true)
         .visible(false)
-        .accept_first_mouse(true)
         .initialization_script(&init_script)
         .on_page_load({
             let startup_trace_id = startup_trace_id.to_string();
@@ -667,6 +666,11 @@ pub fn create_main_window(
         native_sidebar_material,
         appearance.to_tauri_color(),
     );
+
+    #[cfg(target_env = "ohos")]
+    {
+        builder = builder.background_color(appearance.to_tauri_color());
+    }
 
     // The Linux window is transparent because the shell draws the frame radius
     // itself: WebKitGTK keeps the GTK frame square on Wayland.

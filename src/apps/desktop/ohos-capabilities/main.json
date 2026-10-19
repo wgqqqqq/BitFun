@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "ohos-main",
   "description": "HarmonyOS PC main workbench; native window controls use the desktop host bridge.",
-  "windows": [
+  "webviews": [
     "main"
   ],
   "permissions": [

@@ -478,23 +478,6 @@ export const AgentCompanionDesktopPet: React.FC = () => {
   // Only the inline composer changes bubble layout; floating menus do not.
   const composingSessionId = overlay?.kind === 'composer' ? overlay.sessionId : null;
   const harmonyPetMenuOpen = IS_HARMONY_COMPANION && overlay?.kind === 'pet-menu';
-  const pendingSizeRef = useRef<{ width: number; height: number } | null>(null);
-  const resizingRef = useRef(false);
-  const flushWindowSize = async () => {
-    if (resizingRef.current) return;
-    resizingRef.current = true;
-    try {
-      while (pendingSizeRef.current) {
-        const size = pendingSizeRef.current;
-        pendingSizeRef.current = null;
-        await api.invoke('resize_agent_companion_desktop_pet', size);
-      }
-    } catch (error) {
-      log.warn('Failed to resize Agent companion window', error);
-    } finally {
-      resizingRef.current = false;
-    }
-  };
 
   useLayoutEffect(() => {
     // Written here (not during render) so an abandoned/double render cannot

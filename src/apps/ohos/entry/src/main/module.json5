@@ -26,6 +26,15 @@
             ]
           }
         ]
+      },
+      {
+        "name": "MiniAppAbility",
+        "srcEntry": "./ets/miniappability/MiniAppAbility.ets",
+        "label": "$string:app_name",
+        "startWindowIcon": "$media:app_icon",
+        "startWindowBackground": "$color:start_window_background",
+        "exported": false,
+        "launchType": "specified"
       }
     ],
     "requestPermissions": [
@@ -57,6 +66,7 @@
         "exported": true,
         "icon": "$media:app_icon"
       }
-    ]
+    ],
+    "srcEntry": "./ets/MiniAppStage.ets"
   }
 }

@@ -7,6 +7,19 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const host = path.join(root, 'src/apps/ohos');
 const read = relative => readFileSync(path.join(root, relative), 'utf8');
 
+test('the HAP bootstrap owns a process-lifetime runtime with Desktop worker stack capacity', () => {
+  const source = read('src/apps/desktop/src/ohos.rs');
+  const entry = source.slice(source.indexOf('pub fn openharmony('));
+  assert.ok(source.includes('static RUNTIME: OnceLock<tokio::runtime::Runtime>'));
+  assert.ok(source.includes('.thread_stack_size(8 * 1024 * 1024)'));
+  assert.ok(source.includes('.worker_threads(4)'));
+  assert.ok(source.includes('tauri::async_runtime::set(runtime.handle().clone())'));
+  assert.ok(entry.includes('initialize_runtime();'));
+  assert.ok(entry.indexOf('initialize_runtime();') < entry.indexOf('tauri::async_runtime::block_on(crate::run())'));
+  const ark = read('src/apps/ohos/entry/src/main/ets/entryability/EntryAbility.ets');
+  assert.ok(ark.includes("configureRuntimeDiagnostics(want.parameters?.['openbitfun.runtimeDiagnostic'] === true)"));
+});
+
 test('PC package identity matches the HarmonyOS controller and native library matches the Desktop host', () => {
   const app = JSON.parse(read('src/apps/ohos/AppScope/app.json5')).app;
   const mobile = read('src/apps/mobile/harmonyos/AppScope/app.json5');
@@ -90,7 +103,10 @@ test('packaging requires mobile-web HTML and assets alongside Desktop resources'
 
 test('the product companion replaces the exported diagnostic surface', () => {
   const module = JSON.parse(read('src/apps/ohos/entry/src/main/module.json5')).module;
-  assert.deepEqual(module.abilities.map(ability => ability.name), ['EntryAbility']);
+  assert.deepEqual(module.abilities.map(ability => ability.name), ['EntryAbility', 'MiniAppAbility']);
+  const miniapp = module.abilities.find(ability => ability.name === 'MiniAppAbility');
+  assert.equal(miniapp.exported, false);
+  assert.equal(miniapp.launchType, 'specified');
   const routes = JSON.parse(read('src/apps/ohos/entry/src/main/resources/base/profile/main_pages.json')).src;
   assert.ok(routes.includes('pages/Companion'));
   assert.ok(!routes.includes('pages/PetProbe'));

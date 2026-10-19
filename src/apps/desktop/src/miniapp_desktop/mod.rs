@@ -3,6 +3,8 @@
 mod chat;
 mod ipc;
 mod launcher;
+#[cfg(target_env = "ohos")]
+pub(crate) mod ohos;
 mod sdk;
 mod system_install;
 
@@ -39,6 +41,7 @@ pub(crate) fn run_shell(manifest: std::path::PathBuf) -> Result<(), String> {
 
 /// Retain the old Desktop command name for installed clients. Shell commands
 /// are now implemented exclusively by the independent window executable.
+#[cfg(not(target_env = "ohos"))]
 pub(crate) fn miniapp_shell_call(request: Value) -> Result<Value, String> {
     let _ = request;
     Err("MiniApp Shell command is unavailable on this surface".into())
@@ -659,13 +662,18 @@ async fn open_window(
         record.workspace_path.clone(),
         MiniAppViewKind::Window,
     )?;
-    if let Some(lease) = host
-        .shells
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .get_mut(&view.view_id)
-    {
-        lease.push("focus", Value::Null);
+    let running = {
+        let mut shells = host.shells.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(lease) = shells.get_mut(&view.view_id) {
+            lease.push("focus", Value::Null);
+            true
+        } else {
+            false
+        }
+    };
+    if running {
+        #[cfg(target_env = "ohos")]
+        ohos::open(app, &record, &instance, &view).await?;
         changed(app);
         return Ok(Ticket { instance, view });
     }
@@ -680,36 +688,48 @@ async fn open_window(
             .unwrap_or_else(|p| p.into_inner())
             .insert(view.view_id.clone());
     }
-    let path = launcher::write_record(&record)?;
-    #[cfg(target_os = "macos")]
-    let spawn = {
-        let native = tokio::task::spawn_blocking(move || launcher::runtime_bundle(&record))
-            .await
-            .map_err(|e| e.to_string())??;
-        create_command("/usr/bin/open")
-            .arg("-n")
-            .arg(native)
-            .spawn()
-    };
-    #[cfg(not(target_os = "macos"))]
-    let spawn = create_command(launcher::shell_executable(&record.host_executable)?)
-        .arg("--miniapp-launch")
-        .arg(path)
-        .spawn();
-    let _ = path;
-    let mut child = match spawn {
-        Ok(child) => child,
-        Err(error) => {
+    #[cfg(target_env = "ohos")]
+    {
+        if let Err(error) = ohos::open(app, &record, &instance, &view).await {
             let _ = host.instances.detach(&instance.instance_id, &view.view_id);
-            return Err(error.to_string());
+            return Err(error);
         }
-    };
-    // Reap launchers without making Tokio shutdown wait for an independent shell.
-    std::thread::spawn(move || {
-        let _ = child.wait();
-    });
-    changed(app);
-    Ok(Ticket { instance, view })
+        changed(app);
+        return Ok(Ticket { instance, view });
+    }
+    #[cfg(not(target_env = "ohos"))]
+    {
+        let path = launcher::write_record(&record)?;
+        #[cfg(target_os = "macos")]
+        let spawn = {
+            let native = tokio::task::spawn_blocking(move || launcher::runtime_bundle(&record))
+                .await
+                .map_err(|e| e.to_string())??;
+            create_command("/usr/bin/open")
+                .arg("-n")
+                .arg(native)
+                .spawn()
+        };
+        #[cfg(not(target_os = "macos"))]
+        let spawn = create_command(launcher::shell_executable(&record.host_executable)?)
+            .arg("--miniapp-launch")
+            .arg(path)
+            .spawn();
+        let _ = path;
+        let mut child = match spawn {
+            Ok(child) => child,
+            Err(error) => {
+                let _ = host.instances.detach(&instance.instance_id, &view.view_id);
+                return Err(error.to_string());
+            }
+        };
+        // Reap launchers without making Tokio shutdown wait for an independent shell.
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+        changed(app);
+        Ok(Ticket { instance, view })
+    }
 }
 
 /// The desktop app the user published for one MiniApp, if any.
@@ -817,6 +837,9 @@ async fn presentation(
             let workspace_path = local_workspace(app, workspace_path).await?;
             let _guard = host.launches.lock().await;
             let record = record(app, &app_id, workspace_path).await?;
+            #[cfg(target_env = "ohos")]
+            let path = ohos::install_shortcut(&record, icon_svg).await?;
+            #[cfg(not(target_env = "ohos"))]
             let path = tokio::task::spawn_blocking(move || {
                 launcher::install(&record, icon_svg.as_deref())
             })
@@ -832,6 +855,9 @@ async fn presentation(
                 .miniapp_manager
                 .path_manager()
                 .user_data_dir();
+            #[cfg(target_env = "ohos")]
+            let paths = ohos::shortcuts(&data_dir, &app_id, false, channel).await?;
+            #[cfg(not(target_env = "ohos"))]
             let paths = tokio::task::spawn_blocking(move || {
                 system_install::status(&data_dir, &app_id, channel)
             })
@@ -847,6 +873,9 @@ async fn presentation(
                 .miniapp_manager
                 .path_manager()
                 .user_data_dir();
+            #[cfg(target_env = "ohos")]
+            ohos::shortcuts(&data_dir, &app_id, true, channel).await?;
+            #[cfg(not(target_env = "ohos"))]
             tokio::task::spawn_blocking(move || {
                 system_install::uninstall(&data_dir, &app_id, channel)
             })
@@ -1685,6 +1714,8 @@ pub(crate) fn install(app: &tauri::AppHandle) -> Result<(), String> {
             if handle.get_webview("main").is_some() {
                 state.instances.renew_committed_views(MiniAppViewKind::Tab);
             }
+            #[cfg(target_env = "ohos")]
+            ohos::renew(&handle);
             {
                 let _guard = state.launches.lock().await;
                 // Expired/crashed shells and failed initial presentations must
@@ -1736,5 +1767,7 @@ pub(crate) fn install(app: &tauri::AppHandle) -> Result<(), String> {
         changed(&handle);
     });
     sdk::install_events(app);
+    #[cfg(target_env = "ohos")]
+    ohos::ready(app);
     Ok(())
 }
