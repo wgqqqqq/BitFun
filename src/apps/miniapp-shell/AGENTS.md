@@ -20,7 +20,13 @@ Use the renderer and generated Lucide catalog in `src/shared/miniapp-chrome` for
 both native windows and draft previews. Window controls remain host-owned and
 usable on content/IPC failure. Keep the return action disabled until the content view is ready,
 and acquire its transfer guard before awaiting IPC. Native close must not wait
-indefinitely for a disconnected host. The v1 IPC bootstrap advertises
+indefinitely for a disconnected host.
+HarmonyOS transfer confirmation uses the trusted shell's modal dialog because
+unhandled ArkWeb JavaScript confirmations return cancellation without a prompt.
+Acquire the transfer guard before opening it; cancellation must retain the source.
+Only a poll started after host acceptance can report a failed target; waiting
+for confirmation is not a failed transfer.
+The v1 IPC bootstrap advertises
 `miniapp_custom_chrome_v1`; older hosts use the default custom titlebar.
 macOS keeps native decorations with an overlay titlebar and actual AppKit traffic
 lights, using the main app's token-based inset and minimum row height. Windows

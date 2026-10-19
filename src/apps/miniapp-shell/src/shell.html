@@ -20,13 +20,15 @@ body { display: flex; flex-direction: column; background: var(--openbitfun-color
 
 
 
-#status button, #permissions button, #titlebar button { font: inherit; }
+#status button, #permissions button, #titlebar button, #transfer-confirm button { font: inherit; }
 button { cursor: pointer; }
 #status button { padding: 5px 12px; }
 iframe { flex: 1; min-height: 0; width: 100%; border: 0; }
 #status { padding: 12px; white-space: pre-wrap; overflow: auto; }
 #permissions { position: relative; z-index: 11; background: var(--openbitfun-color-surface-raised); padding: 12px; border-top: 1px solid var(--openbitfun-color-border-subtle); max-height: 180px; overflow: auto; }
 #permissions p { white-space: pre-wrap; overflow-wrap: anywhere; }
+#transfer-confirm { max-width: min(480px, calc(100vw - 48px)); font: inherit; background: inherit; color: inherit; border: 1px solid var(--openbitfun-color-border-subtle); }
+#transfer-confirm form { display: flex; justify-content: flex-end; gap: 12px; }
 [hidden] { display: none !important; }
 </style></head><body>
 <header id="titlebar"></header>
@@ -35,6 +37,7 @@ iframe { flex: 1; min-height: 0; width: 100%; border: 0; }
 <iframe id="app" title="MiniApp" sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads" referrerpolicy="no-referrer" hidden></iframe>
 <aside id="permissions" aria-live="polite" hidden></aside>
 <div id="miniapp-chat" hidden></div>
+<dialog id="transfer-confirm" aria-describedby="transfer-warning"><p id="transfer-warning"></p><form method="dialog"><button value="cancel" autofocus></button><button value="confirm"></button></form></dialog>
 <script type="module">
 import { mountTitlebar } from '/titlebar.js';
 import { mountMiniAppChat } from '/miniapp-chat.js';
@@ -55,16 +58,36 @@ const chatLabels = await fetch('/chat-labels.json').then(response => response.js
     onStop: params => native('rpc', { method: 'agent.cancel', params }),
     loadSnapshot: sessionId => native('chatSnapshot', { sessionId }),
   });
-  let stopped = false, pollGeneration = 0, transferring = false, titlebar, contentReady = false;
+  let stopped = false, pollGeneration = 0, transferring = false, transferAccepted = false, titlebar, contentReady = false;
+  const confirmTransfer = action => {
+    // ArkWeb rejects an unhandled JavaScript confirm without showing a dialog.
+    // Keep the confirmation in trusted shell chrome, outside MiniApp content.
+    if (platform !== 'ohos') return Promise.resolve(confirm(bootstrap.ui.transferWarning));
+    const dialog = document.getElementById('transfer-confirm');
+    dialog.setAttribute('aria-label', bootstrap.ui[action]);
+    document.getElementById('transfer-warning').textContent = bootstrap.ui.transferWarning;
+    dialog.querySelector('[value="cancel"]').textContent = bootstrap.ui.cancel || bootstrap.ui.reject;
+    dialog.querySelector('[value="confirm"]').textContent = bootstrap.ui[action];
+    dialog.returnValue = 'cancel';
+    return new Promise((resolve, reject) => {
+      const close = () => { dialog.removeEventListener('close', close); resolve(dialog.returnValue === 'confirm'); };
+      dialog.addEventListener('close', close);
+      try { dialog.showModal(); }
+      catch (cause) { dialog.removeEventListener('close', close); reject(cause); }
+    });
+  };
   const nativeState = state => {
     titlebar?.setMaximized(state.maximized || state.fullscreen);
     titlebar?.setFullscreen(state.fullscreen);
-    document.getElementById('resize-borders').hidden = platform === 'macos' || state.maximized || state.fullscreen;
+    document.getElementById('resize-borders').hidden = ['macos', 'ohos'].includes(platform) || state.maximized || state.fullscreen;
   };
   const transfer = async () => {
-    if (!bootstrap || !contentReady || transferring || !confirm(bootstrap.ui.transferWarning)) return;
-    transferring = true; titlebar?.setTransferring(true);
-    try { await native('tab'); statusText.textContent = bootstrap.ui.transferring; status.hidden = false; }
+    if (!bootstrap || !contentReady || transferring) return;
+    transferring = true; transferAccepted = false; titlebar?.setTransferring(true);
+    try {
+      if (!await confirmTransfer('openTab')) { transferring = false; titlebar?.setTransferring(false); return; }
+      await native('tab'); transferAccepted = true; statusText.textContent = bootstrap.ui.transferring; status.hidden = false;
+    }
     catch (cause) { transferring = false; titlebar?.setTransferring(false); error(cause); }
   };
   const windowAction = async action => {
@@ -88,7 +111,7 @@ const chatLabels = await fetch('/chat-labels.json').then(response => response.js
     titlebar.setTransferring(!bootstrap || transferring);
     void native('windowState').then(nativeState).catch(error);
   };
-  for (const direction of platform === 'macos' ? [] : ['North','South','East','West','NorthEast','NorthWest','SouthEast','SouthWest']) {
+  for (const direction of ['macos', 'ohos'].includes(platform) ? [] : ['North','South','East','West','NorthEast','NorthWest','SouthEast','SouthWest']) {
     const region = document.createElement('div'); region.dataset.direction = direction;
     region.onmousedown = e => { if (e.button === 0) { e.preventDefault(); void native('resize', { direction }).catch(error); } };
     document.getElementById('resize-borders').append(region);
@@ -174,11 +197,12 @@ const chatLabels = await fetch('/chat-labels.json').then(response => response.js
   async function poll(generation) {
     while (!stopped && generation === pollGeneration) {
       try {
+        const transferWasAccepted = transferAccepted;
         const batch = await native('poll', { after: cursor });
         if (generation !== pollGeneration) return;
         chat.setConnected(true);
         if (batch.released) { stopped = true; await native('close'); return; }
-        if (transferring && !batch.pendingView) { transferring = false; titlebar?.setTransferring(false); error(bootstrap.ui.transferFailed); }
+        if (transferring && transferWasAccepted && transferAccepted && !batch.pendingView) { transferring = false; titlebar?.setTransferring(false); error(bootstrap.ui.transferFailed); }
         if (batch.resyncRequired) {
           // The chat snapshot does not recover app-owned Worker/AI events.
           error(bootstrap.ui.eventGap);
@@ -206,7 +230,7 @@ const chatLabels = await fetch('/chat-labels.json').then(response => response.js
       bootstrap = await native('bootstrap');
       if (bootstrap.reused) return;
       const ui = bootstrap.ui;
-      if (bootstrap.instance.primaryView?.kind === 'tab' && !bootstrap.transferConfirmed && !confirm(ui.transferWarning)) {
+      if (bootstrap.instance.primaryView?.kind === 'tab' && !bootstrap.transferConfirmed && !await confirmTransfer('openWindow')) {
         await native('close'); return;
       }
       document.documentElement.style.colorScheme = bootstrap.appearanceMode;

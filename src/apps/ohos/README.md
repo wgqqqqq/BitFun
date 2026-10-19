@@ -6,6 +6,9 @@ An experimental ARM64 HAP has been built, signed, installed and started on a con
 
 From the repository root on macOS with DevEco Studio installed:
 
+Before the first build in a checkout, run DevEco Studio's `ohpm install` from
+`src/apps/ohos/entry` to resolve the vendored Ability bridge and native-library typings.
+
 ```bash
 node --test scripts/ohos-host.test.mjs
 # Build frontend before applying the isolated Cargo dependency overrides.
@@ -102,3 +105,75 @@ The installed fix tracked 500-pixel forward/reverse and fast injected drags with
 2026-09-15 顶部栏采用官方自由窗口沉浸方案：在页面挂载完成后隐藏系统标题文字区域，保留原生三键，45vp 高度与工作台工具栏对齐。`WindowChrome` 在主 WebView 初始化、聚焦及尺寸变化时读取实际三键区域，动态设置工作台顶部栏右侧避让；API24真机测得123vp，进入会话、最大化及还原均保持工具按钮分离。按钮明暗由工作台背景同步。顶部空白区域通过原生onTouch调用startMoving，交互按钮、标签页及弹出菜单区域不触发拖窗；真机注入100×70px拖动通过。桌宠保持独立宿主。本次check:web、HAP构建及宿主测试通过；API22、完整深色主题切换和远程场景尚未验证。
 
 官方方案：https://developer.huawei.com/consumer/cn/doc/best-practices/bpta-multi-device-window-immersive
+
+
+## MiniApp desktop entries
+
+On API 24 or later, open Home → MiniApps and use the app card's independent-window
+or “添加为系统应用” action. The latter asks HarmonyOS to add a desktop shortcut with
+that MiniApp's icon/name. Each MiniApp has a separate native window and task, while
+all windows share the existing OpenBitFun backend and MiniApp permissions. Opening
+the same entry again focuses its window. The workbench close button minimizes it
+and keeps the shared host alive for subsequent desktop launches. Cold desktop launches initialize the one host.
+
+The desktop entry is a same-bundle shortcut, not a distributable standalone HAP.
+HarmonyOS owns confirmation and the device's shortcut quota. Updating an existing
+entry requires separate remove/add confirmations because the public API has no
+in-place update. If the second step is cancelled, retry adding the entry; the
+MiniApp and its data remain intact. Removing an entry never deletes the MiniApp.
+Missing/deleted apps and unsupported system services return errors. File dialogs,
+system notifications and fullscreen in the lightweight window are currently
+unsupported and report that state explicitly. Remote workspace, remote control,
+Peer Device Mode and Detached Dispatch cannot install local presentation entries.
+
+
+2026-10-19 API 24 PC validation: a debug-signed product HAP added the built-in
+Gomoku shortcut through the system confirmation dialog. The desktop icon opened
+its own rendered window from a stopped process and after the previous window
+closed, retaining one host PID on warm launch. Workbench close was intercepted
+synchronously and minimized the host; a second MiniApp then opened in the same
+process. Closing the last native view left an empty instance snapshot. The
+existing desktop shortcut and launch record survived replacement HAP installs.
+Device probes rejected general product commands, direct filesystem plugin calls
+and private SDK authority methods from the lightweight shell. Validation included
+16 platform contract tests, 29 focused frontend/API tests, Web UI type checking,
+macOS/OHOS Rust compilation and signed HAP packaging. The four remote scenarios
+were not exercised on-device; the existing local-presentation refusal remains.
+
+
+2026-10-19 immersive caption drag fix: hidden retained dialog/menu nodes no longer
+clear the workbench's native caption regions. The native container retains only
+empty-caption presses during hit testing so ArkWeb cannot consume the move gesture;
+buttons, tabs and content still receive their normal input. Window movement starts
+in the native Touch Down callback with an explicit grab offset converted from vp
+to physical pixels. Four focused tests execute the production injected script and
+native hit-test adapter. On the API 24 PC, HDC mouse drags of (+120,+40) and
+(-120,-40) px and touch drags of (+80,+30) and (-80,-30) px matched WindowManager
+geometry exactly across consecutive moves. The sidebar button still toggled with
+no window movement. This is injected-input evidence on local windows; physical
+mouse/touch feel and the four remote scenarios were not exercised.
+
+2026-10-19 MiniApp return-button fix: HarmonyOS uses a modal confirmation in
+trusted shell chrome because unhandled ArkWeb JavaScript confirmations silently
+cancelled the transfer. The click guard covers the confirmation period, and host
+polling checks target failure only after the transfer was accepted. On the API 24
+PC, injected clicks opened the warning, kept the source after cancellation, then
+restored the minimized workbench and transferred the same instance to a tab.
+The native MiniApp window closed only after the tab became ready; the host PID
+stayed unchanged. Validation passed 26 focused frontend tests, 20 host tests,
+i18n/theme audits, OHOS native compilation and signed HAP installation. The four
+remote scenarios were not exercised; this change affects local shell presentation.
+
+2026-10-19 Creative session crash: the native fault report at 18:54:28 showed a
+Tokio worker exhausting its approximately 2 MiB stack while explicitly loading
+`miniapp-dev`. Symbolization reached the Skill registry through the ordinary
+Agent/tool pipeline. Desktop `main.rs` already configured 8 MiB stacks, but the
+HAP Ability entry bypassed it, including in the pre-rebase origin branch. The
+Ability now creates one process-lifetime runtime with four workers and explicit
+8 MiB stacks, then shares its handle with Tauri before product initialization.
+On the API 24 PC, the replacement HAP passed native 3 MiB stack probes on async
+and blocking workers and loaded the same Skill through the tool API without a
+model request. The original session and its one stored turn restored after
+startup. The complete Creative turn and four remote scenarios were not replayed.
+Validation passed 21 focused host tests, OHOS native compilation and signed HAP
+installation.

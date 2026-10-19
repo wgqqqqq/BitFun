@@ -6,6 +6,7 @@ export function configureDataDirectory(directory: string): void;
 export function configureDeviceDisplayName(name: string): void;
 export function configureTerminalDiagnostics(enabled: boolean): void;
 export function configureWorkspaceAccessDiagnostics(enabled: boolean): void;
+export function configureRuntimeDiagnostics(enabled: boolean): void;
 
 export declare function registerExternalUrlOpener(callback: (error: Error | null, url: string) => Promise<boolean>): void;
 
@@ -14,3 +15,7 @@ export declare function registerTrayOperation(callback: (error: Error | null, ac
 export function registerCompanionOperation(callback: (error: Error | null, request: string) => Promise<string>): void;
 
 export function registerWorkspaceAccess(callback: (error: Error | null, request: string) => Promise<string>): void;
+
+export function registerMiniappOperation(callback: (error: Error | null, request: string) => Promise<string>): void;
+export function launchMiniApp(launchId: string, complete: (error: Error | null) => void): void;
+export function miniAppWindowClosed(label: string): void;

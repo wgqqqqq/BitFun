@@ -10,7 +10,7 @@ import chatLabels from '../../../../../../apps/miniapp-shell/src/chat-labels.jso
 
 const html = readFileSync(resolve(process.cwd(), '../apps/miniapp-shell/src/shell.html'), 'utf8');
 const source = html.slice(html.indexOf('(() => {'), html.indexOf('</script>'));
-const labels = { ...windowLabels['en-US'], titlebar: 'Window controls', openTab: 'Return to app', retry: 'Retry', transferWarning: 'Save first', transferring: 'Opening', transferFailed: 'Transfer failed' };
+const labels = { ...windowLabels['en-US'], titlebar: 'Window controls', openTab: 'Return to app', openWindow: 'Open in a window', cancel: 'Cancel', retry: 'Retry', transferWarning: 'Save first', transferring: 'Opening', transferFailed: 'Transfer failed' };
 const bootstrap = {
   presentationCapabilities: ['miniapp_custom_chrome_v1'], locale: 'en-US', appearanceMode: 'dark', ui: labels,
   instance: { primaryView: { kind: 'window' } },
@@ -21,6 +21,9 @@ let listeners: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.useFakeTimers();
   document.body.innerHTML = html.split('</head><body>')[1].split('<script')[0];
+  const dialog = document.querySelector<HTMLDialogElement>('#transfer-confirm')!;
+  dialog.showModal = vi.fn(() => { dialog.open = true; });
+  dialog.close = vi.fn(value => { dialog.returnValue = value ?? dialog.returnValue; dialog.open = false; dialog.dispatchEvent(new Event('close')); });
   listeners = vi.spyOn(window, 'addEventListener');
   vi.spyOn(window, 'confirm').mockReturnValue(true);
   vi.stubGlobal('requestAnimationFrame', (callback: () => void) => setTimeout(callback, 0));
@@ -39,6 +42,7 @@ function run(overrides: Record<string, (request: { operation: string; params?: R
     if (overrides[request.operation]) return overrides[request.operation](request);
     if (request.operation === 'bootstrap') return bootstrap;
     if (request.operation === 'windowState') return { maximized: false, fullscreen: false };
+    if (request.operation === 'permissions') return [];
     if (request.operation === 'poll') return new Promise(() => {});
     return null;
   });
@@ -48,6 +52,94 @@ function run(overrides: Record<string, (request: { operation: string; params?: R
 }
 
 describe('MiniApp Shell presentation handoff', () => {
+  it('confirms HarmonyOS return in trusted chrome and coalesces clicks before awaiting the dialog', async () => {
+    let poll!: (value: unknown) => void;
+    const call = run({ poll: () => new Promise(resolve => { poll = resolve; }) }, 'ohos');
+    await flush();
+    document.querySelector('iframe')!.dispatchEvent(new Event('load'));
+    await flush();
+    const button = document.querySelector<HTMLButtonElement>('[data-window-action="tab"]')!;
+    button.click(); button.click();
+    await flush();
+    const dialog = document.querySelector<HTMLDialogElement>('#transfer-confirm')!;
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(dialog.open).toBe(true);
+    expect(dialog.showModal).toHaveBeenCalledTimes(1);
+    expect(dialog.textContent).toContain('Save first');
+    expect(dialog.querySelector('[value="confirm"]')?.textContent).toBe('Return to app');
+    expect(call.mock.calls.some(([, { request }]) => request.operation === 'tab')).toBe(false);
+    // The native host has no pending target while the user reads the warning.
+    poll({ cursor: 0, pendingView: null, events: [] });
+    await flush();
+    expect(button.disabled).toBe(true);
+    expect(document.querySelector('#status-text')?.textContent).not.toBe(labels.transferFailed);
+    dialog.close('confirm');
+    await flush();
+    expect(call.mock.calls.filter(([, { request }]) => request.operation === 'tab')).toHaveLength(1);
+    expect(call.mock.calls.some(([, { request }]) => request.operation === 'close')).toBe(false);
+  });
+
+  it.each(['cancel', ''])('retains the HarmonyOS source on dismissal (%s) and allows retry', async value => {
+    const call = run({}, 'ohos');
+    await flush();
+    document.querySelector('iframe')!.dispatchEvent(new Event('load'));
+    await flush();
+    const button = document.querySelector<HTMLButtonElement>('[data-window-action="tab"]')!;
+    const dialog = document.querySelector<HTMLDialogElement>('#transfer-confirm')!;
+    button.click(); dialog.close(value);
+    await flush();
+    expect(button.disabled).toBe(false);
+    expect(call.mock.calls.some(([, { request }]) => ['tab', 'close'].includes(request.operation))).toBe(false);
+    button.click();
+    expect(dialog.open).toBe(true);
+    // Escape uses the default dialog return value, reset on every attempt.
+    dialog.close();
+    await flush();
+    expect(button.disabled).toBe(false);
+  });
+
+  it('ignores a poll started before host acceptance and recovers if a later target expires', async () => {
+    let poll!: (value: unknown) => void;
+    const call = run({ poll: () => new Promise(resolve => { poll = resolve; }) }, 'ohos');
+    await flush();
+    document.querySelector('iframe')!.dispatchEvent(new Event('load'));
+    await flush();
+    const button = document.querySelector<HTMLButtonElement>('[data-window-action="tab"]')!;
+    button.click();
+    document.querySelector<HTMLDialogElement>('#transfer-confirm')!.close('confirm');
+    await flush();
+    poll({ cursor: 0, pendingView: null, events: [] });
+    await flush();
+    expect(button.disabled).toBe(true);
+    await vi.advanceTimersByTimeAsync(750);
+    poll({ cursor: 0, pendingView: null, events: [] });
+    await flush();
+    expect(button.disabled).toBe(false);
+    expect(document.querySelector('#status-text')?.textContent).toBe(labels.transferFailed);
+    expect(call.mock.calls.some(([, { request }]) => request.operation === 'close')).toBe(false);
+  });
+
+  it('keeps the existing tab when the HarmonyOS window transfer is cancelled at startup', async () => {
+    const call = run({ bootstrap: () => ({ ...bootstrap, instance: { primaryView: { kind: 'tab' } } }) }, 'ohos');
+    await flush();
+    const dialog = document.querySelector<HTMLDialogElement>('#transfer-confirm')!;
+    expect(dialog.open).toBe(true);
+    expect(dialog.querySelector('[value="confirm"]')?.textContent).toBe('Open in a window');
+    dialog.close('cancel');
+    await flush();
+    expect(call.mock.calls.some(([, { request }]) => request.operation === 'close')).toBe(true);
+    expect(call.mock.calls.some(([, { request }]) => request.operation === 'ready')).toBe(false);
+  });
+
+  it('leaves HarmonyOS resize and window controls to the native container', async () => {
+    const call = run({}, 'ohos');
+    await flush();
+    expect(document.querySelector('#resize-borders')?.children).toHaveLength(0);
+    expect(document.querySelector('.window-controls')).toBeNull();
+    expect(document.querySelector('iframe')?.getAttribute('sandbox')?.includes('allow-same-origin')).toBe(false);
+    expect(call.mock.calls.some(([, { request }]) => request.operation === 'bootstrap')).toBe(true);
+  });
+
   it('gates the dedicated launcher on the existing authorized SDK claim', async () => {
     run({ local: () => Promise.reject(new Error('MiniApp lacks permission')) });
     await flush();

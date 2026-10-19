@@ -7,7 +7,7 @@ const labels = { titlebar: 'Window controls', openTab: 'Return to app', minimize
 const mounted: { destroy(): void }[] = [];
 afterEach(() => { mounted.forEach(bar => bar.destroy()); mounted.length = 0; document.body.replaceChildren(); });
 
-function render(preview = false, platform: 'macos' | 'windows' | 'linux' = 'windows') {
+function render(preview = false, platform: 'macos' | 'windows' | 'linux' | 'ohos' = 'windows') {
   const element = document.createElement('header');
   document.body.append(element);
   const onAction = vi.fn(), onWindowAction = vi.fn(), onDrag = vi.fn();
@@ -56,6 +56,15 @@ describe('MiniApp shared titlebar', () => {
     expect(element.dataset.fullscreen).toBe('true');
     element.dispatchEvent(new MouseEvent('dblclick', { button: 0 }));
     expect(onWindowAction).toHaveBeenCalledExactlyOnceWith('titlebarDoubleClick');
+  });
+
+  it('keeps HarmonyOS native decorations while retaining app actions and tab transfer', () => {
+    const { element, onWindowAction, onAction } = render(false, 'ohos');
+    expect(element.querySelector('.window-controls')).toBeNull();
+    (element.querySelector('[aria-label="导出"]') as HTMLButtonElement).click();
+    expect(onAction).toHaveBeenCalledExactlyOnceWith('export');
+    (element.querySelector('[data-window-action="tab"]') as HTMLButtonElement).click();
+    expect(onWindowAction).toHaveBeenCalledExactlyOnceWith('tab');
   });
 
   it('uses main-window Windows captions at the right regardless of legacy control placement', () => {

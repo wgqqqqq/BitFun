@@ -20,7 +20,7 @@ pub(super) fn applications_directory() -> Result<PathBuf, String> {
     Err("System MiniApp launchers are unsupported on this platform".into())
 }
 
-fn records(data_dir: &Path, app_id: &str) -> Result<Vec<LaunchRecord>, String> {
+pub(super) fn records(data_dir: &Path, app_id: &str) -> Result<Vec<LaunchRecord>, String> {
     let root = data_dir.join("miniapp-desktop/launchers");
     if !root.try_exists().map_err(|e| e.to_string())? {
         return Ok(Vec::new());

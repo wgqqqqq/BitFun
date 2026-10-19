@@ -74,7 +74,7 @@ export function mountTitlebar(element, options) {
   controls.className = `miniapp-titlebar__controls window-controls${platform === 'windows' ? ' window-controls--windows' : ''}`;
   // AppKit owns the real traffic lights. Only other platforms use the same
   // caption buttons as the main window; MiniApp styling cannot move them.
-  if (platform !== 'macos') {
+  if (!['macos', 'ohos'].includes(platform)) {
     for (const name of ['minimize', 'maximize', 'close']) {
       const control = button(name, labels[name], () => onWindowAction?.(name));
       control.className = `window-controls__btn window-controls__btn--${name}`;
@@ -83,7 +83,7 @@ export function mountTitlebar(element, options) {
     }
   }
   element.append(identity, actions, transfer);
-  if (platform !== 'macos') element.append(controls);
+  if (!['macos', 'ohos'].includes(platform)) element.append(controls);
   element.onmousedown = event => {
     if (preview || event.button !== 0 || event.detail > 1 || event.target.closest('button')) return;
     event.preventDefault();

@@ -2,6 +2,7 @@ import window from '@ohos.window';
 import webview from '@ohos.web.webview';
 import { ConfigurationConstant } from '@kit.AbilityKit';
 import { JsHelper, WebviewInitData } from '@ohos-rs/ability';
+import { MiniAppWindows } from './MiniAppWindows';
 import { CompanionWindow } from './CompanionWindow';
 
 interface ChromeRect { x: number; y: number; width: number; height: number; }
@@ -16,13 +17,32 @@ export class WindowChrome {
   private static dark: boolean | null = null;
   private static regions: ChromeHitRegions = { bars: [], controls: [] };
 
-  static onTouch(event: TouchEvent): void {
-    if (event.type !== TouchType.Down || event.touches.length !== 1) return;
+  private static isCaptionTouch(event: TouchEvent): boolean {
+    if (event.type !== TouchType.Down || event.touches.length !== 1) return false;
     const touch = event.touches[0];
     const contains = (r: ChromeRect): boolean => touch.windowX >= r.x && touch.windowX < r.x + r.width &&
       touch.windowY >= r.y && touch.windowY < r.y + r.height;
-    if (!WindowChrome.regions.bars.some(contains) || WindowChrome.regions.controls.some(contains)) return;
-    WindowChrome.main?.startMoving().catch((error: Error) => console.warn('Native caption drag failed: ' + String(error)));
+    return WindowChrome.regions.bars.some(contains) && !WindowChrome.regions.controls.some(contains);
+  }
+
+  static hitTest(event: TouchEvent): HitTestMode {
+    // ArkWeb consumes pointer events before they bubble to the parent. Retain
+    // only empty caption presses on this native container; controls stay in Web.
+    return WindowChrome.isCaptionTouch(event) ? HitTestMode.Block : HitTestMode.Default;
+  }
+
+  static onTouch(event: TouchEvent): void {
+    if (!WindowChrome.isCaptionTouch(event)) return;
+    const main = WindowChrome.main;
+    if (!main) return;
+    const touch = event.touches[0];
+    const ui = main.getUIContext();
+    const rect = main.getWindowProperties().windowRect;
+    // ArkUI reports vp; Window.startMoving's explicit grab offset uses px.
+    // Preserve the grab point across repeated moves and non-default PC density.
+    const x = Math.max(0, Math.min(rect.width - 1, Math.floor(ui.vp2px(touch.windowX))));
+    const y = Math.max(0, Math.min(rect.height - 1, Math.floor(ui.vp2px(touch.windowY))));
+    main.startMoving(x, y).catch((error: Error) => console.warn('Native caption drag failed: ' + String(error)));
   }
   private static updateRect = (rect: window.TitleButtonRect): void => {
     WindowChrome.inset = Math.max(0, rect.width + rect.right);
@@ -50,6 +70,8 @@ export class WindowChrome {
   }
 
   static attach(data: WebviewInitData): JsHelper | undefined {
+    const miniapp = MiniAppWindows.attach(data);
+    if (miniapp) return miniapp;
     const companion = CompanionWindow.attach(data);
     if (companion) return companion;
     data.onControllerAttached = (controller: webview.WebviewController): void => {
@@ -98,7 +120,11 @@ export class WindowChrome {
             };
             const selector = 'button, a, input, select, [role="button"], [role="tab"], [contenteditable="true"], [draggable="true"]';
             const regions = JSON.stringify({
-              bars: document.querySelector('[role="dialog"], [role="menu"]') ? [] : bars.map(rect),
+              bars: [...document.querySelectorAll('[role="dialog"], [role="menu"]')].some(element => {
+                const style = getComputedStyle(element);
+                return element.getClientRects().length > 0 && style.display !== 'none' &&
+                  style.visibility !== 'hidden' && style.visibility !== 'collapse';
+              }) ? [] : bars.map(rect),
               controls: bars.flatMap(bar => [...bar.querySelectorAll(selector)].map(rect))
             });
             if (regions !== previousRegions) {
@@ -113,7 +139,7 @@ export class WindowChrome {
             requestAnimationFrame(() => { regionsScheduled = false; syncRegions(); });
           };
           new MutationObserver(queueRegions).observe(document.body, { childList: true, subtree: true, attributes: true,
-            attributeFilter: ['class', 'style', 'role'] });
+            attributeFilter: ['class', 'style', 'role', 'hidden', 'open'] });
           new ResizeObserver(queueRegions).observe(document.body);
           queueRegions();
           let scheduled = false;

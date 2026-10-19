@@ -364,6 +364,19 @@ fn handle_secondary_launch(app: &tauri::AppHandle) {
     }
 }
 
+#[cfg(target_env = "ohos")]
+fn handle_secondary_launch(app: &tauri::AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = appearance::show_main_window(app).await {
+            log::warn!(
+                "Failed to show HarmonyOS main window from secondary launch: {}",
+                error
+            );
+        }
+    });
+}
+
 pub(crate) fn e2e_storage_guard_enabled() -> bool {
     std::env::var("OPENBITFUN_E2E_STORAGE_GUARD")
         .ok()
@@ -738,6 +751,13 @@ pub async fn run() {
         move |_context, request| frontend_protocol_manager.protocol_response(request),
     );
 
+    #[cfg(target_env = "ohos")]
+    {
+        builder = builder.register_uri_scheme_protocol("openbitfun-miniapp", |_, request| {
+            miniapp_desktop::ohos::asset(request.uri().path())
+        });
+    }
+
     #[cfg(all(
         not(target_env = "ohos"),
         any(target_os = "linux", target_os = "macos", target_os = "windows")
@@ -1076,6 +1096,8 @@ pub async fn run() {
             ohos::terminal_diagnostics::run_if_requested();
             #[cfg(all(target_env = "ohos", debug_assertions))]
             ohos::workspace_access_diagnostics::run_if_requested();
+            #[cfg(all(target_env = "ohos", debug_assertions))]
+            ohos::runtime_diagnostics::run_if_requested();
 
             let app_handle = app.handle().clone();
             let workspace_startup_bootstrap_snapshot = {
@@ -1368,7 +1390,13 @@ pub async fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(|invoke| {
+            #[cfg(target_env = "ohos")]
+            if invoke.message.webview_ref().label().starts_with("miniapp-shell-") && invoke.message.command() != "miniapp_shell_call" {
+                invoke.resolver.reject("Only the MiniApp shell bridge is available on this surface");
+                return true;
+            }
+            let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
             api::miniapp_api::miniapp_presentation,
             api::miniapp_api::miniapp_shell_call,
             appearance::show_main_window,
@@ -2061,7 +2089,9 @@ pub async fn run() {
             api::debug_api::debug_element_picked,
             api::debug_api::debug_open_devtools,
             api::debug_api::debug_close_devtools,
-        ])
+        ];
+            handler(invoke)
+        })
         .build(desktop_context());
 
     match app {

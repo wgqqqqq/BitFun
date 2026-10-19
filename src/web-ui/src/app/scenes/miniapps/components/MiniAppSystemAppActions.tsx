@@ -53,6 +53,7 @@ export function MiniAppSystemAppActions({ app, workspacePath, supported, compact
     setBusy(true);
     const current = generation.current;
     const scope = getActiveSurfaceScope();
+    let completed = false;
     try {
       if (remove) {
         const removed = await systemInstallation.uninstall(app);
@@ -63,9 +64,12 @@ export function MiniAppSystemAppActions({ app, workspacePath, supported, compact
         if (!result || current !== generation.current || !scope.isCurrent()) return;
         setPaths([result.path]);
       }
+      completed = true;
     } finally {
       pending.current = false;
       setBusy(false);
+      // Native shortcut updates may require separate consented remove/add steps.
+      if (!completed && current === generation.current && scope.isCurrent()) setRevision(value => value + 1);
     }
   };
 

@@ -10,6 +10,7 @@ struct Index {
         .width('100%')
         .height('100%')
     }.width('100%').height('100%')
+    .onTouchIntercept((event: TouchEvent): HitTestMode => WindowChrome.hitTest(event))
     .onTouch((event: TouchEvent) => WindowChrome.onTouch(event))
   }
 }

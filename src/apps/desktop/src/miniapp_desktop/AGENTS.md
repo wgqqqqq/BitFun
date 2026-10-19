@@ -73,3 +73,15 @@ acknowledgement. Agent permissions use the existing runtime permission mailbox;
 shell content cannot call its response adapter. Managed views reject the legacy
 `agent.cancelStaleRuns` reload cleanup: explicit Stop or per-turn cancellation is
 required so opening a new presentation cannot silently cancel accepted work.
+
+HarmonyOS PC uses the same shell renderer inside a non-exported, specified
+MiniAppAbility, sharing the one EntryAbility/Rust host. It must not spawn or copy
+the Desktop executable. The Ability bridge binds each WebView label to a native
+lease; reject other app commands and do not grant main-workbench plugin access
+to child WebViews. Native lifetime renews committed window leases; destruction
+releases only that view through the existing last-view cleanup. System shortcuts
+carry only a validated launch UUID, and OS restoration routes through EntryAbility
+before rendering. API 24 shortcut queries are the installation authority; do not
+invent success from a launch record. Add/remove use OS confirmation and never
+remove MiniApp data. Run `node --test scripts/ohos-host.test.mjs` and the shared
+Shell/titlebar tests above; compile and exercise the signed HAP for device claims.

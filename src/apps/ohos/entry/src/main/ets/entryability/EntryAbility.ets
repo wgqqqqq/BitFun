@@ -1,3 +1,7 @@
+import { MiniAppWindows } from '../MiniAppWindows';
+import { launchMiniApp, registerMiniappOperation } from 'libopenbitfun_desktop_lib.so';
+import { promptAction } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { CompanionWindow } from '../CompanionWindow';
 import { WindowChrome } from '../WindowChrome';
 import { registerCompanionOperation } from 'libopenbitfun_desktop_lib.so';
@@ -8,12 +12,13 @@ import window from '@ohos.window';
 import resourceManager from '@ohos.resourceManager';
 import { deviceInfo, settings } from '@kit.BasicServicesKit';
 import { WorkspaceAccess } from '../WorkspaceAccess';
-import { registerTrayOperation, registerExternalUrlOpener, configureDataDirectory, configureDeviceDisplayName, configureSystemDarkMode, configureResourceDirectory, configureTerminalDiagnostics, configureWorkspaceAccessDiagnostics, registerWorkspaceAccess, registerWindowOperation } from 'libopenbitfun_desktop_lib.so';
+import { registerTrayOperation, registerExternalUrlOpener, configureDataDirectory, configureDeviceDisplayName, configureSystemDarkMode, configureResourceDirectory, configureTerminalDiagnostics, configureWorkspaceAccessDiagnostics, configureRuntimeDiagnostics, registerWorkspaceAccess, registerWindowOperation } from 'libopenbitfun_desktop_lib.so';
 
 // The library is built from this repository's src/apps/desktop.
 export default class EntryAbility extends NativeAbility {
   public moduleName: string = 'openbitfun_desktop_lib';
   public defaultPage: boolean = false;
+  private pendingMiniApp: string | null = null;
   private mainWindow: window.Window | null = null;
   private companion: CompanionWindow | null = null;
 
@@ -28,13 +33,48 @@ export default class EntryAbility extends NativeAbility {
     await super.onWindowStageCreate(stage);
     await stage.loadContent('pages/Index');
     WindowChrome.configure(this.mainWindow);
+    const keepHost = (): boolean => {
+      // The Tauri host outlives this workbench. Recreating NativeAbility in the
+      // same live process would initialize it twice and produce a blank window.
+      hilog.info(0, 'MiniAppDesktop', 'Keeping the shared host alive; minimizing workbench');
+      void this.mainWindow?.minimize().catch((error: Error) => console.error('Could not minimize MiniApp host: ' + String(error)));
+      return true;
+    };
+    stage.on('windowStageClose', keepHost);
+    this.mainWindow.on('windowWillClose', async (): Promise<boolean> => keepHost());
+    if (this.pendingMiniApp) {
+      const id = this.pendingMiniApp;
+      this.pendingMiniApp = null;
+      await this.openMiniApp(id);
+    }
   }
 
-  onNewWant(_want: Want, _launchParam: AbilityConstant.LaunchParam): void {
+  private async openMiniApp(id: string): Promise<void> {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        launchMiniApp(id, (error: Error | null): void => { if (error) reject(error); else resolve(); });
+      });
+      // A shortcut must leave its MiniApp in front, with the workbench hidden.
+      await this.mainWindow?.minimize();
+    } catch (error) {
+      console.error('MiniApp launch failed: ' + String(error));
+      await this.mainWindow?.showWindow();
+      promptAction.showToast({ message: String(error) });
+    }
+  }
+  onNewWant(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
+    const id = want.parameters?.['openbitfun.miniappLaunchId'];
+    if (typeof id === 'string') { void this.openMiniApp(id); return; }
     this.mainWindow?.showWindow().catch(() => console.error('Could not restore main window'));
   }
 
   async onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): Promise<void> {
+    const launchId = want.parameters?.['openbitfun.miniappLaunchId'];
+    this.pendingMiniApp = typeof launchId === 'string' ? launchId : null;
+    registerMiniappOperation(async (error: Error | null, request: string): Promise<string> => {
+      if (error) throw new Error('MiniApp native bridge failed');
+      return MiniAppWindows.perform(this.context, request);
+    });
     configureDataDirectory(this.context.filesDir);
     let deviceName: string = '';
     try {
@@ -61,6 +101,7 @@ export default class EntryAbility extends NativeAbility {
       return true;
     });
     configureTerminalDiagnostics(want.parameters?.['openbitfun.terminalDiagnostic'] === true);
+    configureRuntimeDiagnostics(want.parameters?.['openbitfun.runtimeDiagnostic'] === true);
     const workspaceAccess = new WorkspaceAccess(this.context);
     registerWorkspaceAccess(async (error: Error | null, request: string): Promise<string> => {
       if (error) throw new Error('Workspace access bridge failed');
