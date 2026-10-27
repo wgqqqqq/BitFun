@@ -1,10 +1,8 @@
 name: Desktop Build Benchmark
 run-name: Cold release build comparison (${{ inputs.target_platform || 'all' }} / ${{ inputs.variant || 'all' }})
 
-# The branch push enables a first run without changing the fork's main branch.
+# The initial branch push registered this workflow; subsequent runs are explicit.
 on:
-  push:
-    branches: [wgq/desktop-build-benchmark]
   workflow_dispatch:
     inputs:
       target_platform:
@@ -16,7 +14,7 @@ on:
         description: Isolated optimization variant
         type: choice
         default: all
-        options: [all, baseline, rlib, rlib-codegen16]
+        options: [all, baseline, rlib, rlib-codegen16, sequential, sequential-ab, sequential-bc]
 
 permissions:
   contents: read
@@ -39,7 +37,9 @@ jobs:
           import fs from 'node:fs';
           const platforms = JSON.parse(fs.readFileSync('scripts/desktop-package-platforms.json'));
           const selected = platforms.filter(p => process.env.SELECT_PLATFORM === 'all' || p.name === process.env.SELECT_PLATFORM);
-          const variants = ['baseline', 'rlib', 'rlib-codegen16'].filter(v => process.env.SELECT_VARIANT === 'all' || v === process.env.SELECT_VARIANT);
+          const variants = process.env.SELECT_VARIANT.startsWith('sequential')
+            ? [process.env.SELECT_VARIANT]
+            : ['baseline', 'rlib', 'rlib-codegen16'].filter(v => process.env.SELECT_VARIANT === 'all' || v === process.env.SELECT_VARIANT);
           if (!selected.length || !variants.length) throw new Error('Empty benchmark matrix');
           fs.appendFileSync(process.env.GITHUB_OUTPUT, 'platforms=' + JSON.stringify(selected) + '\nvariants=' + JSON.stringify(variants) + '\n');
           NODE
@@ -101,12 +101,26 @@ jobs:
           pnpm run prepare:mobile-web
       - name: Measure cold Rust release build
         shell: bash
+        env:
+          BENCHMARK_VARIANT: ${{ matrix.variant }}
+          BENCHMARK_TARGET: ${{ matrix.platform.target }}
         run: |
-          python scripts/ci/benchmark-desktop-build.py \
-            --variant '${{ matrix.variant }}' \
-            --target '${{ matrix.platform.target }}' \
-            --target-dir "$RUNNER_TEMP/desktop-benchmark-target" \
-            --output benchmark-results
+          python - <<'PY'
+          import os, pathlib, shutil, subprocess
+          selected = os.environ['BENCHMARK_VARIANT']
+          groups = {'sequential': ['baseline', 'rlib', 'rlib-codegen16'],
+                    'sequential-ab': ['baseline', 'rlib'],
+                    'sequential-bc': ['rlib', 'rlib-codegen16']}
+          variants = groups.get(selected, [selected])
+          for variant in variants:
+              target = pathlib.Path(os.environ['RUNNER_TEMP']) / ('desktop-benchmark-' + variant)
+              subprocess.run(['python', 'scripts/ci/benchmark-desktop-build.py',
+                  '--variant', variant, '--target', os.environ['BENCHMARK_TARGET'],
+                  '--target-dir', str(target), '--output', 'benchmark-results/' + variant], check=True)
+              # Prevent cumulative disk pressure; every variant starts fully cold.
+              shutil.rmtree(target)
+              shutil.rmtree(pathlib.Path('benchmark-results') / (variant + '-native'))
+          PY
       - name: Preserve measurements and failure logs
         if: always()
         uses: actions/upload-artifact@v6

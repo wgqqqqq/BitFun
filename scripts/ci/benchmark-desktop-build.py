@@ -31,6 +31,14 @@ def command_output(args):
     return subprocess.check_output(args, cwd=ROOT, text=True).strip()
 
 
+def cpu_details():
+    if sys.platform == "linux":
+        return Path("/proc/cpuinfo").read_text(encoding="utf-8")
+    if sys.platform == "darwin":
+        return command_output(["sysctl", "machdep.cpu.brand_string", "hw.physicalcpu", "hw.logicalcpu", "hw.memsize"])
+    return platform.processor()
+
+
 def variant_manifest(original, variant):
     if variant not in VARIANTS:
         raise ValueError(f"Unknown variant: {variant}")
@@ -123,7 +131,7 @@ def main():
         parser.error("Cold target directory must not already exist")
     output.mkdir(parents=True, exist_ok=True)
     manifest = ROOT / "src/apps/desktop/Cargo.toml"
-    original = manifest.read_text()
+    original = manifest.read_text(encoding="utf-8")
     manifest.write_text(variant_manifest(original, args.variant))
     try:
         lib, native = prepare_native(args.target, output / "native")
@@ -139,6 +147,7 @@ def main():
                 "rustc": command_output(["rustc", "-vV"]),
                 "cargo_lock_sha256": file_hash(ROOT / "Cargo.lock"),
                 "jobs": args.jobs, "platform": platform.platform(), "cpu": platform.processor(),
+                "cpu_details": cpu_details(),
                 "logical_cpus": psutil.cpu_count(), "physical_cpus": psutil.cpu_count(logical=False),
                 "memory_bytes": psutil.virtual_memory().total, "native_archive": native,
                 "runner": {k: os.getenv(k) for k in ["RUNNER_OS", "RUNNER_ARCH", "ImageOS", "ImageVersion",
