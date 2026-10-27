@@ -1,0 +1,117 @@
+name: Desktop Build Benchmark
+run-name: Cold release build comparison (${{ inputs.target_platform || 'all' }} / ${{ inputs.variant || 'all' }})
+
+# The branch push enables a first run without changing the fork's main branch.
+on:
+  push:
+    branches: [wgq/desktop-build-benchmark]
+  workflow_dispatch:
+    inputs:
+      target_platform:
+        description: Packaging runner to measure
+        type: choice
+        default: all
+        options: [all, linux-x64, linux-arm64, macos-arm64, macos-x64, windows-x64]
+      variant:
+        description: Isolated optimization variant
+        type: choice
+        default: all
+        options: [all, baseline, rlib, rlib-codegen16]
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    if: github.repository == 'wgqqqqq/BitFun'
+    runs-on: ubuntu-latest
+    outputs:
+      platforms: ${{ steps.select.outputs.platforms }}
+      variants: ${{ steps.select.outputs.variants }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: select
+        env:
+          SELECT_PLATFORM: ${{ inputs.target_platform || 'all' }}
+          SELECT_VARIANT: ${{ inputs.variant || 'all' }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const platforms = JSON.parse(fs.readFileSync('scripts/desktop-package-platforms.json'));
+          const selected = platforms.filter(p => process.env.SELECT_PLATFORM === 'all' || p.name === process.env.SELECT_PLATFORM);
+          const variants = ['baseline', 'rlib', 'rlib-codegen16'].filter(v => process.env.SELECT_VARIANT === 'all' || v === process.env.SELECT_VARIANT);
+          if (!selected.length || !variants.length) throw new Error('Empty benchmark matrix');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'platforms=' + JSON.stringify(selected) + '\nvariants=' + JSON.stringify(variants) + '\n');
+          NODE
+
+  benchmark:
+    name: ${{ matrix.platform.name }} / ${{ matrix.variant }}
+    needs: matrix
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.matrix.outputs.platforms) }}
+        variant: ${{ fromJSON(needs.matrix.outputs.variants) }}
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_TERM_COLOR: never
+      OPENBITFUN_TARGET_GC: '0'
+      OPENBITFUN_RELEASE_CHANNEL: stable
+    steps:
+      - name: Preserve source bytes on Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v5
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libglib2.0-dev libgtk-3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libxdo-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libleptonica-dev libtesseract-dev clang cmake
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+          no-cache: true
+      - uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          targets: ${{ matrix.platform.target }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install resource sampler
+        run: python -m pip install psutil==7.0.0
+      - name: Select packaging Xcode
+        if: runner.os == 'macOS'
+        run: |
+          test -d /Applications/Xcode_26.2.app/Contents/Developer
+          echo 'DEVELOPER_DIR=/Applications/Xcode_26.2.app/Contents/Developer' >> "$GITHUB_ENV"
+      - name: Prefetch locked sources and prepare compile resources
+        shell: bash
+        run: |
+          cargo fetch --locked --target '${{ matrix.platform.target }}'
+          pnpm install --frozen-lockfile
+          pnpm run plugin-host:prepare
+          pnpm run prepare:mobile-web
+      - name: Measure cold Rust release build
+        shell: bash
+        run: |
+          python scripts/ci/benchmark-desktop-build.py \
+            --variant '${{ matrix.variant }}' \
+            --target '${{ matrix.platform.target }}' \
+            --target-dir "$RUNNER_TEMP/desktop-benchmark-target" \
+            --output benchmark-results
+      - name: Preserve measurements and failure logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: benchmark-${{ matrix.platform.name }}-${{ matrix.variant }}-${{ github.run_attempt }}
+          path: benchmark-results/
+          if-no-files-found: warn
+          retention-days: 14
