@@ -185,7 +185,7 @@ pub(super) fn resolve(id: &str) -> Result<Display, String> {
         .find(|display| display.id == id)
         .ok_or_else(|| "target_lost".into())
 }
-pub(super) fn availability() -> &'static str {
+pub(crate) fn availability() -> &'static str {
     if !session_available() {
         "host_locked"
     } else if list().is_ok_and(|displays| !displays.is_empty()) {
