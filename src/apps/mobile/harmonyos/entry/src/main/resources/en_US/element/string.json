@@ -2767,6 +2767,310 @@
     {
       "name": "time_daysAgo",
       "value": "%1$s days ago"
+    },
+    {
+      "name": "remoteDesktopProbe_title",
+      "value": "ArkWeb WebRTC probe"
+    },
+    {
+      "name": "remoteDesktop_navigation",
+      "value": "Remote control"
+    },
+    {
+      "name": "remoteDesktop_open",
+      "value": "View desktop"
+    },
+    {
+      "name": "remoteDesktop_readOnly",
+      "value": "View only"
+    },
+    {
+      "name": "remoteDesktop_forceRelay",
+      "value": "Use relay connection"
+    },
+    {
+      "name": "remoteDesktop_disconnect",
+      "value": "Disconnect"
+    },
+    {
+      "name": "remoteDesktop_approvalRequired",
+      "value": "Allow this device to view the display in the computer’s local settings first."
+    },
+    {
+      "name": "remoteDesktop_permissionRequired",
+      "value": "Enable screen recording permission on the computer."
+    },
+    {
+      "name": "remoteDesktop_hostLocked",
+      "value": "The computer is locked or its desktop session is unavailable. Restore it locally, then reconnect."
+    },
+    {
+      "name": "remoteDesktop_updateRequired",
+      "value": "The relay needs remote desktop support enabled."
+    },
+    {
+      "name": "remoteDesktop_unsupported",
+      "value": "This computer cannot share its display yet."
+    },
+    {
+      "name": "remoteDesktop_connectionFailed",
+      "value": "The connection ended. Return to the device list and try again."
+    },
+    {
+      "name": "remoteDesktop_stage_idle",
+      "value": "Not connected"
+    },
+    {
+      "name": "remoteDesktop_stage_probing",
+      "value": "Checking the computer…"
+    },
+    {
+      "name": "remoteDesktop_stage_choose_display",
+      "value": "Choose a display"
+    },
+    {
+      "name": "remoteDesktop_stage_connecting",
+      "value": "Connecting…"
+    },
+    {
+      "name": "remoteDesktop_stage_observing",
+      "value": "Viewing desktop"
+    },
+    {
+      "name": "remoteDesktop_stage_failed",
+      "value": "Connection failed"
+    },
+    {
+      "name": "remoteDesktop_stage_closed",
+      "value": "Disconnected"
+    },
+    {
+      "name": "remoteDesktop_controlling",
+      "value": "You are in control"
+    },
+    {
+      "name": "remoteDesktop_startControl",
+      "value": "Start control"
+    },
+    {
+      "name": "remoteDesktop_resumeControl",
+      "value": "Resume control"
+    },
+    {
+      "name": "remoteDesktop_stopControl",
+      "value": "Stop control"
+    },
+    {
+      "name": "remoteDesktop_acquiringControl",
+      "value": "Requesting control…"
+    },
+    {
+      "name": "remoteDesktop_controlUnsupported",
+      "value": "Keyboard and mouse control is not available on this computer yet."
+    },
+    {
+      "name": "remoteDesktop_controlBusy",
+      "value": "AI or another operation is using the computer. Stop it on the computer before retrying."
+    },
+    {
+      "name": "remoteDesktop_controlApprovalRequired",
+      "value": "Allow this device to operate the selected display in the computer’s local settings first."
+    },
+    {
+      "name": "remoteDesktop_controlPaused",
+      "value": "Control paused. Start control again; previous input will not be replayed."
+    },
+    {
+      "name": "remoteDesktop_textPlaceholder",
+      "value": "Type here, then send to the computer"
+    },
+    {
+      "name": "remoteDesktop_sendText",
+      "value": "Send text"
+    },
+    {
+      "name": "remoteDesktop_keyboardHint",
+      "value": "Types into the selected field on the computer"
+    },
+    {
+      "name": "remoteDesktop_keyboardUnavailable",
+      "value": "The remote keyboard paused. Use More → Resume control to retry."
+    },
+    {
+      "name": "remoteDesktop_screenshot",
+      "value": "Screenshot"
+    },
+    {
+      "name": "remoteDesktop_screenshotFailed",
+      "value": "Could not capture or save the image. Please retry."
+    },
+    {
+      "name": "remoteDesktop_screenshotSaved",
+      "value": "Saved to Photos"
+    },
+    {
+      "name": "remoteDesktop_keyboard",
+      "value": "Keyboard"
+    },
+    {
+      "name": "remoteDesktop_hideKeyboard",
+      "value": "Hide keyboard"
+    },
+    {
+      "name": "remoteDesktop_tapHint",
+      "value": "In direct touch mode, tap to click. Double-tap and hold the second tap to drag."
+    },
+    {
+      "name": "remoteDesktop_textUnsupported",
+      "value": "Text input is not available on this computer."
+    },
+    {
+      "name": "remoteDesktop_inputPermissionRequired",
+      "value": "Grant the required system input permission locally on the computer, then retry."
+    },
+    {
+      "name": "remoteDesktop_directTouch",
+      "value": "Direct touch"
+    },
+    {
+      "name": "remoteDesktop_mouseMode",
+      "value": "Mouse mode"
+    },
+    {
+      "name": "remoteDesktop_panCanvas",
+      "value": "Move canvas"
+    },
+    {
+      "name": "remoteDesktop_stopPanning",
+      "value": "Stop moving canvas"
+    },
+    {
+      "name": "remoteDesktop_rotateScreen",
+      "value": "Rotate screen"
+    },
+    {
+      "name": "remoteDesktop_rotationUnavailable",
+      "value": "Unable to rotate the screen. Try turning your phone."
+    },
+    {
+      "name": "remoteDesktop_pauseSource",
+      "value": "Pause sharing"
+    },
+    {
+      "name": "remoteDesktop_resumeSource",
+      "value": "Resume viewing"
+    },
+    {
+      "name": "remoteDesktop_pauseHint",
+      "value": "Screen sharing and control are paused. The connection is kept briefly. Resume viewing to reconnect and request control."
+    },
+    {
+      "name": "remoteDesktop_currentQuality",
+      "value": "Current quality: %1$s"
+    },
+    {
+      "name": "remoteDesktop_qualityDataSaver",
+      "value": "Data saver"
+    },
+    {
+      "name": "remoteDesktop_qualityBalanced",
+      "value": "Balanced"
+    },
+    {
+      "name": "remoteDesktop_qualityClear",
+      "value": "Clear"
+    },
+    {
+      "name": "remoteDesktop_stage_setting_quality",
+      "value": "Changing quality…"
+    },
+    {
+      "name": "remoteDesktop_signalingInterrupted",
+      "value": "Signaling interrupted. Control is paused; video is kept for up to 30 seconds while reconnecting."
+    },
+    {
+      "name": "remoteDesktop_stage_pausing",
+      "value": "Pausing sharing…"
+    },
+    {
+      "name": "remoteDesktop_stage_paused",
+      "value": "Sharing paused"
+    },
+    {
+      "name": "remoteDesktop_stage_resuming",
+      "value": "Resuming viewing…"
+    },
+    {
+      "name": "remoteDesktop_chooseSource",
+      "value": "Change display"
+    },
+    {
+      "name": "remoteDesktop_stage_loading_sources",
+      "value": "Loading displays…"
+    },
+    {
+      "name": "remoteDesktop_stage_choose_source",
+      "value": "Choose a display"
+    },
+    {
+      "name": "remoteDesktop_stage_selecting_source",
+      "value": "Switching display…"
+    },
+    {
+      "name": "remoteDesktop_currentDisplay",
+      "value": "Current: %1$s"
+    },
+    {
+      "name": "remoteDesktop_displayLabel",
+      "value": "Display %1$s · %2$s"
+    },
+    {
+      "name": "remoteDesktop_cancelSource",
+      "value": "Back to paused sharing"
+    },
+    {
+      "name": "remoteDesktop_displayUnavailable",
+      "value": "This display is no longer available. Reconnect and select a display."
+    },
+    {
+      "name": "remoteDesktop_stage_waiting_for_host",
+      "value": "Waiting for the previous share to end…"
+    },
+    {
+      "name": "remoteDesktop_attachmentBusy",
+      "value": "This computer is already being viewed. End the other connection, then reconnect."
+    },
+    {
+      "name": "remoteDesktop_cleanupPending",
+      "value": "The computer is still ending the previous share. Reconnect shortly."
+    },
+    {
+      "name": "remoteDesktop_serviceDescription",
+      "value": "Use your own remote desktop service, independently of OpenBitFun login. Each computer must approve this phone locally."
+    },
+    {
+      "name": "remoteDesktop_serviceAddress",
+      "value": "Service address"
+    },
+    {
+      "name": "remoteDesktop_servicePairingKey",
+      "value": "Deployment pairing key"
+    },
+    {
+      "name": "remoteDesktop_servicePairingHint",
+      "value": "Required for first pairing. Leave blank to use saved device credentials. The pairing key is not saved."
+    },
+    {
+      "name": "remoteDesktop_serviceConnect",
+      "value": "Pair / reconnect"
+    },
+    {
+      "name": "remoteDesktop_serviceDisconnect",
+      "value": "Disconnect service"
+    },
+    {
+      "name": "remoteDesktop_serviceFailed",
+      "value": "Unable to connect. Check the service address, pairing key and deployment status. Existing credentials have been kept."
     }
   ]
 }

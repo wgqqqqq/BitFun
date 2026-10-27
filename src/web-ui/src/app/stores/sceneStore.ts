@@ -411,12 +411,21 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     abandonSettingsDraftsForContextSwitch();
     useNavSceneStore.getState().closeNavScene();
     const state = get();
-    const contentTabs = state.openTabs.filter(tab => tab.contentId);
+    const isControllerTab = (tab: SceneTab) => tab.contentId
+      && useContentResourceStore.getState().resources[tab.contentId]?.content.type === 'remote-desktop';
+    // Controller-owned remote desktops must not be filed under a Peer surface
+    // or make that surface's files appear to have a local origin.
+    const controllerTabs = state.openTabs.filter(isControllerTab);
+    const contentTabs = state.openTabs.filter(tab => tab.contentId && !isControllerTab(tab));
     const origin = contentTabs[0]?.contentId
       ? useContentResourceStore.getState().resources[contentTabs[0].contentId]?.scope.surfaceId : undefined;
     if (origin) contentSurfaceTabs.set(origin, { ...projectPaneState(state), openTabs: contentTabs });
     const saved = restoreContent ? contentSurfaceTabs.get(getActiveSurfaceId()) : undefined;
-    const tabs = saved?.openTabs.filter(tab => tab.contentId && useContentResourceStore.getState().resources[tab.contentId]) ?? buildDefaultTabs();
+    const savedTabs = saved?.openTabs.filter(tab => tab.contentId && useContentResourceStore.getState().resources[tab.contentId]);
+    const tabs = orderPinnedTabsFirst([
+      ...controllerTabs,
+      ...(savedTabs ?? buildDefaultTabs()).filter(tab => !isControllerTab(tab)),
+    ]);
     const panes = saved ? reconcilePaneState({ ...saved, openTabs: tabs }) : createPaneState(tabs, tabs[0]?.id ?? null);
     const activeTabId = focusedScene(panes);
     set({ ...projectPaneState(panes), pendingTabId: null,

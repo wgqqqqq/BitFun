@@ -9,6 +9,8 @@ Production origin restore and product deploys for the current OpenBitFun host
 | [miniapp-market/](miniapp-market/README.md) | MiniApp market only |
 | [skin-market/](skin-market/README.md) | Skin market only |
 | [outbound-mail/](outbound-mail/README.md) | Send-only Postfix/OpenDKIM: auth integration, DNS, maintenance and rollback |
+| [remote-desktop/](remote-desktop/README.md) | Trial TURN, probes and prior validation; production rollout pending |
+| [remote-desktop/self-hosted/](remote-desktop/self-hosted/README.md) | Independent device-pairing service, separate from login Relay; native platform release work remains |
 
 An Agent that is asked to move or rebuild the server starts at
 `openbitfun-host/AGENTS.md`.

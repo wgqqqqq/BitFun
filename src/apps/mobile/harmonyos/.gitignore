@@ -35,3 +35,9 @@
 
 # Generated from en_US/zh_CN element string catalogs by entry/hvigorfile.ts
 /entry/src/main/resources/rawfile/string.json
+
+# Generated read-only WebRTC developer probe receiver
+/entry/src/main/resources/rawfile/remote-desktop-probe/receiver.js
+
+# Generated from the shared read-only remote desktop renderer
+/entry/src/main/resources/rawfile/remote-desktop/

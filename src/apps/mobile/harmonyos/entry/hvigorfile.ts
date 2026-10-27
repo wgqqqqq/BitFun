@@ -4,6 +4,9 @@ import { hapTasks } from '@ohos/hvigor-ohos-plugin';
 require('../miniapps/generate.cjs').generate();
 // Regenerate the HostTextRetranslator i18n rawfile catalog on every build.
 require('../i18n/generate.cjs').generate();
+// Bundle the read-only developer WebRTC probe from its single source.
+require('../tools/remote-desktop-probe.cjs').generate();
+require('../tools/remote-desktop-media.cjs').generate();
 
 export default {
   system: hapTasks, /* Built-in plugin of Hvigor. It cannot be modified. */

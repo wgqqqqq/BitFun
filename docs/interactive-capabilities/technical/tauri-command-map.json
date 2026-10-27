@@ -2,12 +2,12 @@
   "schemaVersion": 2,
   "generatedFrom": "src/shared/interactive-capabilities/catalog.json",
   "catalogDigest": "bff6e24a5bc74bba63fcd2858d7ac58e028d6901e44aece40e5bd885f518f8af",
-  "commandCount": 704,
+  "commandCount": 717,
   "coverage": {
-    "commandCount": 704,
+    "commandCount": 717,
     "documentedCommandCount": 645,
-    "implementationCommandCount": 59,
-    "implementationDigest": "0bce9fbda3e8b517e409aec124ca0f2c3b36a7954d996400d9ccf405194dc768"
+    "implementationCommandCount": 72,
+    "implementationDigest": "4c81eb55279fb0ef71fbc5ccdac1878f38202fe06fcf988184ee85c750f3f2a0"
   },
   "commands": [
     {
@@ -7681,6 +7681,188 @@
       "sourceFile": "src/apps/desktop/src/api/ssh_api.rs",
       "signature": "fn remote_create_dir( state: State<'_, AppState>, connection_id: String, path: String, recursive: bool, ) -> Result<(), String>",
       "remoteWorkspacePolicy": "RemoteRouted"
+    },
+    {
+      "id": "remote_desktop_approve_control",
+      "moduleId": "remote_desktop",
+      "capabilityId": "feature.remote-connect",
+      "capabilityIds": [
+        "feature.remote-connect"
+      ],
+      "documentedItemIds": [],
+      "visibility": "implementation",
+      "rustPath": "api::remote_desktop_api::remote_desktop_approve_control",
+      "sourceFile": "src/apps/desktop/src/api/remote_desktop_api.rs",
+      "signature": "fn remote_desktop_approve_control( window: WebviewWindow, request: ApproveRequest, ) -> Result<(), String>",
+      "remoteWorkspacePolicy": "WorkspaceAgnostic"
+    },
+    {
+      "id": "remote_desktop_approve_view",
+      "moduleId": "remote_desktop",
+      "capabilityId": "feature.remote-connect",
+      "capabilityIds": [
+        "feature.remote-connect"
+      ],
+      "documentedItemIds": [],
+      "visibility": "implementation",
+      "rustPath": "api::remote_desktop_api::remote_desktop_approve_view",
+      "sourceFile": "src/apps/desktop/src/api/remote_desktop_api.rs",
+      "signature": "fn remote_desktop_approve_view( window: WebviewWindow, request: ApproveRequest, ) -> Result<(), String>",
+      "remoteWorkspacePolicy": "WorkspaceAgnostic"
+    },
+    {
+      "id": "remote_desktop_capture_consent",
+      "moduleId": "remote_desktop",
+      "capabilityId": "feature.remote-connect",
+      "capabilityIds": [
+        "feature.remote-connect"
+      ],
+      "documentedItemIds": [],
+      "visibility": "implementation",
+      "rustPath": "api::remote_desktop_api::remote_desktop_capture_consent",
+      "sourceFile": "src/apps/desktop/src/api/remote_desktop_api.rs",
+      "signature": "fn remote_desktop_capture_consent( window: WebviewWindow, request: CaptureConsentRequest, ) -> Result<Value, String>",
+      "remoteWorkspacePolicy": "WorkspaceAgnostic"
+    },
+    {
+      "id": "remote_desktop_local_settings",
+      "moduleId": "remote_desktop",
+      "capabilityId": "feature.remote-connect",
+      "capabilityIds": [
+        "feature.remote-connect"
+      ],
+      "documentedItemIds": [],
+      "visibility": "implementation",
+      "rustPath": "api::remote_desktop_api::remote_desktop_local_settings",
+      "sourceFile": "src/apps/desktop/src/api/remote_desktop_api.rs",
+      "signature": "fn remote_desktop_local_settings( window: WebviewWindow, request: EmptyRequest, ) -> Result<Value, String>",
+      "remoteWorkspacePolicy": "WorkspaceAgnostic"
+    },
+    {
+      "id": "remote_desktop_local_stop",
+      "moduleId": "remote_desktop",
+      "capabilityId": "feature.remote-connect",
+      "capabilityIds": [
+        "feature.remote-connect"
+      ],
+      "documentedItemIds": [],
+      "visibility": "implementation",
+      "rustPath": "api::remote_desktop_api::remote_desktop_local_stop",
+      "sourceFile": "src/apps/desktop/src/api/remote_desktop_api.rs",
+      "signature": "fn remote_desktop_local_stop( window: WebviewWindow, request: EmptyRequest, ) -> Result<(), String>",
+      "remoteWorkspacePolicy": "WorkspaceAgnostic"
+    },
+    {
+      "id": "remote_desktop_receiver",
+      "moduleId": "remote_desktop",
+      "capabilityId": "feature.remote-connect",
+      "capabilityIds": [
+        "feature.remote-connect"
+      ],
+      "documentedItemIds": [],
+      "visibility": "implementation",
+      "rustPath": "api::remote_desktop_api::remote_desktop_receiver",
+      "sourceFile": "src/apps/desktop/src/api/remote_desktop_api.rs",
+      "signature": "fn remote_desktop_receiver( window: WebviewWindow, request: ReceiverRequest, ) -> Result<Value, String>",
+      "remoteWorkspacePolicy": "WorkspaceAgnostic"
+    },
+    {
+      "id": "remote_desktop_request",
+      "moduleId": "remote_desktop",
+      "capabilityId": "feature.remote-connect",
+      "capabilityIds": [
+        "feature.remote-connect"
+      ],
+      "documentedItemIds": [],
+      "visibility": "implementation",
+      "rustPath": "remote_desktop_api::remote_desktop_request",
+      "sourceFile": "src/apps/desktop/src/api/remote_desktop_api.rs",
+      "signature": "fn remote_desktop_request( window: WebviewWindow, request: controller::ControllerRequest, ) -> Result<controller::ControllerReply, String>",
+      "remoteWorkspacePolicy": "WorkspaceAgnostic"
+    },
+    {
+      "id": "remote_desktop_revoke_view",
+      "moduleId": "remote_desktop",
+      "capabilityId": "feature.remote-connect",
+      "capabilityIds": [
+        "feature.remote-connect"
+      ],
+      "documentedItemIds": [],
+      "visibility": "implementation",
+      "rustPath": "api::remote_desktop_api::remote_desktop_revoke_view",
+      "sourceFile": "src/apps/desktop/src/api/remote_desktop_api.rs",
+      "signature": "fn remote_desktop_revoke_view( window: WebviewWindow, request: RevokeRequest, ) -> Result<(), String>",
+      "remoteWorkspacePolicy": "WorkspaceAgnostic"
+    },
+    {
+      "id": "remote_desktop_service_connect",
+      "moduleId": "remote_desktop",
+      "capabilityId": "feature.remote-connect",
+      "capabilityIds": [
+        "feature.remote-connect"
+      ],
+      "documentedItemIds": [],
+      "visibility": "implementation",
+      "rustPath": "api::remote_desktop_api::remote_desktop_service_connect",
+      "sourceFile": "src/apps/desktop/src/api/remote_desktop_api.rs",
+      "signature": "fn remote_desktop_service_connect( window: WebviewWindow, request: ServiceConnectRequest, ) -> Result<connection::ServiceStatus, String>",
+      "remoteWorkspacePolicy": "WorkspaceAgnostic"
+    },
+    {
+      "id": "remote_desktop_service_devices",
+      "moduleId": "remote_desktop",
+      "capabilityId": "feature.remote-connect",
+      "capabilityIds": [
+        "feature.remote-connect"
+      ],
+      "documentedItemIds": [],
+      "visibility": "implementation",
+      "rustPath": "api::remote_desktop_api::remote_desktop_service_devices",
+      "sourceFile": "src/apps/desktop/src/api/remote_desktop_api.rs",
+      "signature": "fn remote_desktop_service_devices( window: WebviewWindow, request: EmptyRequest, ) -> Result<Value, String>",
+      "remoteWorkspacePolicy": "WorkspaceAgnostic"
+    },
+    {
+      "id": "remote_desktop_service_disconnect",
+      "moduleId": "remote_desktop",
+      "capabilityId": "feature.remote-connect",
+      "capabilityIds": [
+        "feature.remote-connect"
+      ],
+      "documentedItemIds": [],
+      "visibility": "implementation",
+      "rustPath": "api::remote_desktop_api::remote_desktop_service_disconnect",
+      "sourceFile": "src/apps/desktop/src/api/remote_desktop_api.rs",
+      "signature": "fn remote_desktop_service_disconnect( window: WebviewWindow, request: EmptyRequest, ) -> Result<(), String>",
+      "remoteWorkspacePolicy": "WorkspaceAgnostic"
+    },
+    {
+      "id": "remote_desktop_service_status",
+      "moduleId": "remote_desktop",
+      "capabilityId": "feature.remote-connect",
+      "capabilityIds": [
+        "feature.remote-connect"
+      ],
+      "documentedItemIds": [],
+      "visibility": "implementation",
+      "rustPath": "api::remote_desktop_api::remote_desktop_service_status",
+      "sourceFile": "src/apps/desktop/src/api/remote_desktop_api.rs",
+      "signature": "fn remote_desktop_service_status( window: WebviewWindow, request: EmptyRequest, ) -> Result<connection::ServiceStatus, String>",
+      "remoteWorkspacePolicy": "WorkspaceAgnostic"
+    },
+    {
+      "id": "remote_desktop_turn",
+      "moduleId": "remote_desktop",
+      "capabilityId": "feature.remote-connect",
+      "capabilityIds": [
+        "feature.remote-connect"
+      ],
+      "documentedItemIds": [],
+      "visibility": "implementation",
+      "rustPath": "api::remote_desktop_api::remote_desktop_turn",
+      "sourceFile": "src/apps/desktop/src/api/remote_desktop_api.rs",
+      "signature": "fn remote_desktop_turn( window: WebviewWindow, request: controller::ControllerTurnRequest, ) -> Result< openbitfun_services_integrations::remote_connect::remote_desktop_device::TurnCredentials, String, >",
+      "remoteWorkspacePolicy": "WorkspaceAgnostic"
     },
     {
       "id": "remote_download_to_local_path",

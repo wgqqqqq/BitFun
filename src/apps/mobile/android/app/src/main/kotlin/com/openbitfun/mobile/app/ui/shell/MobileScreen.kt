@@ -52,6 +52,7 @@ import com.openbitfun.mobile.app.ui.account.AccountLoginScreen
 import com.openbitfun.mobile.app.ui.common.AdaptiveModalSurface
 import com.openbitfun.mobile.app.ui.remote.AccountRemoteScreen
 import com.openbitfun.mobile.app.ui.remote.ConnectAccountDeviceScreen
+import com.openbitfun.mobile.app.ui.remote.RemoteDesktopScreen
 import com.openbitfun.mobile.app.ui.remote.FilePreviewSurface
 import com.openbitfun.mobile.app.ui.settings.SettingsScreen
 import com.openbitfun.mobile.app.ui.shell.sidebar.AppSidebar
@@ -133,6 +134,7 @@ internal fun MobileScreen(onAccountRestored: (Boolean) -> Unit = {}) {
     val accountViewModel: AccountViewModel = viewModel(factory = AccountViewModel.Factory)
     val accountWorkspaceState by accountViewModel.workspaceState.collectAsStateWithLifecycle()
     val accountState by accountViewModel.state.collectAsStateWithLifecycle()
+    val desktop by accountViewModel.desktop.collectAsStateWithLifecycle()
     val accountRemoteState by accountViewModel.remoteState.collectAsStateWithLifecycle()
     val accountPhase by accountViewModel.connectionPhase.collectAsStateWithLifecycle()
     val accountWorkspaceDirectory by accountViewModel.workspaceDirectory.collectAsStateWithLifecycle()
@@ -667,9 +669,11 @@ internal fun MobileScreen(onAccountRestored: (Boolean) -> Unit = {}) {
         if (connectAccount != null) {
             ConnectAccountDeviceScreen(
                 state = connectAccount,
+                currentDeviceId = accountViewModel.currentDeviceId,
                 onBack = shell::closeRemoteConnect,
                 onRefresh = { accountViewModel.dispatch(AccountIntent.RefreshDevices) },
                 onSelect = { shell.closeRemoteConnect(); accountViewModel.selectDevice(it) },
+                onViewDesktop = { shell.closeRemoteConnect(); accountViewModel.viewDesktop(it) },
                 modifier = sheetModifier,
             )
         }
@@ -695,5 +699,10 @@ internal fun MobileScreen(onAccountRestored: (Boolean) -> Unit = {}) {
             onBack = shell::dismissAccount,
             viewModel = accountViewModel,
         )
+    }
+    desktop?.let { destination ->
+        RemoteDesktopScreen(destination.store, destination.deviceName,
+            onReconnect = { accountViewModel.viewDesktop(destination.deviceId) },
+            onBack = accountViewModel::closeDesktop, modifier = Modifier.fillMaxSize())
     }
 }

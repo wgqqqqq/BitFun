@@ -33,4 +33,6 @@ export interface ShortcutConfig {
    * element is focused. Defaults to false.
    */
   allowInInput?: boolean;
+  /** Explicit local escape/close action inside a surface that owns its keys. */
+  allowInExclusiveInput?: boolean;
 }

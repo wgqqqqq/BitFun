@@ -1,0 +1,34 @@
+services:
+  remote-desktop:
+    image: ${REMOTE_DESKTOP_IMAGE:?Set REMOTE_DESKTOP_IMAGE}
+    build:
+      context: ../../..
+      dockerfile: src/apps/relay-server/Dockerfile
+    user: "${REMOTE_DESKTOP_UID:-10001}:${REMOTE_DESKTOP_GID:-10001}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${REMOTE_DESKTOP_PORT:-9701}:9700"
+    environment:
+      RELAY_PORT: "9700"
+      RELAY_DB_PATH: /data/desktop.db
+      RELAY_ASSET_DIR: /data/assets
+      RELAY_STATIC_DIR: ""
+      REMOTE_DESKTOP_PAIRING_KEY_FILE: /run/desktop/pairing-key
+      RELAY_REMOTE_DESKTOP_TURN_URLS: ${REMOTE_DESKTOP_TURN_URLS:?Configure your own TURN server}
+      RELAY_REMOTE_DESKTOP_TURN_SECRET_FILE: /run/desktop/turn-secret
+    volumes:
+      - ./data:/data
+      - ./private:/run/desktop:ro
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    mem_limit: 768m
+    cpus: 1
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"

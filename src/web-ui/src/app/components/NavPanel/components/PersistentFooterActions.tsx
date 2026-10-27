@@ -17,6 +17,7 @@ import { createOverlayPortal,
   DialogTitle,
 } from '@openbitfun/ui';
 import { RetainedMountBoundary } from '@/shared/presence';
+import { isTauriRuntime } from '@/infrastructure/runtime';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 import { activateProductAction } from '@/app/global-search/productActionActivator';
 import { useSceneStore } from '@/app/stores/sceneStore';
@@ -68,7 +69,7 @@ const PersistentFooterActions: React.FC = () => {
   const hasAppUpdate = useHasAppUpdate();
   const updateVersion = useUpdateInstallStore(state => state.downloadVersion ?? state.availableUpdate?.latestVersion);
   const [showRemoteConnect, setShowRemoteConnect] = useState(false);
-  const [remoteInitialGroup, setRemoteInitialGroup] = useState<'network' | 'bot' | 'account' | undefined>(undefined);
+  const [remoteInitialGroup, setRemoteInitialGroup] = useState<'network' | 'bot' | 'account' | 'desktop' | undefined>(undefined);
   const [showRemoteDisclaimer, setShowRemoteDisclaimer] = useState(false);
   const [hasAgreedRemoteDisclaimer, setHasAgreedRemoteDisclaimer] = useState<boolean>(
     () => getRemoteConnectDisclaimerAgreed(),
@@ -154,7 +155,7 @@ const PersistentFooterActions: React.FC = () => {
 
   useEffect(() => {
     const handlePlaybookOpen = (event: Event) => {
-      const requestedGroup = (event as CustomEvent<{ group?: 'network' | 'bot' | 'account' }>).detail?.group;
+      const requestedGroup = (event as CustomEvent<{ group?: 'network' | 'bot' | 'account' | 'desktop' }>).detail?.group;
       setRemoteInitialGroup(requestedGroup);
       if (hasAgreedRemoteDisclaimer || getRemoteConnectDisclaimerAgreed()) {
         setHasAgreedRemoteDisclaimer(true);
@@ -183,6 +184,13 @@ const PersistentFooterActions: React.FC = () => {
             open={deviceOverviewOpen}
             onOpenChange={handleDeviceOverviewOpenChange}
             onManageDevices={handleRemoteConnect}
+            onOpenRemoteDesktop={isTauriRuntime() ? () => {
+              setRemoteInitialGroup('desktop');
+              if (hasAgreedRemoteDisclaimer || getRemoteConnectDisclaimerAgreed()) {
+                setHasAgreedRemoteDisclaimer(true);
+                setShowRemoteConnect(true);
+              } else setShowRemoteDisclaimer(true);
+            } : undefined}
           />
         </div>
 

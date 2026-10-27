@@ -90,6 +90,96 @@ UiState or an Intent declared there, and no module above it is visible to them.
   launch argument `--streaming-regression` opens the same deterministic fixture.
   `local.properties` holds
   the local SDK path and is not committed.
+- For the iOS remote-desktop receiver and native layout, use the focused
+  build / simulator commands in `ios/README.md` → Remote desktop.
+  The WKWebView probe uses generated media. The account runner adds the public
+  iOS account factory, Keychain and encrypted transport against synthetic auth /
+  host replies; use a locally signed simulator build. Keep real account-service,
+  physical-phone and OS input acceptance separate.
+- For account target selection and legacy device-kind compatibility, run from
+  `shared/`:
+  `./gradlew :core-feature:jvmTest --tests '*AccountDevicePolicyTest' --tests '*AccountStoreTest' --tests '*AccountDeviceLinkTest'`
+  and
+  `./gradlew :core-transport:jvmTest --tests '*CloudAccountClientTest.listDevicesOffersHostsAndDropsPhones'`.
+  Use `:core-feature:testAndroidHostTest` with the same feature test filters for
+  Android compilation and host-side regression coverage.
+  These cover session host selection and DTO mapping; they do not prove native
+  remote-desktop capture, rendering, or input on Android/iOS.
+- For the dedicated remote-desktop Socket.IO lane, run from `shared/`:
+  `./gradlew :core-transport:jvmTest --tests '*RemoteDesktopAccountChannelTest' --tests '*RemoteDesktopRpcWireTest' --tests '*RemoteDesktopRealtimeTest' --tests '*OkHttpRealtimeTest' --tests '*CloudAccountClientTest'`.
+  Also run `:core-transport:testAndroidHostTest --tests '*RemoteDesktopAccountChannelTest' --tests '*RemoteDesktopRpcWireTest' --tests '*CloudAccountClientTest'`
+  for Android compilation and common validation. The JVM socket fixture uses
+  the actual OkHttp engine with a loopback Engine.IO/Socket.IO peer; it verifies
+  fixed target/epoch, capability refusal, no bulk/fallback/replay, late ACKs,
+  concurrent chat isolation and binding-only close. `CloudAccountClient` creates
+  the encrypted channel after capability discovery; it pins the target key and
+  socket epoch without borrowing the Agent key cache. Channel lifecycle/crypto,
+  bounded no-redirect HTTP metadata, and pure scoped TURN validation have separate
+  owners. Common tests cover actual encryption with mocked HTTP/socket peers,
+  account/key changes, cancellation, late results and redaction. These tests are
+  transport evidence, not an Android/iOS product entry, media, native-device or
+  public-network acceptance. Keep the platform apps behind `core-feature`.
+- For KMP remote-desktop discovery, attachment and read-only media state, run from `shared/`:
+  `./gradlew :core-feature:jvmTest --tests '*RemoteDesktop*Test' --tests '*AccountRemoteDesktopTest' --tests '*AccountDevicePolicyTest' --tests '*AccountStoreTest' --tests '*AccountDeviceLinkTest'`
+  and `:core-feature:testAndroidHostTest` with the same filters.
+  `AccountStore` creates one explicit-target setup owner without changing chat
+  selection. Background or retired account scopes cannot create an owner.
+  Replacement waits for the old owner's attach/detach cleanup before opening its
+  channel; a foreground page reconnect requests a fresh owner instead of reviving
+  its invalidated store. The feature-local channel maps v1 host JSON into typed setup facts;
+  the store owns state, fixed binding, close ordering and bounded cleanup.
+  `RemoteDesktopMediaSession` owns one read-only PC's signaling/presentation
+  evidence and 30-second Relay grace; `RemoteDesktopCredentialBudget` owns pure
+  monotonic/wall deadlines. Read-only recovery requires a fresh binding with the
+  same account object, target, pinned key and verified live host connection.
+  It never replays attachment or input. Tests use a fake feature channel and
+  actual host-shaped JSON. `Attached` is logical; `Viewing` also requires source,
+  answer, actual presentation and forced-TURN evidence when requested.
+  `RemoteDesktopSourceLifecycleTest` covers negotiated manual suspend/resume:
+  retire old callbacks before the mutation, keep the PC until host suspension
+  confirmation, wait for native drain, require a new connection and first frame.
+  Uncertain mutations get one state read and no replay; close waits for both
+  media and source work. Paused/draining attachments expire after 60 seconds and
+  never resume automatically after a manual pause. Negotiated automatic credential
+  renewal requires both source and credential-rebuild capabilities, a presented
+  PC and live signaling. At the 60-second margin it reuses suspend/drain/resume,
+  retaining the attachment but requiring a fresh connection/renderer/frame.
+  A manual pause wins during suspend, drain or an already-sent resume; confirm
+  the latter, then suspend its new PC without presenting it. Account retirement,
+  close, source timeout and revoked authorization cannot restart media. New
+  credentials with at most 60 seconds remaining fail rather than loop.
+  Paused display choice refreshes the authorized catalog without an outer
+  attachment; cancel retires its local read generation and leaves the original
+  retention deadline intact. Select and resume each read a fresh CAS over the
+  fixed attachment channel. Unknown selection ACKs get one confirmation read,
+  never replay or fallback to the old display. Selection preserves the paused
+  connection until resume creates a new one; old frames cannot satisfy it.
+  `RemoteDesktopControlSession` owns only native-side intent admission and
+  retirement; the bundled JS controller still owns lease requests, ACK deadlines,
+  renewal and DC ordering. SetupStore exposes typed renderer intents through a
+  bounded single-consumer queue and fails on pressure instead of dropping input.
+  Host `ordered_control_v1` is insufficient: the exact renderer must signal
+  ControlReady after implementing epoch-stamped reports and queued-input fencing.
+  Stamp report epochs when JS creates the event, never when native receives it.
+  Source/account/PC retirement clears local authority and pending renderer work;
+  a resumed PC starts without native control readiness. Pure common tests cover
+  known/unknown acquire, release crossing renewal, stale events after multiple
+  leases, geometry changes, malformed grants and pressure. They are not native
+  pointer, keyboard, focus or OS-input acceptance. Android sends ControlReady
+  only after the current receiver advertises `control_epoch_v1`, presents valid
+  geometry and completes a delegated native focus reply. Its native adapter
+  supports explicit acquire/release, letterbox-aware taps and committed text /
+  paired special keys; a synchronous
+  read-only native predicate fences queued JS execution after focus/lease loss.
+  Run the Android account/media runner in its local guide for actual emulator
+  tap, keyboard and focus retirement evidence. Text requires `text_commit_v1`;
+  the portable helper validates confirmed Unicode without replacing malformed
+  surrogates, and editor callbacks retain their original authority. Physical OS
+  input remains separate work; synthetic grants do not prove host authorization.
+  The native adapter must stop its PC synchronously when media becomes null,
+  fence all callbacks with renderer/attachment/connection identity, and keep
+  account credentials out of its bundled receive-only page. These tests prove
+  state behavior, not actual WebView, account media or platform UI acceptance.
 - The Android app builds from `android/`: `./gradlew :app:assembleDebug` and
   `:app:installDebug`; release verification is `./gradlew :app:assembleRelease`.
   Release builds use the standard local Android debug keystore when formal

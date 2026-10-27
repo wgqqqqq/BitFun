@@ -294,6 +294,21 @@
       "refresh_subscription_account_instance",
       "set_subscription_account_enabled",
       "start_subscription_account_login"
+    ],
+    "remote-desktop-read-only-foundation": [
+      "remote_desktop_approve_view",
+      "remote_desktop_approve_control",
+      "remote_desktop_capture_consent",
+      "remote_desktop_local_settings",
+      "remote_desktop_local_stop",
+      "remote_desktop_revoke_view",
+      "remote_desktop_receiver",
+      "remote_desktop_request",
+      "remote_desktop_turn",
+      "remote_desktop_service_connect",
+      "remote_desktop_service_devices",
+      "remote_desktop_service_disconnect",
+      "remote_desktop_service_status"
     ]
   },
   "capabilities": [
@@ -10011,6 +10026,9 @@
     },
     "model_pool": {
       "capabilityId": "setting.ai.models"
+    },
+    "remote_desktop": {
+      "capabilityId": "feature.remote-connect"
     }
   }
 }

@@ -13,6 +13,10 @@ and embedded hosts.
   its task lifecycle in `src/apps/desktop`; assembly controls only product
   start/stop sequencing through a narrow host port.
 - Hosts supply the version reported by the shared health and info routes.
+- Default account Relay builders expose no remote-desktop capability or route.
+  An explicit self-hosted pairing configuration selects the independent desktop
+  service: no account login, Pages or general Agent RPC. It owns a separate DB;
+  never enable remote control on the official login deployment as a fallback.
 - Keep relay messages opaque. Devices retain their own private keys; public-key
   lookup and message routing must enforce authenticated account ownership.
 - Keep admission before body buffering and preserve resource permits through
@@ -42,6 +46,11 @@ and embedded hosts.
 Run `cargo test -p openbitfun-relay-service` and
 `node scripts/check-core-boundaries.mjs` after changes.
 
+For the dedicated remote desktop signaling lane, use
+`cargo test --locked -p openbitfun-relay-service --lib account_transport_tests::remote_desktop::`.
+When changing shared identity, admission, or capability discovery, include
+`account_transport_tests::` to preserve legacy RPC and both public path layouts.
+
 Account identity supports independent GitHub and email-code users. Preserve legacy
 numeric GitHub Relay IDs; email `accountId` values occupy the `email-` namespace.
 Never derive identity from the caller's claimed user ID or display name. New
@@ -49,3 +58,24 @@ clients opt into the hosted chooser with `methods=all` on the existing start rou
 legacy calls keep direct GitHub URLs. Run `cargo test -p openbitfun-relay-service
 --lib account_transport_tests::` for account isolation, device RPC and revocation
 across both identity kinds and both route layouts.
+
+Attachment authorization links stay ephemeral in `realtime/remote_desktop`.
+Use the remote-desktop transport filter above for original socket/token/key
+pinning, acknowledged invalidation, reconnect and registration cleanup. Include
+`account_transport_tests::` after changing the shared five-second auth owner.
+These router tests do not prove native pixels, DTLS binding or media termination.
+
+The same filter checks `credentialBinding` across fresh routers sharing one DB:
+the original credential pair stays stable after registry loss, a replacement
+token differs even after the old token is revoked, and controller-supplied
+metadata is ignored. The binding is opaque host metadata, never a forwarded
+token or media authority. Keep legacy discovery and RPC working; new hosts
+negotiate `remote_desktop_credential_binding_v1` before advertising media.
+
+For attachment-scoped TURN credential issuance, use the same remote-desktop
+transport filter and `cargo test --locked -p openbitfun-relay-service --lib remote_desktop_turn`.
+HTTP and Socket.IO must share one association registry. Recheck the original
+participant tokens/keys; presence, delegated scopes and replacement tokens
+cannot obtain ICE credentials. Signing secrets are host-supplied private config,
+never serializable route data. Include `--lib` after HTTP admission/builder changes
+to preserve legacy routes and both public mount layouts.

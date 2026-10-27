@@ -41,6 +41,11 @@ async fn main() -> anyhow::Result<()> {
     } else {
         anyhow::bail!("RELAY_DB_PATH is required; anonymous relay mode is no longer supported")
     };
+    openbitfun_relay_service::validate_remote_desktop_database(
+        &db,
+        cfg.remote_desktop_pairing.is_some(),
+    )
+    .await?;
     if cfg.cors_allow_origins.iter().any(|origin| origin == "*") {
         anyhow::bail!(
             "RELAY_CORS_ALLOW_ORIGINS=* is not allowed when RELAY_DB_PATH enables account APIs"
@@ -70,14 +75,18 @@ async fn main() -> anyhow::Result<()> {
 
     let pages_enabled = page_browser_auth.is_some();
     let page_data_dir = std::path::PathBuf::from(&cfg.asset_dir).join("page-data");
-    let mut app = openbitfun_relay_service::build_relay_router_with_page_data_origins_and_page_auth(
+    let mut app = openbitfun_relay_service::build_relay_router_with_options(
         asset_store,
         start_time,
         db,
         env!("CARGO_PKG_VERSION"),
-        pages_enabled.then_some(page_data_dir),
-        cfg.cors_allow_origins.clone(),
-        page_browser_auth,
+        openbitfun_relay_service::RelayRuntimeOptions {
+            page_data_dir: pages_enabled.then_some(page_data_dir),
+            cors_allow_origins: cfg.cors_allow_origins.clone(),
+            page_browser_auth,
+            remote_desktop_turn: cfg.remote_desktop_turn.clone(),
+            remote_desktop_pairing: cfg.remote_desktop_pairing.clone(),
+        },
     );
 
     if let Some(static_dir) = &cfg.static_dir {

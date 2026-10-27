@@ -63,6 +63,9 @@ struct AppRoot {
   build() {
     Stack() {
       AppRootPresentation({
+        remoteDesktopState: this.runtime.remoteDesktopViewModel.state,
+        remoteDesktopServiceState: this.runtime.remoteDesktopServiceViewModel.state,
+        remoteDesktopActions: this.runtime.remoteDesktopViewModel.actions,
         shellState: this.runtime.appShellState,
         miniAppState: this.runtime.miniAppViewModel.state,
         miniAppActions: this.runtime.miniAppViewModel.actions,

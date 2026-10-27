@@ -7,6 +7,8 @@ import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
 import io.ktor.websocket.send
+import com.openbitfun.mobile.core.protocol.EncryptedPayload
+import com.openbitfun.mobile.core.protocol.RelayJson
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
@@ -23,6 +25,9 @@ internal interface AccountRpcConnection {
     val notifications: Flow<JsonObject> get() = emptyFlow()
     val connections: Flow<Long> get() = emptyFlow()
     suspend fun call(target: String, params: JsonElement, timeoutMs: Long): JsonElement
+    suspend fun prepareRemoteDesktop(target: String, relayCapabilities: Set<String>): RemoteDesktopRpcBinding {
+        throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.RELAY_UPGRADE_REQUIRED)
+    }
     fun close()
 }
 
@@ -101,6 +106,84 @@ internal class AccountRealtime(
             }
         } catch (timeout: TimeoutCancellationException) {
             throw CloudAccountException(CloudAccountFailure.TIMEOUT, null, connectionFailure.value ?: timeout)
+        }
+    }
+
+    /** Discovery belongs to the account client. This binding never waits for a
+     * successor epoch, uses bulk payloads, registers a host, or replays a call. */
+    override suspend fun prepareRemoteDesktop(target: String, relayCapabilities: Set<String>): RemoteDesktopRpcBinding {
+        if ("remote_desktop_route_v1" !in relayCapabilities) {
+            throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.RELAY_UPGRADE_REQUIRED)
+        }
+        RemoteDesktopRpcWire.requireTarget(target)
+        if (!owner.isActive) throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.ACCOUNT_CHANGED)
+        val epoch = try {
+            withTimeout(RELAY_CONNECT_TIMEOUT_MS) {
+                state.filterNotNull().first().also { it.ready.await() }
+            }
+        } catch (_: TimeoutCancellationException) {
+            throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.RELAY_CONNECT_TIMEOUT)
+        } catch (_: CloudAccountException) {
+            throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.ACCOUNT_CHANGED)
+        }
+        val retired = MutableStateFlow(false)
+        return object : RemoteDesktopRpcBinding {
+            override fun current(): Boolean = !retired.value && owner.isActive && !epoch.closed && state.value === epoch
+            override fun close() { retired.value = true }
+            override suspend fun call(params: EncryptedPayload, timeoutMs: Long, attachment: String?): EncryptedPayload {
+                RemoteDesktopRpcWire.requireCall(params, timeoutMs, attachment)
+                if (!current()) throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.ACCOUNT_CHANGED)
+                val reply = CompletableDeferred<JsonElement>()
+                val id = epoch.mutex.withLock {
+                    if (!current()) throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.ACCOUNT_CHANGED)
+                    val id = epoch.nextId++
+                    epoch.pending[id] = reply
+                    id
+                }
+                try {
+                    val packet = SocketIOPacket.Event("/", id, buildJsonArray {
+                        add("rd-call")
+                        add(buildJsonObject {
+                            put("version", 1); put("targetDeviceId", target)
+                            put("params", RelayJson.encodeToJsonElement(EncryptedPayload.serializer(), params))
+                            put("timeoutMs", timeoutMs)
+                            if (attachment != null) put("attachId", attachment)
+                        })
+                    })
+                    val response = withTimeout(timeoutMs) {
+                        if (!current()) throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.ACCOUNT_CHANGED)
+                        epoch.socket.send(EngineIO.encodeSocketIO(EngineIOPacket.Message(packet)))
+                        val result = reply.await() as? JsonObject
+                            ?: throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.INVALID_SIGNAL_ENVELOPE)
+                        if (!current()) throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.DELIVERY_UNKNOWN)
+                        if ((result["ok"] as? JsonPrimitive)?.booleanOrNull != true) {
+                            throw RemoteDesktopRpcWire.rejection((result["error"] as? JsonPrimitive)?.contentOrNull)
+                        }
+                        val envelope = try {
+                            RelayJson.decodeFromJsonElement(EncryptedPayload.serializer(), result["result"] ?: JsonNull)
+                        } catch (_: IllegalArgumentException) {
+                            throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.INVALID_SIGNAL_ENVELOPE)
+                        }
+                        RemoteDesktopRpcWire.requireEnvelope(envelope)
+                        envelope
+                    }
+                    if (!current()) throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.DELIVERY_UNKNOWN)
+                    return response
+                } catch (_: TimeoutCancellationException) {
+                    throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.DELIVERY_UNKNOWN)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: RemoteDesktopTransportException) {
+                    throw failure
+                } catch (_: Exception) {
+                    // A failed write/epoch may already have reached the host.
+                    throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.DELIVERY_UNKNOWN)
+                } finally {
+                    withContext(NonCancellable) { epoch.mutex.withLock { epoch.pending.remove(id) } }
+                }
+            }
+        }.also {
+            if (!it.current()) throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.ACCOUNT_CHANGED)
         }
     }
 

@@ -11,6 +11,11 @@
 //!   - Published Page assets are managed via `WebAssetStore`
 
 mod identity;
+mod remote_desktop_turn;
+pub use remote_desktop_turn::RemoteDesktopTurnConfig;
+mod remote_desktop_pairing;
+pub use remote_desktop_pairing::validate_remote_desktop_database;
+pub use remote_desktop_pairing::RemoteDesktopPairingConfig;
 pub mod realtime;
 
 #[cfg(test)]
@@ -1080,6 +1085,17 @@ fn create_link(original: &std::path::Path, link: &std::path::Path) -> std::io::R
 
 // ── Router builder ────────────────────────────────────────────────────
 
+#[derive(Default)]
+pub struct RelayRuntimeOptions {
+    pub page_data_dir: Option<std::path::PathBuf>,
+    pub cors_allow_origins: Vec<String>,
+    pub page_browser_auth: Option<PageBrowserAuthConfig>,
+    pub remote_desktop_turn: Option<RemoteDesktopTurnConfig>,
+    /// Select the independent self-hosted desktop service. Account Relay
+    /// builders leave this absent and expose no desktop control capability.
+    pub remote_desktop_pairing: Option<RemoteDesktopPairingConfig>,
+}
+
 /// Build the relay router with all API, WebSocket, and static-file routes.
 ///
 /// Both the standalone binary and the embedded relay call this function,
@@ -1144,6 +1160,35 @@ pub fn build_relay_router_with_page_data_origins_and_page_auth(
     cors_allow_origins: Vec<String>,
     page_browser_auth: Option<PageBrowserAuthConfig>,
 ) -> Router {
+    build_relay_router_with_options(
+        asset_store,
+        start_time,
+        db,
+        host_version,
+        RelayRuntimeOptions {
+            page_data_dir,
+            cors_allow_origins,
+            page_browser_auth,
+            remote_desktop_turn: None,
+            remote_desktop_pairing: None,
+        },
+    )
+}
+
+pub fn build_relay_router_with_options(
+    asset_store: Arc<dyn WebAssetStore>,
+    start_time: std::time::Instant,
+    db: Arc<crate::db::DbPool>,
+    host_version: &'static str,
+    options: RelayRuntimeOptions,
+) -> Router {
+    let RelayRuntimeOptions {
+        page_data_dir,
+        cors_allow_origins,
+        page_browser_auth,
+        remote_desktop_turn,
+        remote_desktop_pairing,
+    } = options;
     let page_data = page_data_dir.map(crate::page_data::PageDataStore::new);
     let cors_allow_origins = cors_allow_origins
         .into_iter()
@@ -1167,7 +1212,12 @@ pub fn build_relay_router_with_page_data_origins_and_page_auth(
         device_manager: crate::relay::DeviceManager::new(),
         cors_allow_origins: Arc::new(cors_allow_origins.clone()),
         page_browser_auth: page_browser_auth.map(Arc::new),
+        remote_desktop_associations: Arc::new(realtime::RemoteDesktopAssociations::default()),
+        remote_desktop_turn: remote_desktop_turn.map(Arc::new),
+        remote_desktop_pairing: remote_desktop_pairing.map(Arc::new),
     };
+    let remote_desktop_enabled = state.remote_desktop_pairing.is_some();
+    let turn_configured = state.remote_desktop_turn.is_some();
     // Resolve retirement configuration at startup so its state is in the log
     // before the first request can be refused.
     retired_version::announce_policy();
@@ -1179,19 +1229,35 @@ pub fn build_relay_router_with_page_data_origins_and_page_auth(
         )
         .route(
             "/api/info",
-            get(move || routes::api::server_info_for_host(host_version)),
+            get(move || {
+                routes::api::server_info_for_service(
+                    host_version,
+                    remote_desktop_enabled,
+                    turn_configured,
+                )
+            }),
         )
-        .route("/api/auth/github/start", post(routes::auth::github_start))
-        .route("/api/auth/github/poll", post(routes::auth::github_poll))
-        .route("/api/auth/login", post(routes::auth::login))
-        .route("/api/auth/logout", post(routes::auth::logout))
-        .route("/api/auth/delegate", post(routes::auth::delegate))
-        .route(
-            "/api/auth/provision-device",
-            post(routes::auth::provision_device),
-        )
-        .merge(routes::devices::device_router())
-        .merge(routes::pages::pages_router());
+        .merge(routes::devices::device_router());
+    let router = if remote_desktop_enabled {
+        router
+            .route(
+                "/api/remote-desktop/pair",
+                post(remote_desktop_pairing::pair),
+            )
+            .merge(remote_desktop_turn::router())
+    } else {
+        router
+            .route("/api/auth/github/start", post(routes::auth::github_start))
+            .route("/api/auth/github/poll", post(routes::auth::github_poll))
+            .route("/api/auth/login", post(routes::auth::login))
+            .route("/api/auth/logout", post(routes::auth::logout))
+            .route("/api/auth/delegate", post(routes::auth::delegate))
+            .route(
+                "/api/auth/provision-device",
+                post(routes::auth::provision_device),
+            )
+            .merge(routes::pages::pages_router())
+    };
     let router = realtime::mount(router, state.clone())
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),

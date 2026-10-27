@@ -145,6 +145,36 @@ describe('isPeerLocalOnlyCommand', () => {
     expect(isPeerLocalOnlyCommand('product_control_invoke')).toBe(false);
   });
 
+  it('keeps remote desktop OS consent and trust on this controller', async () => {
+    const rpc = vi.fn();
+    const local = vi.spyOn(TauriTransportAdapter.prototype, 'request').mockResolvedValue({ current_granted: false });
+    try {
+      const adapter = new PeerDeviceTransportAdapter('peer-1', rpc);
+      const args = { request: { action: 'request' } };
+      expect(isPeerLocalOnlyCommand('remote_desktop_capture_consent')).toBe(true);
+      await expect(adapter.request('remote_desktop_capture_consent', args)).resolves.toEqual({ current_granted: false });
+      expect(local).toHaveBeenCalledWith('remote_desktop_capture_consent', args, undefined);
+      expect(rpc).not.toHaveBeenCalled();
+    } finally { local.mockRestore(); }
+  });
+
+  it('sends remote desktop signaling from this controller while a peer workspace is active', async () => {
+    const rpc = vi.fn();
+    const local = vi.spyOn(TauriTransportAdapter.prototype, 'request').mockResolvedValue({});
+    try {
+      const adapter = new PeerDeviceTransportAdapter('workspace-peer', rpc);
+      for (const [command, request] of [
+        ['remote_desktop_request', { target_device_id: 'desktop-target', payload: { version: 1, op: 'capabilities' } }],
+        ['remote_desktop_turn', { target_device_id: 'desktop-target', attach_id: 'attachment', context: { connection_id: 'controller-connection' } }],
+      ] as const) {
+        expect(isPeerLocalOnlyCommand(command)).toBe(true);
+        await adapter.request(command, { request });
+        expect(local).toHaveBeenLastCalledWith(command, { request }, undefined);
+      }
+      expect(rpc).not.toHaveBeenCalled();
+    } finally { local.mockRestore(); }
+  });
+
   it('keeps controller app-shell locale on the controller device', () => {
     expect(isPeerLocalOnlyCommand('i18n_get_current_language')).toBe(true);
     expect(isPeerLocalOnlyCommand('i18n_set_language')).toBe(true);

@@ -942,6 +942,24 @@ impl FrontendWorkbenchManager {
         }
     }
 
+    /// Read-only identity check for native-only security settings. Unlike the
+    /// navigation callback, this never arms or adopts a document URL.
+    pub(crate) fn is_current_main_document(&self, url: &Url) -> bool {
+        if matches!(url.scheme(), "blob" | "about" | "data") {
+            return false;
+        }
+        let Ok(navigation) = self.main_navigation.lock() else {
+            return false;
+        };
+        navigation.current_url.as_ref().is_some_and(|current| {
+            let mut current = current.clone();
+            current.set_fragment(None);
+            let mut candidate = url.clone();
+            candidate.set_fragment(None);
+            same_main_navigation_target(&current, &candidate)
+        })
+    }
+
     fn navigate_main_to_revision(
         &self,
         app: &tauri::AppHandle,
@@ -2382,6 +2400,37 @@ mod tests {
         assert!(!manager.should_allow_main_navigation(&untrusted_url));
         assert!(manager
             .should_allow_main_navigation(&"about:srcdoc".parse::<Url>().expect("srcdoc URL")));
+    }
+
+    #[test]
+    fn remote_desktop_trust_requires_the_current_document_without_arming_navigation() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = FrontendWorkbenchManager::new(temp.path());
+        let dev: Url = "http://localhost:1422/".parse().unwrap();
+        let candidate: Url = "openbitfun-ui://localhost/index.html?openbitfunFrontendRevision=new"
+            .parse()
+            .unwrap();
+        assert!(!manager.is_current_main_document(&dev));
+        assert!(manager.should_allow_main_navigation(&dev));
+        assert!(manager.is_current_main_document(&dev));
+        assert!(
+            manager.is_current_main_document(&"http://localhost:1422/#devices".parse().unwrap())
+        );
+        for url in [
+            "https://example.com/",
+            "about:srcdoc",
+            "blob:http://localhost:1422/x",
+            "http://localhost:1423/",
+        ] {
+            assert!(!manager.is_current_main_document(&url.parse().unwrap()));
+        }
+        assert!(!manager.is_current_main_document(&candidate));
+        assert!(manager.is_current_main_document(&dev));
+        manager.main_navigation.lock().unwrap().armed_url = Some(candidate.clone());
+        assert!(!manager.is_current_main_document(&candidate));
+        assert!(manager.should_allow_main_navigation(&candidate));
+        assert!(manager.is_current_main_document(&candidate));
+        assert!(!manager.is_current_main_document(&dev));
     }
 
     #[test]

@@ -1,3 +1,7 @@
+import { WindowSystemBarService } from '../services/WindowSystemBarService';
+import BuildProfile from 'BuildProfile';
+import { RemoteDesktopService } from '../services/RemoteDesktopService';
+import { RemoteDesktopProbeService } from '../services/RemoteDesktopProbeService';
 import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { display, window } from '@kit.ArkUI';
@@ -10,10 +14,22 @@ export default class EntryAbility extends UIAbility {
   private mainWindow?: window.Window;
   private initialPage: string = 'pages/AppRoot';
   private previewStorage?: LocalStorage;
+  private probeLandscape: boolean = false;
+  private probePortrait: boolean = false;
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     const scenarioId = want.parameters?.['openbitfunDesignPreview'];
-    if (scenarioId === 'history-scroll' || scenarioId === 'durable-timeline' || scenarioId === 'composer-submit' || scenarioId === 'catalog-refresh' || scenarioId === 'catalog-refresh-dark' || scenarioId === 'model-role-selector' || scenarioId === 'model-role-selector-dark' || scenarioId === 'model-role-selector-wide' || scenarioId === 'subagent-process' || scenarioId === 'subagent-process-dark' || scenarioId === 'file-visibility' || scenarioId === 'file-visibility-dark' || scenarioId === 'immersive-bottom' || scenarioId === 'immersive-bottom-dark' || scenarioId === 'immersive-bottom-wide' || scenarioId === 'immersive-bottom-drawer' || scenarioId === 'immersive-bottom-drawer-dark' || scenarioId === 'immersive-bottom-settings' || scenarioId === 'immersive-bottom-settings-dark' || scenarioId === 'immersive-bottom-cover' || scenarioId === 'immersive-bottom-miniapps' || scenarioId === 'immersive-bottom-wide-shell' || scenarioId === 'immersive-bottom-tools' || scenarioId === 'immersive-bottom-tools-editor' || scenarioId === 'immersive-bottom-tools-file-action' || scenarioId === 'immersive-bottom-view-settings' || scenarioId === 'immersive-bottom-connect' || scenarioId === 'composer-overflow' || scenarioId === 'composer-overflow-empty' || scenarioId === 'composer-overflow-dark' || scenarioId === 'composer-overflow-wide' || scenarioId === 'composer-overflow-expanded' || scenarioId === 'composer-overflow-expanded-dark' || scenarioId === 'device-selector' || scenarioId === 'device-selector-dark' || scenarioId === 'welcome-home' || scenarioId === 'connected-conversation' ||
+    if (BuildProfile.DEBUG && want.parameters?.['openbitfunRemoteDesktopProbe'] === 'true') {
+      this.initialPage = want.parameters?.['remoteDesktopSharedReceiver'] === 'true'
+        ? 'pages/preview/RemoteDesktopSharedMediaProbe' : 'pages/preview/RemoteDesktopProbe';
+      this.probeLandscape = want.parameters?.['remoteDesktopProbeLandscape'] === 'true';
+      AppStorage.setOrCreate('remoteDesktopProbeKey', String(want.parameters?.['remoteDesktopProbeKey'] || ''));
+    }
+    if (BuildProfile.DEBUG && (scenarioId === 'remote-desktop' || scenarioId === 'remote-desktop-dark')) {
+      this.probeLandscape = want.parameters?.['remoteDesktopPreviewLandscape'] === 'true';
+      this.probePortrait = want.parameters?.['remoteDesktopPreviewLandscape'] === 'false';
+    }
+    if ((BuildProfile.DEBUG && (scenarioId === 'remote-desktop' || scenarioId === 'remote-desktop-dark')) || scenarioId === 'history-scroll' || scenarioId === 'durable-timeline' || scenarioId === 'composer-submit' || scenarioId === 'catalog-refresh' || scenarioId === 'catalog-refresh-dark' || scenarioId === 'model-role-selector' || scenarioId === 'model-role-selector-dark' || scenarioId === 'model-role-selector-wide' || scenarioId === 'subagent-process' || scenarioId === 'subagent-process-dark' || scenarioId === 'file-visibility' || scenarioId === 'file-visibility-dark' || scenarioId === 'immersive-bottom' || scenarioId === 'immersive-bottom-dark' || scenarioId === 'immersive-bottom-wide' || scenarioId === 'immersive-bottom-drawer' || scenarioId === 'immersive-bottom-drawer-dark' || scenarioId === 'immersive-bottom-settings' || scenarioId === 'immersive-bottom-settings-dark' || scenarioId === 'immersive-bottom-cover' || scenarioId === 'immersive-bottom-miniapps' || scenarioId === 'immersive-bottom-wide-shell' || scenarioId === 'immersive-bottom-tools' || scenarioId === 'immersive-bottom-tools-editor' || scenarioId === 'immersive-bottom-tools-file-action' || scenarioId === 'immersive-bottom-view-settings' || scenarioId === 'immersive-bottom-connect' || scenarioId === 'composer-overflow' || scenarioId === 'composer-overflow-empty' || scenarioId === 'composer-overflow-dark' || scenarioId === 'composer-overflow-wide' || scenarioId === 'composer-overflow-expanded' || scenarioId === 'composer-overflow-expanded-dark' || scenarioId === 'device-selector' || scenarioId === 'device-selector-dark' || scenarioId === 'welcome-home' || scenarioId === 'connected-conversation' ||
       scenarioId === 'streaming-dark' ||
       scenarioId === 'reconnecting-wide' || scenarioId === 'narrow-multiline' ||
       scenarioId === 'fold-context' || scenarioId === 'long-reading' ||
@@ -32,9 +48,9 @@ export default class EntryAbility extends UIAbility {
       AppStorage.setOrCreate('scenarioId', scenarioId);
     }
     try {
-      const colorMode = scenarioId === 'cold-start-home-dark' || scenarioId === 'catalog-refresh-dark' || scenarioId === 'model-role-selector-dark' || scenarioId === 'subagent-process-dark' || scenarioId === 'file-visibility-dark' || scenarioId === 'immersive-bottom-dark' || scenarioId === 'immersive-bottom-drawer-dark' || scenarioId === 'immersive-bottom-settings-dark' || scenarioId === 'composer-overflow-dark' || scenarioId === 'composer-overflow-expanded-dark' || scenarioId === 'device-selector-dark' || scenarioId === 'streaming-dark' || scenarioId === 'interaction-mailbox-dark' || scenarioId === 'copy-selection-dark' || scenarioId === 'copy-rollback-dark' || scenarioId === 'copy-rollback-send-dark' || scenarioId === 'copy-rollback-fail-dark'
+      const colorMode = scenarioId === 'remote-desktop-dark' || scenarioId === 'cold-start-home-dark' || scenarioId === 'catalog-refresh-dark' || scenarioId === 'model-role-selector-dark' || scenarioId === 'subagent-process-dark' || scenarioId === 'file-visibility-dark' || scenarioId === 'immersive-bottom-dark' || scenarioId === 'immersive-bottom-drawer-dark' || scenarioId === 'immersive-bottom-settings-dark' || scenarioId === 'composer-overflow-dark' || scenarioId === 'composer-overflow-expanded-dark' || scenarioId === 'device-selector-dark' || scenarioId === 'streaming-dark' || scenarioId === 'interaction-mailbox-dark' || scenarioId === 'copy-selection-dark' || scenarioId === 'copy-rollback-dark' || scenarioId === 'copy-rollback-send-dark' || scenarioId === 'copy-rollback-fail-dark'
         ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
-        : scenarioId === 'cold-start-home' || scenarioId === 'catalog-refresh' || scenarioId === 'model-role-selector' || scenarioId === 'model-role-selector-wide' || scenarioId === 'subagent-process' || scenarioId === 'file-visibility' || scenarioId === 'immersive-bottom' || scenarioId === 'immersive-bottom-wide' || scenarioId === 'immersive-bottom-drawer' || scenarioId === 'immersive-bottom-settings' || scenarioId === 'immersive-bottom-cover' || scenarioId === 'immersive-bottom-miniapps' || scenarioId === 'immersive-bottom-wide-shell' || scenarioId === 'immersive-bottom-tools' || scenarioId === 'immersive-bottom-tools-editor' || scenarioId === 'immersive-bottom-tools-file-action' || scenarioId === 'immersive-bottom-view-settings' || scenarioId === 'immersive-bottom-connect' || scenarioId === 'composer-overflow' || scenarioId === 'composer-overflow-empty' || scenarioId === 'composer-overflow-wide' || scenarioId === 'composer-overflow-expanded' || scenarioId === 'device-selector' || scenarioId === 'connected-conversation' || scenarioId === 'reconnecting-wide' || scenarioId === 'copy-selection' || scenarioId === 'copy-selection-nav' || scenarioId === 'copy-selection-wide' || scenarioId === 'copy-rollback' || scenarioId === 'copy-rollback-send' || scenarioId === 'copy-rollback-send-fail' || scenarioId === 'copy-rollback-fail' || scenarioId === 'copy-rollback-stale' || scenarioId === 'copy-rollback-busy' || scenarioId === 'copy-rollback-unsupported'
+        : scenarioId === 'remote-desktop' || scenarioId === 'cold-start-home' || scenarioId === 'catalog-refresh' || scenarioId === 'model-role-selector' || scenarioId === 'model-role-selector-wide' || scenarioId === 'subagent-process' || scenarioId === 'file-visibility' || scenarioId === 'immersive-bottom' || scenarioId === 'immersive-bottom-wide' || scenarioId === 'immersive-bottom-drawer' || scenarioId === 'immersive-bottom-settings' || scenarioId === 'immersive-bottom-cover' || scenarioId === 'immersive-bottom-miniapps' || scenarioId === 'immersive-bottom-wide-shell' || scenarioId === 'immersive-bottom-tools' || scenarioId === 'immersive-bottom-tools-editor' || scenarioId === 'immersive-bottom-tools-file-action' || scenarioId === 'immersive-bottom-view-settings' || scenarioId === 'immersive-bottom-connect' || scenarioId === 'composer-overflow' || scenarioId === 'composer-overflow-empty' || scenarioId === 'composer-overflow-wide' || scenarioId === 'composer-overflow-expanded' || scenarioId === 'device-selector' || scenarioId === 'connected-conversation' || scenarioId === 'reconnecting-wide' || scenarioId === 'copy-selection' || scenarioId === 'copy-selection-nav' || scenarioId === 'copy-selection-wide' || scenarioId === 'copy-rollback' || scenarioId === 'copy-rollback-send' || scenarioId === 'copy-rollback-send-fail' || scenarioId === 'copy-rollback-fail' || scenarioId === 'copy-rollback-stale' || scenarioId === 'copy-rollback-busy' || scenarioId === 'copy-rollback-unsupported'
           ? ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT
           : ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET;
       this.context.getApplicationContext().setColorMode(colorMode);
@@ -61,15 +77,28 @@ export default class EntryAbility extends UIAbility {
   }
 
   onDestroy(): void {
+    RemoteDesktopService.onLifecycle?.(false);
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onDestroy');
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
+    // Native editor/toolbar focus can leave ArkWeb while the app is active.
+    // Losing the app window itself closes the bound remote-desktop connection.
+    windowStage.on('windowStageEvent', (event: window.WindowStageEventType): void => {
+      if (event === window.WindowStageEventType.INACTIVE || event === window.WindowStageEventType.HIDDEN) {
+        RemoteDesktopService.onLifecycle?.(false);
+      }
+    });
     // Main window is created, set main page for this ability
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onWindowStageCreate');
     try {
       const mainWindow = windowStage.getMainWindowSync();
       this.mainWindow = mainWindow;
+      if (this.probeLandscape || this.probePortrait) {
+        void mainWindow.setPreferredOrientation(this.probePortrait ? window.Orientation.PORTRAIT : window.Orientation.LANDSCAPE).catch((error: Error) => {
+          hilog.error(DOMAIN, TAG, 'Failed to set probe orientation: %{public}s', error.message);
+        });
+      }
       // The shell runs immersive: the chat page's transcript has to reach the
       // bottom edge of the screen, and pages read the avoid areas themselves to
       // keep their content clear of the system bars.
@@ -95,11 +124,13 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageDestroy(): void {
+    RemoteDesktopService.onLifecycle?.(false);
     // Main window is destroyed, release UI related resources
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onWindowStageDestroy');
   }
 
   onForeground(): void {
+    RemoteDesktopProbeService.onLifecycle?.(true);
     // Ability has brought to foreground
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onForeground');
   }
@@ -109,6 +140,8 @@ export default class EntryAbility extends UIAbility {
   }
 
   onBackground(): void {
+    RemoteDesktopService.onLifecycle?.(false);
+    RemoteDesktopProbeService.onLifecycle?.(false);
     // Ability has back to background
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onBackground');
   }
@@ -167,18 +200,7 @@ export default class EntryAbility extends UIAbility {
     const dark = colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
     const content = dark ? MobileDesignColors.ink.dark : MobileDesignColors.ink.light;
     try {
-      this.mainWindow.setWindowSystemBarProperties({
-        // The window is laid out full-screen above (`setWindowLayoutFullScreen(true)`),
-        // so it already runs in the immersive layout, and the status bar and the
-        // navigation area are transparent by platform default: both strips carry
-        // the page's own background through. The page therefore owns what shows
-        // there — the drawer's fill and the chat page's blurred header band — and
-        // any background colour set here would repaint the page's edge instead.
-        // The content colours are the only thing left to state: they keep the
-        // clock and the icons legible against whatever the page puts behind them.
-        statusBarContentColor: content,
-        navigationBarContentColor: content
-      });
+      WindowSystemBarService.configureBarAppearance(this.mainWindow, content, MobileDesignColors.contentOnAction.light);
     } catch (err) {
       hilog.error(DOMAIN, TAG, 'Failed to update system bars. Cause: %{public}s', JSON.stringify(err));
     }

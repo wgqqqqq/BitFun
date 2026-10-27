@@ -1,4 +1,5 @@
 import { isImeOwnedKeyboardEvent } from '@/shared/utils/ime';
+import { isExclusiveShortcutTarget } from '@/shared/utils/keyboardOwnership';
 
 export function shouldBlockBrowserShortcut(key: string, allowPageReload: boolean): boolean {
   const normalizedKey = key.toLowerCase();
@@ -12,6 +13,7 @@ export function handleBrowserShortcut(
   adjustFontSize: (delta: -1 | 1) => void,
   platform = navigator.platform,
 ): void {
+  if (isExclusiveShortcutTarget(event)) return;
   if (!(event.ctrlKey || event.metaKey)) return;
 
   if (shouldBlockBrowserShortcut(event.key, allowPageReload)) {

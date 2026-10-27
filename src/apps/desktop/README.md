@@ -714,6 +714,23 @@ scheduled-job and desktop-result notifications are unavailable there. Ordinary
 WeChat-initiated requests keep their existing cross-device reply path. This feature
 does not add cross-host Peer Device or Detached Dispatch result delivery.
 
+## Self-hosted remote desktop
+
+PC-to-PC viewing/control and HarmonyOS phone control use an independent,
+user-deployed remote desktop service and device pairing. The account login Relay
+provides no remote desktop service. See the [deployment and verification matrix](../../../deploy/remote-desktop/self-hosted/README.md)
+for setup, required host approval and current platform evidence.
+
+The default desktop build includes native WebRTC, capture and input adapters.
+Windows uses GDI/SendInput, macOS uses ScreenCaptureKit/Quartz, and Linux uses
+X11 or an explicitly approved Wayland RemoteDesktop/ScreenCast portal session.
+Linux needs GStreamer `videoconvert`/`appsink` plus `ximagesrc` (X11) or
+`pipewiresrc` (Wayland), and a supported screen-lock monitor. Missing capabilities
+are reported explicitly. Linux WebViews without WebRTC use the native receiver
+and an isolated canvas renderer. `--no-default-features` builds omit native
+remote desktop. Windows/Linux native linking, permission flows and physical
+capture/input remain pending test-machine verification.
+
 ## Model pools
 
 In **Settings → AI models → Model pools**, create named pools from existing model

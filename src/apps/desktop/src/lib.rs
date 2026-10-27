@@ -42,6 +42,7 @@ fn desktop_context() -> tauri::Context<tauri::Wry> {
     tauri::generate_context!()
 }
 mod openbitfun_control_host;
+mod remote_desktop;
 pub mod runtime;
 pub mod sleep_prevention;
 pub mod startup_trace;
@@ -804,6 +805,7 @@ pub async fn run() {
         .manage(app_state)
         .manage(miniapp_desktop::DesktopMiniApps::new(miniapp_host_channel))
         .manage(sleep_prevention::SleepPreventionState::default())
+        .manage(remote_desktop::RemoteDesktopState::default())
         .manage(desktop_runtime)
         .manage(coordinator_state)
         .manage(scheduler_state)
@@ -1213,6 +1215,12 @@ pub async fn run() {
             // paired bots start listening immediately on app startup.
             let step_started = Instant::now();
             api::remote_connect_api::init_on_startup();
+            let remote_desktop_app = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = remote_desktop::connection::restore(&remote_desktop_app).await {
+                    log::warn!("Remote desktop profile restore unavailable: {error}");
+                }
+            });
             startup_trace.record_elapsed_step(
                 "native_setup",
                 "remote_connect_init_on_startup",
@@ -1870,6 +1878,19 @@ pub async fn run() {
             i18n_get_config,
             i18n_set_config,
             // Remote Connect
+            api::remote_desktop_api::remote_desktop_capture_consent,
+            api::remote_desktop_api::remote_desktop_local_settings,
+            api::remote_desktop_api::remote_desktop_approve_view,
+            api::remote_desktop_api::remote_desktop_approve_control,
+            api::remote_desktop_api::remote_desktop_revoke_view,
+            api::remote_desktop_api::remote_desktop_local_stop,
+            api::remote_desktop_api::remote_desktop_receiver,
+            remote_desktop_api::remote_desktop_request,
+            api::remote_desktop_api::remote_desktop_turn,
+            api::remote_desktop_api::remote_desktop_service_connect,
+            api::remote_desktop_api::remote_desktop_service_status,
+            api::remote_desktop_api::remote_desktop_service_disconnect,
+            api::remote_desktop_api::remote_desktop_service_devices,
             api::remote_connect_api::remote_connect_get_device_info,
             api::remote_connect_api::remote_connect_get_lan_ip,
             api::remote_connect_api::remote_connect_get_lan_network_info,

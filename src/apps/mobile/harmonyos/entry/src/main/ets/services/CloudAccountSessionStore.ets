@@ -29,14 +29,32 @@ export interface PersistedWatchProvisionIdentity {
   privateKeyBase64: string;
 }
 
+export interface PersistedRemoteDesktopProfile {
+  version: number;
+  serviceUrl: string;
+  deviceId: string;
+  deviceName: string;
+  requestId: string;
+  privateKey: string;
+  token: string;
+  principal: string;
+  connectOnStartup?: boolean;
+}
+
 /** Persists only an HUKS-encrypted account session, never plaintext secrets. */
 export class CloudAccountSessionStore {
+  private readonly storeName: string;
+  private readonly alias: string;
+  constructor(desktopService: boolean = false) {
+    this.storeName = desktopService ? `${STORE_NAME}_remote_desktop_v1` : STORE_NAME;
+    this.alias = desktopService ? `${HUKS_ALIAS}_remote_desktop_v1` : HUKS_ALIAS;
+  }
   private store?: preferences.Preferences;
   private deviceKeyWork?: Promise<Uint8Array>;
 
   async init(context: Context): Promise<void> {
     try {
-      this.store = await preferences.getPreferences(context, STORE_NAME);
+      this.store = await preferences.getPreferences(context, this.storeName);
     } catch (err) {
       throw OhosError.wrap('cloud account session init', err);
     }
@@ -74,7 +92,7 @@ export class CloudAccountSessionStore {
 
   private async recreateKeyForFreshInstall(): Promise<void> {
     try {
-      await huks.deleteKeyItem(HUKS_ALIAS, {});
+      await huks.deleteKeyItem(this.alias, {});
     } catch (err) {
       const message = OhosError.reason(err);
       if (message.indexOf('12000011') < 0 && message.indexOf('-13') < 0 &&
@@ -96,6 +114,17 @@ export class CloudAccountSessionStore {
 
   async save(session: PersistedCloudAccountSession): Promise<void> {
     await this.writeSealed(CIPHER_KEY, IV_KEY, JSON.stringify(session));
+  }
+
+  async saveDesktopProfile(profile: PersistedRemoteDesktopProfile): Promise<void> {
+    if (this.storeName === STORE_NAME) throw new Error('Independent desktop store required');
+    await this.writeSealed('remote_desktop_profile_v1_cipher', 'remote_desktop_profile_v1_iv', JSON.stringify(profile));
+  }
+
+  async loadDesktopProfile(): Promise<PersistedRemoteDesktopProfile | undefined> {
+    if (this.storeName === STORE_NAME) throw new Error('Independent desktop store required');
+    const text = await this.readSealed('remote_desktop_profile_v1_cipher', 'remote_desktop_profile_v1_iv');
+    return text ? JSON.parse(text) as PersistedRemoteDesktopProfile : undefined;
   }
 
   async loadWatchProvisionIdentity(relayUrl: string, userId: string,
@@ -126,7 +155,7 @@ export class CloudAccountSessionStore {
       await this.ensureKey();
       const iv = Encoding.randomBytes(16);
       const options = this.options(huks.HuksKeyPurpose.HUKS_KEY_PURPOSE_ENCRYPT, iv);
-      const handle = await huks.initSession(HUKS_ALIAS, options);
+      const handle = await huks.initSession(this.alias, options);
       const encrypted = await huks.finishSession(handle.handle, {
         properties: options.properties,
         inData: Encoding.utf8ToBytes(plaintext)
@@ -157,7 +186,7 @@ export class CloudAccountSessionStore {
       }
       const iv = Encoding.base64ToBytes(ivText);
       const options = this.options(huks.HuksKeyPurpose.HUKS_KEY_PURPOSE_DECRYPT, iv);
-      const handle = await huks.initSession(HUKS_ALIAS, options);
+      const handle = await huks.initSession(this.alias, options);
       const decrypted = await huks.finishSession(handle.handle, {
         properties: options.properties,
         inData: Encoding.base64ToBytes(cipher)
@@ -187,7 +216,7 @@ export class CloudAccountSessionStore {
       return;
     }
     try {
-      await huks.generateKeyItem(HUKS_ALIAS, {
+      await huks.generateKeyItem(this.alias, {
         properties: [
           { tag: huks.HuksTag.HUKS_TAG_ALGORITHM, value: huks.HuksKeyAlg.HUKS_ALG_AES },
           { tag: huks.HuksTag.HUKS_TAG_KEY_SIZE, value: huks.HuksKeySize.HUKS_AES_KEY_SIZE_256 },
@@ -203,7 +232,7 @@ export class CloudAccountSessionStore {
 
   private async keyItemExists(): Promise<boolean> {
     try {
-      return await huks.isKeyItemExist(HUKS_ALIAS, {});
+      return await huks.isKeyItemExist(this.alias, {});
     } catch (err) {
       const message = err instanceof Error ? err.message : JSON.stringify(err);
       if (message.indexOf('12000011') >= 0 || message.indexOf('-13') >= 0 ||

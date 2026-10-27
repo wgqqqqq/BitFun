@@ -331,3 +331,21 @@ the portable math fixture plus the platform fixture above. The Windows
 `--check` command validates types only; its native test mode links the shared C
 model. Browser tests and portable math on macOS are not native Windows/Linux
 or remote-session evidence.
+For external GUI reservation changes, run
+`node scripts/test-computer-use-context.mjs control_admission` and
+`cargo test --locked -p openbitfun-desktop --lib computer_use::control_session`.
+Keep legacy AI tests unchanged. Cover active-but-not-busy owners, manual selection,
+starting/cleanup, implicit Background admission, release/drain failure, exhausted
+tickets, and queued old cleanup after native-lock acquisition. No OS input or
+permission prompt belongs in these fixtures. Actual injected-state and in-flight
+worker drainage must be proved at the input owner before wiring these ports.
+
+External native submission must use `with_external_control`, never query a
+reservation and post after dropping its lock. Lock order is native cleanup then
+GUI owner; waiting submitters recheck their ticket after acquiring both. Keep
+the callback bounded to native submission, do not re-enter this facade, await
+or join workers, and check PC/grant/lease/media health at its final OS boundary.
+Facade concurrency tests cover release behind an in-flight callback, queued old
+submission against a successor, and callback panic poisoning. They perform no
+OS input; `scripts/test-remote-desktop-input.mjs` separately verifies local native
+delivery/release through these ports, without claiming remote authority.

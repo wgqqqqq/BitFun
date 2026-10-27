@@ -1,6 +1,8 @@
 {
   "src": [
     "pages/AppRoot",
-    "pages/preview/MobileDesignGallery"
+    "pages/preview/MobileDesignGallery",
+    "pages/preview/RemoteDesktopProbe",
+    "pages/preview/RemoteDesktopSharedMediaProbe"
   ]
 }

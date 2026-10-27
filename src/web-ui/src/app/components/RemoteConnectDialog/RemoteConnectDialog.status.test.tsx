@@ -14,6 +14,7 @@ const boundary = vi.hoisted(() => ({
   backend: null as RemoteConnectStatus | null,
   hasWorkspace: true,
   loggedIn: true,
+  desktopRuntime: false,
   getStatus: vi.fn(),
   startConnection: vi.fn(),
   stopConnection: vi.fn(),
@@ -66,6 +67,9 @@ vi.mock('@/features/dispatch/dispatchJobStore', () => ({ useDispatchJobStore: (s
 vi.mock('@/shared/notification-system', () => ({ useNotification: () => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }) }));
 vi.mock('@/infrastructure/confirm-dialog', () => ({ confirmWarning: vi.fn().mockResolvedValue(true) }));
 vi.mock('./AccountPanel', () => ({ AccountPanel: () => null }));
+vi.mock('@/infrastructure/runtime', () => ({ isTauriRuntime: () => boundary.desktopRuntime }));
+vi.mock('@/infrastructure/remote-desktop/RemoteDesktopService', () => ({ useRemoteDesktopService: () => null }));
+
 
 const relayA = 'https://remote.openbitfun.com/v/1.0.2';
 
@@ -92,7 +96,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function Harness({ initialGroup }: { initialGroup?: 'network' | 'bot' }) {
+function Harness({ initialGroup }: { initialGroup?: 'network' | 'bot' | 'desktop' }) {
   const [open, setOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   return <DesignSystemProvider portalHost={document.body}>
@@ -124,7 +128,7 @@ async function clickText(key: string) {
   await click(button!);
 }
 async function tick(ms = 2000) { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); }
-async function render(initialGroup?: 'network' | 'bot') { await act(async () => { root.render(<Harness initialGroup={initialGroup} />); }); }
+async function render(initialGroup?: 'network' | 'bot' | 'desktop') { await act(async () => { root.render(<Harness initialGroup={initialGroup} />); }); }
 async function openNetwork() { await click(overviewNetwork()); }
 async function generateInvitation() {
   await openNetwork();
@@ -139,6 +143,7 @@ async function closeDialog() {
 }
 
 beforeEach(() => {
+  boundary.desktopRuntime = false;
   vi.useFakeTimers();
   vi.clearAllMocks();
   boundary.listeners.clear();
@@ -434,4 +439,15 @@ describe('Remote Connect shared status through the real dialog and sidebar', () 
     expect(dialog().textContent).toContain(invitation(lanUrl).qr_url);
     expect(boundary.stopConnection).not.toHaveBeenCalled();
   });
+});
+
+it('opens remote computer pairing from the device center while signed out', async () => {
+  boundary.desktopRuntime = true; boundary.loggedIn = false;
+  await render();
+  const entry = element('[data-openbitfun-part="overviewAction"][data-openbitfun-group="desktop"]');
+  await click(entry);
+  expect(dialog().getAttribute('data-openbitfun-view')).toBe('desktop');
+  expect(document.querySelector('[data-openbitfun-component="remote-desktop-service"]')).not.toBeNull();
+  expect(document.querySelector('input[type="password"]')).not.toBeNull();
+  expect(boundary.startConnection).not.toHaveBeenCalled();
 });

@@ -1,0 +1,90 @@
+@use './remote-connect-surface' as surface;
+
+@media (min-width: 761px) {
+  .openbitfun-remote-connect-dialog:has([data-openbitfun-view='desktop']) {
+    block-size: min(760px, calc(100vh - 2 * var(--openbitfun-overlay-dialog-viewport-gutter)));
+    min-block-size: min(760px, calc(100vh - 2 * var(--openbitfun-overlay-dialog-viewport-gutter)));
+    max-block-size: min(760px, calc(100vh - 2 * var(--openbitfun-overlay-dialog-viewport-gutter)));
+  }
+}
+
+
+.openbitfun-remote-connect__desktop-scroll { min-height: 0; flex: 1; }
+.remote-desktop-service {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbitfun-space-6);
+  padding: var(--openbitfun-space-6) surface.$page-inline surface.$page-block-start;
+  color: var(--openbitfun-color-content-secondary);
+  h3 { @include surface.section-title; }
+  &__hint { @include surface.supporting-text; }
+  &__service {
+    border: surface.$divider;
+    border-radius: var(--openbitfun-radius-lg);
+    overflow: hidden;
+  }
+  &__service-heading {
+    display: flex;
+    align-items: center;
+    gap: var(--openbitfun-space-3);
+    padding: var(--openbitfun-space-4);
+  }
+  &__service-icon { @include surface.icon-slot; }
+  &__service-copy { @include surface.row-copy; }
+  &__label { @include surface.supporting-text; }
+  &__endpoint { @include surface.row-title; }
+  &__setup { padding: 0 var(--openbitfun-space-4) var(--openbitfun-space-4); }
+  &__setup-heading { display: flex; flex-direction: column; gap: var(--openbitfun-space-2); padding-block: var(--openbitfun-space-2) var(--openbitfun-space-5); }
+  &__form { display: flex; flex-direction: column; gap: var(--openbitfun-space-3); }
+  &__form-fields { display: grid; grid-template-columns: 1fr 1fr; gap: var(--openbitfun-space-4); }
+  &__form-actions { display: flex; justify-content: flex-end; gap: var(--openbitfun-space-2); }
+  &__disconnect { display: flex; align-items: center; justify-content: space-between; gap: var(--openbitfun-space-3); padding-top: var(--openbitfun-space-4); border-top: surface.$divider; }
+  &__section-heading { @include surface.section-heading; align-items: center; margin-bottom: var(--openbitfun-space-4); }
+  &__section-heading > div { display: flex; flex-direction: column; gap: var(--openbitfun-space-1); }
+  &__device-list { display: flex; flex-direction: column; gap: var(--openbitfun-space-2); }
+  &__device {
+    display: flex; align-items: center; gap: var(--openbitfun-space-4);
+    padding: var(--openbitfun-space-4);
+    border-radius: var(--openbitfun-radius-lg);
+    background: var(--openbitfun-color-field-group-background);
+  }
+  &__monitor {
+    display: flex; flex-shrink: 0; align-items: center; justify-content: center;
+    width: 48px; height: 48px;
+    border: surface.$divider; border-radius: var(--openbitfun-radius-lg);
+    color: var(--openbitfun-color-content-primary);
+  }
+  &__device[data-online='false'] &__monitor { color: var(--openbitfun-color-content-muted); }
+  &__device-copy { @include surface.row-copy; }
+  &__device-name { @include surface.row-title; }
+  &__device-meta { display: flex; min-width: 0; align-items: center; gap: var(--openbitfun-space-2); @include surface.supporting-text; }
+  &__empty {
+    display: flex; flex-direction: column; align-items: center; gap: var(--openbitfun-space-3);
+    padding: var(--openbitfun-space-8) var(--openbitfun-space-5);
+    border: surface.$divider; border-radius: var(--openbitfun-radius-lg); text-align: center;
+    > svg { color: var(--openbitfun-color-content-muted); }
+    h4 { @include surface.row-title; }
+    p { max-width: 38ch; }
+  }
+  &__local { border-top: surface.$divider; padding-top: var(--openbitfun-space-5); }
+  &__local-identity { display: flex; align-items: center; gap: var(--openbitfun-space-2); margin-bottom: var(--openbitfun-space-3); @include surface.supporting-text; }
+  &__local-identity > span:last-child { margin-inline-start: auto; flex-shrink: 0; }
+  &__intro {
+    display: grid; grid-template-columns: 1fr 1fr; gap: var(--openbitfun-space-6);
+    > div { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-content: start; gap: var(--openbitfun-space-2); }
+    svg { color: var(--openbitfun-color-content-muted); }
+    strong { @include surface.row-title; }
+    p { grid-column: 2; @include surface.supporting-text; }
+  }
+  &__privacy { display: flex; align-items: flex-start; gap: var(--openbitfun-space-2); @include surface.supporting-text; }
+  &__privacy > svg { flex-shrink: 0; margin-top: 2px; }
+  @media (max-width: 760px) { padding-inline: surface.$page-inline-narrow; }
+  @media (max-width: 540px) {
+    &__form-fields, &__intro { grid-template-columns: 1fr; }
+    &__service-heading { flex-wrap: wrap; }
+    &__service-copy { min-width: 130px; }
+    &__device { flex-wrap: wrap; gap: var(--openbitfun-space-3); }
+    &__device > button { margin-inline-start: auto; }
+    &__disconnect { flex-direction: column; align-items: flex-start; }
+  }
+}

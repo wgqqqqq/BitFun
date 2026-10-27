@@ -1,3 +1,6 @@
+import { RemoteDesktopPanel } from './RemoteDesktopPanel';
+import { RemoteDesktopServiceState } from '../state/RemoteDesktopServiceState';
+import { RemoteDesktopState, RemoteDesktopActions, emptyRemoteDesktopActions } from '../state/RemoteDesktopState';
 import { RemoteCompactHomePolicy } from '../policy/RemoteCompactHomePolicy';
 import { MiniAppActions, emptyMiniAppActions } from '../../model/MiniAppModels';
 import { MiniAppState } from '../state/MiniAppState';
@@ -64,6 +67,9 @@ enum WideWorkspacePresentationMode {
 
 @ComponentV2
 export struct AppRootPresentation {
+  @Param remoteDesktopState: RemoteDesktopState = new RemoteDesktopState();
+  @Param remoteDesktopServiceState: RemoteDesktopServiceState = new RemoteDesktopServiceState();
+  @Param remoteDesktopActions: RemoteDesktopActions = emptyRemoteDesktopActions();
   @Param miniAppState: MiniAppState = new MiniAppState();
   @Param miniAppActions: MiniAppActions = emptyMiniAppActions();
   @Param shellState: AppShellState = new AppShellState();
@@ -154,6 +160,9 @@ export struct AppRootPresentation {
       })
       if (this.filePreviewPlacement() === FilePreviewPlacement.CompactFullPage) {
         this.FilePreviewPane()
+      }
+      if (this.remoteDesktopState.visible) {
+        RemoteDesktopPanel({ state: this.remoteDesktopState, actions: this.remoteDesktopActions })
       }
     }
     .width('100%')
@@ -635,6 +644,8 @@ export struct AppRootPresentation {
 
   @Builder ConnectContent() {
     AppConnectSurface({
+      remoteDesktopServiceState: this.remoteDesktopServiceState,
+      remoteDesktopOnly: this.shellState.remoteDesktopDeviceSelection,
       remotePageState: this.remotePageState,
       deviceId: this.deviceId,
       actions: this.actions

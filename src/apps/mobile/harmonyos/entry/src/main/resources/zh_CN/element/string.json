@@ -2767,6 +2767,310 @@
     {
       "name": "time_daysAgo",
       "value": "%1$s 天前"
+    },
+    {
+      "name": "remoteDesktopProbe_title",
+      "value": "ArkWeb 远程画面探针"
+    },
+    {
+      "name": "remoteDesktop_navigation",
+      "value": "远程控制"
+    },
+    {
+      "name": "remoteDesktop_open",
+      "value": "查看桌面"
+    },
+    {
+      "name": "remoteDesktop_readOnly",
+      "value": "仅查看"
+    },
+    {
+      "name": "remoteDesktop_forceRelay",
+      "value": "使用中继连接"
+    },
+    {
+      "name": "remoteDesktop_disconnect",
+      "value": "断开连接"
+    },
+    {
+      "name": "remoteDesktop_approvalRequired",
+      "value": "请先在电脑本机设置中允许这台设备查看显示器。"
+    },
+    {
+      "name": "remoteDesktop_permissionRequired",
+      "value": "请在电脑上开启录屏权限。"
+    },
+    {
+      "name": "remoteDesktop_hostLocked",
+      "value": "电脑已锁定或桌面会话不可用，请在电脑本机恢复后重新连接。"
+    },
+    {
+      "name": "remoteDesktop_updateRequired",
+      "value": "中继尚未启用远程桌面支持。"
+    },
+    {
+      "name": "remoteDesktop_unsupported",
+      "value": "这台电脑暂不支持共享桌面。"
+    },
+    {
+      "name": "remoteDesktop_connectionFailed",
+      "value": "连接已结束，请返回设备列表后重试。"
+    },
+    {
+      "name": "remoteDesktop_stage_idle",
+      "value": "未连接"
+    },
+    {
+      "name": "remoteDesktop_stage_probing",
+      "value": "正在检查电脑…"
+    },
+    {
+      "name": "remoteDesktop_stage_choose_display",
+      "value": "选择显示器"
+    },
+    {
+      "name": "remoteDesktop_stage_connecting",
+      "value": "正在连接…"
+    },
+    {
+      "name": "remoteDesktop_stage_observing",
+      "value": "正在查看桌面"
+    },
+    {
+      "name": "remoteDesktop_stage_failed",
+      "value": "连接失败"
+    },
+    {
+      "name": "remoteDesktop_stage_closed",
+      "value": "已断开"
+    },
+    {
+      "name": "remoteDesktop_controlling",
+      "value": "由你控制"
+    },
+    {
+      "name": "remoteDesktop_startControl",
+      "value": "开启操作"
+    },
+    {
+      "name": "remoteDesktop_resumeControl",
+      "value": "恢复操作"
+    },
+    {
+      "name": "remoteDesktop_stopControl",
+      "value": "停止操作"
+    },
+    {
+      "name": "remoteDesktop_acquiringControl",
+      "value": "正在申请操作权…"
+    },
+    {
+      "name": "remoteDesktop_controlUnsupported",
+      "value": "此电脑暂未开放键鼠操作。"
+    },
+    {
+      "name": "remoteDesktop_controlBusy",
+      "value": "电脑正由 AI 或其他操作占用，请先在电脑端停止后再试。"
+    },
+    {
+      "name": "remoteDesktop_controlApprovalRequired",
+      "value": "请先在电脑本机允许这台设备操作所选显示器。"
+    },
+    {
+      "name": "remoteDesktop_controlPaused",
+      "value": "操作已暂停，请重新开启；旧输入不会重发。"
+    },
+    {
+      "name": "remoteDesktop_textPlaceholder",
+      "value": "在此输入，点击发送后才会输入到电脑"
+    },
+    {
+      "name": "remoteDesktop_sendText",
+      "value": "发送文字"
+    },
+    {
+      "name": "remoteDesktop_keyboardHint",
+      "value": "直接输入到电脑当前选中的输入框"
+    },
+    {
+      "name": "remoteDesktop_keyboardUnavailable",
+      "value": "虚拟键盘已暂停，请在更多菜单中恢复操作后再试。"
+    },
+    {
+      "name": "remoteDesktop_screenshot",
+      "value": "截图"
+    },
+    {
+      "name": "remoteDesktop_screenshotFailed",
+      "value": "截图或保存失败，请重试。"
+    },
+    {
+      "name": "remoteDesktop_screenshotSaved",
+      "value": "已保存到相册"
+    },
+    {
+      "name": "remoteDesktop_keyboard",
+      "value": "键盘"
+    },
+    {
+      "name": "remoteDesktop_hideKeyboard",
+      "value": "收起键盘"
+    },
+    {
+      "name": "remoteDesktop_tapHint",
+      "value": "直接触控时轻点画面即可点击，双击第二次按住可拖动。"
+    },
+    {
+      "name": "remoteDesktop_textUnsupported",
+      "value": "此电脑未开放文字输入。"
+    },
+    {
+      "name": "remoteDesktop_inputPermissionRequired",
+      "value": "请在电脑本机授予键鼠操作所需的系统权限后再试。"
+    },
+    {
+      "name": "remoteDesktop_directTouch",
+      "value": "直接触控"
+    },
+    {
+      "name": "remoteDesktop_mouseMode",
+      "value": "鼠标模式"
+    },
+    {
+      "name": "remoteDesktop_panCanvas",
+      "value": "移动画面"
+    },
+    {
+      "name": "remoteDesktop_stopPanning",
+      "value": "结束移动画面"
+    },
+    {
+      "name": "remoteDesktop_rotateScreen",
+      "value": "旋转屏幕"
+    },
+    {
+      "name": "remoteDesktop_rotationUnavailable",
+      "value": "无法旋转屏幕，请尝试转动手机。"
+    },
+    {
+      "name": "remoteDesktop_pauseSource",
+      "value": "暂停共享"
+    },
+    {
+      "name": "remoteDesktop_resumeSource",
+      "value": "继续查看"
+    },
+    {
+      "name": "remoteDesktop_pauseHint",
+      "value": "画面和操作已暂停，连接将暂时保留。继续查看后会重新连接并申请操作。"
+    },
+    {
+      "name": "remoteDesktop_currentQuality",
+      "value": "当前画质：%1$s"
+    },
+    {
+      "name": "remoteDesktop_qualityDataSaver",
+      "value": "省流"
+    },
+    {
+      "name": "remoteDesktop_qualityBalanced",
+      "value": "均衡"
+    },
+    {
+      "name": "remoteDesktop_qualityClear",
+      "value": "清晰"
+    },
+    {
+      "name": "remoteDesktop_stage_setting_quality",
+      "value": "正在调整画质…"
+    },
+    {
+      "name": "remoteDesktop_signalingInterrupted",
+      "value": "信令暂时中断，操作已暂停；恢复期间画面最多保留 30 秒。"
+    },
+    {
+      "name": "remoteDesktop_stage_pausing",
+      "value": "正在暂停共享…"
+    },
+    {
+      "name": "remoteDesktop_stage_paused",
+      "value": "共享已暂停"
+    },
+    {
+      "name": "remoteDesktop_stage_resuming",
+      "value": "正在恢复查看…"
+    },
+    {
+      "name": "remoteDesktop_chooseSource",
+      "value": "切换显示器"
+    },
+    {
+      "name": "remoteDesktop_stage_loading_sources",
+      "value": "正在读取显示器…"
+    },
+    {
+      "name": "remoteDesktop_stage_choose_source",
+      "value": "选择显示器"
+    },
+    {
+      "name": "remoteDesktop_stage_selecting_source",
+      "value": "正在切换显示器…"
+    },
+    {
+      "name": "remoteDesktop_currentDisplay",
+      "value": "当前：%1$s"
+    },
+    {
+      "name": "remoteDesktop_displayLabel",
+      "value": "显示器 %1$s · %2$s"
+    },
+    {
+      "name": "remoteDesktop_cancelSource",
+      "value": "返回暂停页"
+    },
+    {
+      "name": "remoteDesktop_displayUnavailable",
+      "value": "显示器已不可用，请重新连接并选择。"
+    },
+    {
+      "name": "remoteDesktop_stage_waiting_for_host",
+      "value": "正在等待上次共享结束…"
+    },
+    {
+      "name": "remoteDesktop_attachmentBusy",
+      "value": "这台电脑已有查看连接，请结束其他连接后重连。"
+    },
+    {
+      "name": "remoteDesktop_cleanupPending",
+      "value": "电脑还在结束上次共享，请稍后重连。"
+    },
+    {
+      "name": "remoteDesktop_serviceDescription",
+      "value": "使用自己部署的远控服务，与 OpenBitFun 登录分开。每台被控电脑仍需在本机授权此手机。"
+    },
+    {
+      "name": "remoteDesktop_serviceAddress",
+      "value": "远控服务地址"
+    },
+    {
+      "name": "remoteDesktop_servicePairingKey",
+      "value": "服务配对密钥"
+    },
+    {
+      "name": "remoteDesktop_servicePairingHint",
+      "value": "首次配对填写；使用已保存的设备凭据重连时可留空。配对密钥不会保存。"
+    },
+    {
+      "name": "remoteDesktop_serviceConnect",
+      "value": "配对／重连"
+    },
+    {
+      "name": "remoteDesktop_serviceDisconnect",
+      "value": "断开服务"
+    },
+    {
+      "name": "remoteDesktop_serviceFailed",
+      "value": "连接失败，请检查服务地址、配对密钥和部署状态。已有凭据已保留。"
     }
   ]
 }

@@ -37,6 +37,8 @@ export class WorkspaceDirectoryState {
 export class DeviceDirectoryEntry {
   @Trace deviceId: string = '';
   @Trace deviceName: string = '';
+  /** Explicit Relay kind; empty means an older or unreported directory row. */
+  @Trace deviceKind: string = '';
   @Trace online: boolean = false;
   @Trace status: DeviceDirectoryStatus = 'idle';
   @Trace errorText: string = '';

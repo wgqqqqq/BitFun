@@ -207,7 +207,7 @@ export struct AppShell {
       this.connect()
     }
     .width('100%')
-    .height('100%')
+    .height(this.shellState.remoteDesktopDeviceSelection ? undefined : '100%')
     .borderRadius(this.usesWideSheetChrome(this.connectPlacement) ? WIDE_SHEET_RADIUS : 0)
     .clip(this.usesWideSheetChrome(this.connectPlacement))
     .shadow({
@@ -237,7 +237,12 @@ export struct AppShell {
   }
 
   private connectSheetOptions(): SheetOptions {
-    return AdaptiveSheetOptions.fromPlacement(this.connectPlacement);
+    const options = AdaptiveSheetOptions.fromPlacement(this.connectPlacement);
+    if (this.shellState.remoteDesktopDeviceSelection) {
+      options.height = SheetSize.FIT_CONTENT;
+      if (this.connectPlacement.width > 0) options.width = Math.min(420, this.connectPlacement.width);
+    }
+    return options;
   }
 
   private usesWideSheetChrome(placement: SettingsPlacement): boolean {

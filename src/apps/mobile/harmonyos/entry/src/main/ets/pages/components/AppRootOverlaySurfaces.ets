@@ -16,6 +16,8 @@ import { RemotePageState } from '../state/RemotePageState';
 import { REMOTE_CAPABILITY_HARNESS_PROFILES_V1 } from '../../model/RemoteModels';
 import { AppSidebar } from './AppSidebar';
 import { ConnectView } from './ConnectView';
+import { RemoteDesktopDevicePicker } from './RemoteDesktopDevicePicker';
+import { RemoteDesktopServiceState } from '../state/RemoteDesktopServiceState';
 import { AccountLoginSheet } from './AccountLoginSheet';
 import { RemoteSurfaceState } from './remote/RemoteSurfaceHost';
 import { SettingsSheet } from './SettingsSheet';
@@ -54,6 +56,7 @@ export struct AppSidebarSurface {
       onNewChat: this.actions.onSidebar.newChat,
       onEnterCode: this.actions.onSidebar.enterCode,
       onOpenMiniApps: this.actions.onRemoteHome.openMiniApps,
+      onOpenRemoteDesktop: this.actions.onSidebar.openRemoteDesktop,
       onOpenViewSettings: this.onOpenRemoteViewSettings,
       onSearchQueryChange: (query: string) => {
         this.actions.onRemoteHome.queryChanged(query);
@@ -175,30 +178,44 @@ export struct AppSettingsSurface {
 
 @ComponentV2
 export struct AppConnectSurface {
+  @Param remoteDesktopServiceState: RemoteDesktopServiceState = new RemoteDesktopServiceState();
   @Param remotePageState: RemotePageState = new RemotePageState();
   @Param deviceId: string = '';
+  @Param remoteDesktopOnly: boolean = false;
   @Param actions: AppRootPresentationActions = emptyAppRootPresentationActions();
 
   build() {
-    ConnectView({
-      remoteUrl: this.remotePageState.remoteUrl,
-      userId: this.remotePageState.userId,
-      statusText: this.remotePageState.conversation.statusText,
-      connectionState: this.remotePageState.connectionState,
-      connectionFailureKind: this.remotePageState.connectionFailureKind,
-      isBusy: this.remotePageState.conversation.isBusy,
-      isConnected: this.remotePageState.connectionState === 'connected',
-      desktopName: this.remotePageState.desktopName,
-      deviceId: this.deviceId,
-      accountUserId: this.remotePageState.accountUserId,
-      controlTargetDeviceId: this.remotePageState.controlTargetDeviceId,
-      onBack: this.actions.onConnect.back,
-      onOpenAccount: this.actions.onConnect.openAccount,
-      onConnect: this.actions.onConnect.connect,
-      cloudListDevices: this.actions.onConnect.cloudListDevices,
-      cloudSelectDevice: this.actions.onConnect.cloudSelectDevice
-    })
-    .width('100%')
-    .height('100%')
+    if (this.remoteDesktopOnly) {
+      RemoteDesktopDevicePicker({
+        serviceState: this.remoteDesktopServiceState,
+        deviceId: this.remoteDesktopServiceState.deviceId,
+        listDevices: this.actions.onConnect.desktopServiceDevices,
+        onConnect: this.actions.onConnect.desktopServiceConnect,
+        onDisconnect: this.actions.onConnect.desktopServiceDisconnect,
+        onSelect: this.actions.onConnect.openRemoteDesktop,
+        onClose: this.actions.onConnect.back
+      })
+    } else {
+      ConnectView({
+        remoteUrl: this.remotePageState.remoteUrl,
+        userId: this.remotePageState.userId,
+        statusText: this.remotePageState.conversation.statusText,
+        connectionState: this.remotePageState.connectionState,
+        connectionFailureKind: this.remotePageState.connectionFailureKind,
+        isBusy: this.remotePageState.conversation.isBusy,
+        isConnected: this.remotePageState.connectionState === 'connected',
+        desktopName: this.remotePageState.desktopName,
+        deviceId: this.deviceId,
+        accountUserId: this.remotePageState.accountUserId,
+        controlTargetDeviceId: this.remotePageState.controlTargetDeviceId,
+        onBack: this.actions.onConnect.back,
+        onOpenAccount: this.actions.onConnect.openAccount,
+        onConnect: this.actions.onConnect.connect,
+        cloudListDevices: this.actions.onConnect.cloudListDevices,
+        cloudSelectDevice: this.actions.onConnect.cloudSelectDevice
+      })
+      .width('100%')
+      .height('100%')
+    }
   }
 }

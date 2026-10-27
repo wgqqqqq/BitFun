@@ -155,7 +155,7 @@ impl Drop for AccountContextTransitionGuard {
     }
 }
 
-async fn lock_account_operation(
+pub(crate) async fn lock_account_operation(
     generation: u64,
 ) -> Result<tokio::sync::MutexGuard<'static, ()>, String> {
     let guard = ACCOUNT_OPERATION_LOCK.lock().await;
@@ -2688,6 +2688,11 @@ async fn connect_route_devices(route: RelayRoute) -> Result<Vec<OnlineDeviceInfo
                     }
                     break;
                 }
+                RelayEvent::RemoteDesktopMessageReceived { .. }
+                | RelayEvent::RemoteDesktopNoticeReceived { .. }
+                | RelayEvent::RemoteDesktopRouteReady { .. } => {
+                    log::warn!("Remote desktop event refused on account Relay connection");
+                }
                 RelayEvent::DevicePresence { devices } => {
                     event_session.clear_peer_keys().await;
                     let Some(_routing_effect) = lock_current_device_routing(&event_owner).await
@@ -3367,6 +3372,20 @@ async fn execute_local_remote_command(
 }
 
 #[cfg(test)]
+pub(crate) async fn replace_account_context_for_test(
+    context: Option<(AccountSession, String)>,
+) -> Option<(AccountSession, String)> {
+    std::mem::replace(
+        &mut *get_account_context().write().await,
+        context.map(|(session, relay_url)| AccountContextState { session, relay_url }),
+    )
+    .map(|context| (context.session, context.relay_url))
+}
+
+#[cfg(test)]
+pub(crate) use sync_state_tests::ACCOUNT_CONTEXT_TEST_LOCK;
+
+#[cfg(test)]
 mod sync_state_tests {
     use super::*;
 
@@ -3374,7 +3393,7 @@ mod sync_state_tests {
     /// Async-aware so the guard may be held across each test's awaits; the
     /// plain `#[test]` cases take it with `blocking_lock`, which cannot stall
     /// because they run without an ambient runtime.
-    pub(super) static ACCOUNT_CONTEXT_TEST_LOCK: tokio::sync::Mutex<()> =
+    pub(crate) static ACCOUNT_CONTEXT_TEST_LOCK: tokio::sync::Mutex<()> =
         tokio::sync::Mutex::const_new(());
 
     #[test]

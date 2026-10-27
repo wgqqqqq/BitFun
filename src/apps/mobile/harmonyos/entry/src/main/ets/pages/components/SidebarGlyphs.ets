@@ -20,6 +20,8 @@ export struct SidebarGlyph {
       this.Clock()
     } else if (this.kind === 'apps') {
       this.Apps()
+    } else if (this.kind === 'remote_control') {
+      TemplateIcon({ src: $r('app.media.sidebar_remote_control'), iconWidth: 24, iconHeight: 24, tint: this.tint })
     } else if (this.kind === 'code_flower') {
       this.CodeFlower()
     } else if (this.kind === 'more') {

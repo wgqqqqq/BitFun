@@ -19,6 +19,7 @@ export class AppShellState {
   @Trace showSettings: boolean = false;
   @Trace settingsMode: SettingsMode = 'general';
   @Trace showConnectSheet: boolean = false;
+  @Trace remoteDesktopDeviceSelection: boolean = false;
   /**
    * Mirror of the resolved master-detail layout mode. Only the presentation
    * layer measures the viewport, so runtime logic that must branch on compact
@@ -90,7 +91,13 @@ export class AppShellState {
   }
 
   setConnectSheetVisible(visible: boolean): void {
+    if (visible) this.remoteDesktopDeviceSelection = false;
     this.showConnectSheet = visible;
+  }
+
+  openRemoteDesktopDevicePicker(): void {
+    this.remoteDesktopDeviceSelection = true;
+    this.showConnectSheet = true;
   }
 
   closeGlobalSurfaces(): void {
@@ -99,5 +106,6 @@ export class AppShellState {
     this.accountReturnsToSettings = false;
     this.settingsSheet.resetOnClose();
     this.showConnectSheet = false;
+    this.remoteDesktopDeviceSelection = false;
   }
 }

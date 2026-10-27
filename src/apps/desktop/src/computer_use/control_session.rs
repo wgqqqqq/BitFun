@@ -12,6 +12,7 @@ mod admission;
 mod sharing;
 use admission::Admission;
 pub(crate) use admission::ControlToken;
+pub(crate) use admission::ExternalReservationToken;
 #[cfg(target_os = "macos")]
 pub(crate) use sharing::shared_target_allowed;
 pub(crate) use sharing::{
@@ -64,6 +65,92 @@ fn check_context(r: &Resource) -> Result<(), String> {
         process.validate()?;
     }
     Ok(())
+}
+
+// Reserved for the input-stage integration. The view-only media owner never
+// calls these ports. They share the existing GUI mutex, not another arbiter.
+#[allow(dead_code)]
+pub(crate) fn reserve_external_control() -> Result<ExternalReservationToken, String> {
+    locked()?.admission.reserve_external()
+}
+/// Submit on one blocking worker. Holds native serialization and the GUI owner
+/// lock through the final reservation check and callback, closing the gap
+/// between a permission query and native submission. The callback must not
+/// re-enter control_session, await work, or join another worker. It still checks
+/// its own bound PC/grant/lease/health immediately before posting to the OS.
+#[allow(dead_code)] // Reserved for the input owner; read-only media does not call it.
+pub(crate) fn with_external_control<T>(
+    token: ExternalReservationToken,
+    submit: impl FnOnce() -> T,
+) -> Result<T, String> {
+    submit_external_reservation(resource(), &NATIVE_CLEANUP, token, submit)
+}
+
+fn submit_external_reservation<T>(
+    owner: &Mutex<Resource>,
+    native: &Mutex<()>,
+    token: ExternalReservationToken,
+    submit: impl FnOnce() -> T,
+) -> Result<T, String> {
+    // Match AI/native teardown's lock order: native first, then GUI owner.
+    // Never retain the GUI mutex while waiting for native serialization.
+    let _native = native
+        .lock()
+        .map_err(|_| "[CONTROL_FAILED] Native cleanup lock poisoned")?;
+    let state = owner
+        .lock()
+        .map_err(|_| "[CONTROL_FAILED] Control resource lock poisoned")?;
+    if !state.admission.external_matches(token) {
+        return Err("[CONTROL_STALE] Manual control reservation was released".into());
+    }
+    // Keep the guard alive across the callback, including its OS post.
+    let result = submit();
+    drop(state);
+    Ok(result)
+}
+/// Run on a blocking worker. The caller drains only its own injected state and
+/// awaits its in-flight workers; failure keeps the reservation invalid and held.
+#[allow(dead_code)]
+pub(crate) fn release_external_control(
+    token: ExternalReservationToken,
+    drain: impl FnOnce() -> Result<(), String>,
+) -> Result<bool, String> {
+    drain_external_reservation(resource(), &NATIVE_CLEANUP, token, drain)
+}
+
+fn drain_external_reservation(
+    owner: &Mutex<Resource>,
+    cleanup: &Mutex<()>,
+    token: ExternalReservationToken,
+    drain: impl FnOnce() -> Result<(), String>,
+) -> Result<bool, String> {
+    {
+        let mut state = owner
+            .lock()
+            .map_err(|_| "[CONTROL_FAILED] Control resource lock poisoned")?;
+        if !state.admission.begin_external_release(token) {
+            return Ok(false);
+        }
+    }
+    // Same native cleanup serialization as AI Stop. Recheck after waiting:
+    // duplicate old releases must not apply key-ups to a subsequent owner.
+    let _cleanup = cleanup
+        .lock()
+        .map_err(|_| "[CONTROL_FAILED] Native cleanup lock poisoned")?;
+    if !owner
+        .lock()
+        .map_err(|_| "[CONTROL_FAILED] Control resource lock poisoned")?
+        .admission
+        .external_releasing(token)
+    {
+        return Ok(false);
+    }
+    drain()?;
+    Ok(owner
+        .lock()
+        .map_err(|_| "[CONTROL_FAILED] Control resource lock poisoned")?
+        .admission
+        .finish_external_release(token, true))
 }
 
 /// Captured before crossing an async/native boundary; never mint a replacement
@@ -676,5 +763,203 @@ mod wait_tests {
         .await
         .expect("revocation must wake the wait immediately");
         assert_eq!(result.unwrap_err(), "stopped");
+    }
+}
+
+#[cfg(test)]
+mod external_cleanup_tests {
+    use super::*;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
+    #[test]
+    fn failed_drain_holds_admission_and_an_old_release_never_invokes_io() {
+        let owner = Mutex::new(Resource::default());
+        let native = Mutex::new(());
+        let old = owner.lock().unwrap().admission.reserve_external().unwrap();
+        assert!(
+            drain_external_reservation(&owner, &native, old, || Err("native failure".into()))
+                .is_err()
+        );
+        assert!(!owner.lock().unwrap().admission.external_matches(old));
+        assert!(owner.lock().unwrap().admission.reserve_external().is_err());
+        assert!(owner
+            .lock()
+            .unwrap()
+            .admission
+            .begin_start("ai", ControlMode::Background)
+            .is_err());
+        assert!(drain_external_reservation(&owner, &native, old, || Ok(())).unwrap());
+        let current = owner.lock().unwrap().admission.reserve_external().unwrap();
+        assert!(!drain_external_reservation(&owner, &native, old, || panic!(
+            "stale release applied native cleanup"
+        ))
+        .unwrap());
+        assert!(owner.lock().unwrap().admission.external_matches(current));
+    }
+
+    #[test]
+    fn queued_old_cleanup_rechecks_scope_after_native_mutex_wait() {
+        let owner = Arc::new(Mutex::new(Resource::default()));
+        let native = Arc::new(Mutex::new(()));
+        let called = Arc::new(AtomicUsize::new(0));
+        let old = owner.lock().unwrap().admission.reserve_external().unwrap();
+        let native_guard = native.lock().unwrap();
+        let worker_owner = owner.clone();
+        let worker_native = native.clone();
+        let worker_called = called.clone();
+        let worker = std::thread::spawn(move || {
+            drain_external_reservation(&worker_owner, &worker_native, old, || {
+                worker_called.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            })
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while !owner.lock().unwrap().admission.external_releasing(old) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "cleanup did not invalidate submission before waiting"
+            );
+            std::thread::yield_now();
+        }
+        // This thread owns native serialization and models the first completed
+        // drain; the queued duplicate must not run against the next lease.
+        assert!(owner
+            .lock()
+            .unwrap()
+            .admission
+            .finish_external_release(old, true));
+        let current = owner.lock().unwrap().admission.reserve_external().unwrap();
+        drop(native_guard);
+        assert!(!worker.join().unwrap().unwrap());
+        assert_eq!(called.load(Ordering::SeqCst), 0);
+        assert!(owner.lock().unwrap().admission.external_matches(current));
+    }
+
+    #[test]
+    fn submission_holds_both_locks_until_native_callback_finishes() {
+        use std::sync::mpsc;
+        let owner = Arc::new(Mutex::new(Resource::default()));
+        let native = Arc::new(Mutex::new(()));
+        let ticket = owner.lock().unwrap().admission.reserve_external().unwrap();
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (finish_tx, finish_rx) = mpsc::channel();
+        let worker_owner = owner.clone();
+        let worker_native = native.clone();
+        let worker = std::thread::spawn(move || {
+            submit_external_reservation(&worker_owner, &worker_native, ticket, || {
+                entered_tx.send(()).unwrap();
+                finish_rx
+                    .recv_timeout(std::time::Duration::from_secs(3))
+                    .unwrap();
+                17
+            })
+        });
+        entered_rx
+            .recv_timeout(std::time::Duration::from_secs(3))
+            .unwrap();
+        assert!(matches!(
+            owner.try_lock(),
+            Err(std::sync::TryLockError::WouldBlock)
+        ));
+        assert!(matches!(
+            native.try_lock(),
+            Err(std::sync::TryLockError::WouldBlock)
+        ));
+        let (cleanup_tx, cleanup_rx) = mpsc::channel();
+        let drain_owner = owner.clone();
+        let drain_native = native.clone();
+        let release = std::thread::spawn(move || {
+            drain_external_reservation(&drain_owner, &drain_native, ticket, || {
+                cleanup_tx.send(()).unwrap();
+                Ok(())
+            })
+        });
+        assert!(matches!(
+            cleanup_rx.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
+        finish_tx.send(()).unwrap();
+        assert_eq!(worker.join().unwrap().unwrap(), 17);
+        assert!(release.join().unwrap().unwrap());
+        cleanup_rx
+            .recv_timeout(std::time::Duration::from_secs(3))
+            .unwrap();
+        assert!(
+            submit_external_reservation(&owner, &native, ticket, || panic!(
+                "released worker posted input"
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn queued_old_submission_rechecks_the_ticket_after_native_mutex_wait() {
+        use std::sync::mpsc;
+        let owner = Arc::new(Mutex::new(Resource::default()));
+        let native = Arc::new(Mutex::new(()));
+        let old = owner.lock().unwrap().admission.reserve_external().unwrap();
+        let native_guard = native.lock().unwrap();
+        let (started_tx, started_rx) = mpsc::channel();
+        let worker_owner = owner.clone();
+        let worker_native = native.clone();
+        let worker = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            submit_external_reservation(&worker_owner, &worker_native, old, || {
+                panic!("stale worker posted input")
+            })
+        });
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(3))
+            .unwrap();
+        // Holding the native lock must not prevent revocation under the owner
+        // mutex. Model completed drainage before letting the old worker run.
+        let current = {
+            let mut state = owner.lock().unwrap();
+            assert!(state.admission.begin_external_release(old));
+            assert!(state.admission.finish_external_release(old, true));
+            state.admission.reserve_external().unwrap()
+        };
+        drop(native_guard);
+        assert!(worker
+            .join()
+            .unwrap()
+            .unwrap_err()
+            .contains("CONTROL_STALE"));
+        assert_eq!(
+            submit_external_reservation(&owner, &native, current, || 42).unwrap(),
+            42
+        );
+    }
+
+    #[test]
+    fn a_panicking_native_callback_poison_fences_future_submission_and_drain() {
+        let owner = Mutex::new(Resource::default());
+        let native = Mutex::new(());
+        let ticket = owner.lock().unwrap().admission.reserve_external().unwrap();
+        let failure = std::panic::catch_unwind(|| {
+            let _ = submit_external_reservation(&owner, &native, ticket, || {
+                panic!("native callback failed")
+            });
+        });
+        assert!(failure.is_err());
+        assert!(owner.is_poisoned());
+        assert!(native.is_poisoned());
+        assert!(
+            submit_external_reservation(&owner, &native, ticket, || panic!(
+                "poisoned owner submitted input"
+            ))
+            .unwrap_err()
+            .contains("CONTROL_FAILED")
+        );
+        assert!(
+            drain_external_reservation(&owner, &native, ticket, || panic!(
+                "poisoned owner reported drain success"
+            ))
+            .unwrap_err()
+            .contains("CONTROL_FAILED")
+        );
     }
 }

@@ -54,6 +54,8 @@ const VENDORED_EXTERNAL_PACKAGES = new Map([
   ['third_party/eioc/Cargo.toml', { name: 'eioc', version: '0.5.0' }],
   ['third_party/tao/Cargo.toml', { name: 'tao', version: '0.36.0' }],
   ['third_party/wry/Cargo.toml', { name: 'wry', version: '0.56.0' }],
+  ['third_party/webrtc-sys/Cargo.toml', { name: 'webrtc-sys', version: '0.3.49' }],
+  ['third_party/libwebrtc/Cargo.toml', { name: 'libwebrtc', version: '0.3.52' }],
 ]);
 
 function isVendoredExternalManifest(root, manifestPath) {
@@ -346,6 +348,8 @@ const REQWEST_PACKAGE_PROFILES = new Map([
     dependencyFeatures: ['http2', 'json', 'query', 'rustls-no-provider', 'stream'],
     optional: false,
   }],
+  // Isolated native media probe sends bounded JSON to its loopback HTTP fixture.
+  ['openbitfun-native-media-probe', { dependencyFeatures: ['json'], optional: false }],
   ['openbitfun-miniapp-market-service', {
     dependencyFeatures: ['form', 'http2', 'json', 'rustls-no-provider'],
     optional: false,
@@ -606,13 +610,13 @@ const THIRD_PARTY_CAPABILITY_PROFILES = new Map([
         kind: 'dev',
         useDefaultFeatures: false,
       })],
-      ['openbitfun-services-integrations', dependencyProfile([], {
+      ['openbitfun-services-integrations', { ...dependencyProfile([], {
         optional: true,
         ownerFeatureCapabilities: new Map([
           ['remote-connect', ['rustls-tls-native-roots']],
           ['speech-realtime', ['rustls-tls-native-roots']],
         ]),
-      })],
+      }), devProfile: dependencyProfile(['handshake'], { kind: 'dev' }) }],
     ]),
   }],
   ['tower-http', {
@@ -864,6 +868,28 @@ const RESOLVED_THIRD_PARTY_CAPABILITY_POLICIES = new Map([
 
 export function findResolvedThirdPartyCapabilityFeatureViolations(records, { root }) {
   const violations = [];
+
+  // A newer registry package can otherwise win Cargo's patch resolution and
+  // silently restore native SCTP payload dumps. SDK upgrades require review.
+  for (const record of records.filter(record => record.name === 'webrtc-sys')) {
+    if (record.version !== '0.3.49' || record.source !== null) {
+      violations.push({
+        path: join(root, 'Cargo.toml'),
+        line: 1,
+        message: 'resolved webrtc-sys must use the reviewed local 0.3.49 diagnostic-privacy patch',
+      });
+    }
+  }
+
+  for (const record of records.filter(record => record.name === 'libwebrtc')) {
+    if (record.version !== '0.3.52' || record.source !== null) {
+      violations.push({
+        path: join(root, 'Cargo.toml'),
+        line: 1,
+        message: 'resolved libwebrtc must use the reviewed local 0.3.52 received-channel properties patch',
+      });
+    }
+  }
 
   for (const [dependencyName, policy] of RESOLVED_THIRD_PARTY_CAPABILITY_POLICIES) {
     const namedRecords = records.filter((record) => record.name === dependencyName);

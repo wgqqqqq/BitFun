@@ -23,6 +23,9 @@ pub(crate) async fn admit(
     next: Next,
 ) -> Response {
     let path = request.uri().path();
+    if state.remote_desktop_pairing.is_some() && path.starts_with("/v1/rpc/") {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     // A retired version answers before anything else, including authentication:
     // the client must learn that it has to update, not that its token expired.
     // Static content stays served, so the page that explains the update loads.
@@ -38,6 +41,9 @@ pub(crate) async fn admit(
     if !path.starts_with("/api/") {
         return next.run(request).await;
     }
+    if path.starts_with("/api/remote-desktop/") && state.remote_desktop_pairing.is_none() {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
@@ -49,7 +55,16 @@ pub(crate) async fn admit(
     {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
-    if path.starts_with("/api/devices") {
+    if path == "/api/remote-desktop/pair"
+        && !state
+            .login_rate_limiter
+            .check_and_record("rd-pair", &ip, 10, None)
+    {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    if path.starts_with("/api/devices")
+        || (path.starts_with("/api/remote-desktop/") && path != "/api/remote-desktop/pair")
+    {
         let auth = match crate::routes::devices::validate_user(&state, request.headers()).await {
             Ok(auth) => auth,
             Err(status) => return status.into_response(),
@@ -57,6 +72,13 @@ pub(crate) async fn admit(
         if !state
             .login_rate_limiter
             .check_and_record("account-http", &auth.user_id, 6000, None)
+        {
+            return StatusCode::TOO_MANY_REQUESTS.into_response();
+        }
+        if path == "/api/remote-desktop/turn"
+            && !state
+                .login_rate_limiter
+                .check_and_record("rd-turn", &auth.user_id, 60, None)
         {
             return StatusCode::TOO_MANY_REQUESTS.into_response();
         }
@@ -71,7 +93,7 @@ pub(crate) async fn admit(
     };
     let mut memory_permit = None;
     if request.method() == Method::POST {
-        let maximum = if path.starts_with("/api/auth/") {
+        let maximum = if path.starts_with("/api/auth/") || path == "/api/remote-desktop/pair" {
             16 * 1024
         } else {
             MAX_API_BODY

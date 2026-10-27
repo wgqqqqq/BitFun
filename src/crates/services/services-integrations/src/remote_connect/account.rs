@@ -13,6 +13,19 @@ use crate::remote_connect::relay_http::{
 
 pub const MASTER_KEY_LEN: usize = 32;
 
+/// Candidates for a local native confirmation, not capture/input authority.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct RemoteDesktopControllerDevice {
+    pub device_id: String,
+    pub device_name: Option<String>,
+    pub device_kind: String,
+    pub device_alias: Option<String>,
+}
+pub enum RemoteDesktopControllerDirectory {
+    Unsupported,
+    Ready(Vec<RemoteDesktopControllerDevice>),
+}
+
 /// A retired official deployment has its own credential database. Authenticate
 /// with the new deployment instead of replaying its token or deleting the record.
 ///
@@ -610,6 +623,197 @@ impl AccountClient {
         Ok(response.json::<Info>().await?.capabilities)
     }
 
+    /// Remote desktop discovery must not turn failed/absent HTTP discovery into
+    /// a successful "upgrade required" verdict. Legacy metadata callers retain
+    /// their existing fallback through relay_capabilities.
+    pub async fn remote_desktop_capabilities(&self, relay_url: &str) -> Result<Vec<String>> {
+        let response = self
+            .http
+            .get(Self::endpoint(relay_url, "/api/info")?)
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            return Err(Self::into_error(response).await);
+        }
+        #[derive(Deserialize)]
+        struct Info {
+            #[serde(default)]
+            capabilities: Vec<String>,
+        }
+        Ok(response.json::<Info>().await?.capabilities)
+    }
+
+    /// A separate directory leaves the legacy host-only list unchanged. Missing
+    /// capability is an upgrade state; failed discovery is never an empty list.
+    pub async fn remote_desktop_controller_directory(
+        &self,
+        relay_url: &str,
+        session: &AccountSession,
+    ) -> Result<RemoteDesktopControllerDirectory> {
+        let capabilities = self.remote_desktop_capabilities(relay_url).await?;
+        if !capabilities
+            .iter()
+            .any(|value| value == "remote_desktop_controller_directory_v1")
+        {
+            return Ok(RemoteDesktopControllerDirectory::Unsupported);
+        }
+        let mut response = self
+            .http
+            .get(Self::endpoint(
+                relay_url,
+                "/api/remote-desktop/controllers",
+            )?)
+            .bearer_auth(&session.token)
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            return Err(Self::into_error(response).await);
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await? {
+            if bytes.len() + chunk.len() > 64 * 1024 {
+                return Err(anyhow!("Controller directory exceeds its limit"));
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        let devices: Vec<RemoteDesktopControllerDevice> = serde_json::from_slice(&bytes)?;
+        if devices.len() > 256
+            || devices.iter().any(|device| {
+                device.device_id.is_empty()
+                    || device.device_id.len() > 128
+                    || !device
+                        .device_id
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
+                    || !matches!(device.device_kind.as_str(), "desktop" | "mobile")
+            })
+        {
+            return Err(anyhow!("Controller directory is invalid"));
+        }
+        Ok(RemoteDesktopControllerDirectory::Ready(devices))
+    }
+
+    /// Fresh same-account lookup. Remote desktop grants pin this actual key;
+    /// do not substitute a cached derived AES key when establishing a grant.
+    pub async fn device_public_key(
+        &self,
+        relay_url: &str,
+        session: &AccountSession,
+        device_id: &str,
+    ) -> Result<[u8; 32]> {
+        let response = self
+            .http
+            .get(Self::endpoint(
+                relay_url,
+                &format!("/api/devices/{}/key", urlencoding::encode(device_id)),
+            )?)
+            .bearer_auth(&session.token)
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            return Err(Self::into_error(response).await);
+        }
+        #[derive(Deserialize)]
+        struct Key {
+            device_id: String,
+            public_key: String,
+        }
+        let key: Key = response.json().await?;
+        if key.device_id != device_id {
+            return Err(anyhow!("Relay returned a different device identity"));
+        }
+        super::encryption::parse_public_key(&key.public_key)
+    }
+
+    /// Discovery must have succeeded before this call; missing support or a
+    /// failed issuance never becomes an empty ICE config or a public fallback.
+    pub async fn remote_desktop_turn(
+        &self,
+        relay_url: &str,
+        session: &AccountSession,
+        target: &str,
+        attach_id: &str,
+        capabilities: &[String],
+    ) -> Result<super::remote_desktop_device::TurnCredentials> {
+        if !capabilities
+            .iter()
+            .any(|value| value == "remote_desktop_turn_v1")
+        {
+            return Err(anyhow!("relay_turn_upgrade_required"));
+        }
+        super::realtime_client::validate_remote_desktop_attachment(target)?;
+        super::realtime_client::validate_remote_desktop_attachment(attach_id)?;
+        let endpoint = Self::endpoint(relay_url, "/api/remote-desktop/turn")?;
+        let loopback = endpoint.host_str().is_some_and(|host| {
+            host == "localhost"
+                || host
+                    .trim_matches(['[', ']'])
+                    .parse::<std::net::IpAddr>()
+                    .is_ok_and(|ip| ip.is_loopback())
+        });
+        if endpoint.scheme() != "https" && !loopback {
+            return Err(anyhow!("remote_desktop_requires_https"));
+        }
+        let mut response = self
+            .http
+            .get(endpoint)
+            .query(&[("target_device_id", target), ("attach_id", attach_id)])
+            .bearer_auth(&session.token)
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await?;
+        let status = response.status();
+        let mut body = Vec::new();
+        while let Some(chunk) = response.chunk().await? {
+            if body.len().saturating_add(chunk.len()) > 16 * 1024 {
+                return Err(anyhow!("TURN credential response exceeds its limit"));
+            }
+            body.extend_from_slice(&chunk);
+        }
+        if !status.is_success() {
+            // Never format a response body that may contain ICE credentials.
+            let error: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
+            let code = error["error"]["code"].as_str().filter(|code| {
+                matches!(
+                    *code,
+                    "turn_unavailable"
+                        | "authorization_unknown"
+                        | "authorization_required"
+                        | "authorization_expired"
+                        | "attachment_unavailable"
+                        | "forbidden"
+                        | "invalid_request"
+                )
+            });
+            let code = match code {
+                Some("attachment_unavailable") => "attachment_unavailable",
+                Some("authorization_unknown") => "authorization_unknown",
+                Some("authorization_expired") => "authorization_expired",
+                Some("authorization_required") => "authorization_required",
+                Some("turn_unavailable") => "turn_unavailable",
+                Some("forbidden") => "forbidden",
+                Some("invalid_request") => "invalid_request",
+                _ => "request_rejected",
+            };
+            return Err(super::remote_desktop_device::TurnIssuanceError {
+                code,
+                status: status.as_u16(),
+            }
+            .into());
+        }
+        let credentials: super::remote_desktop_device::TurnCredentials =
+            serde_json::from_slice(&body)
+                .map_err(|_| anyhow!("Invalid TURN credential response"))?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs();
+        credentials.validate(target, attach_id, now)?;
+        Ok(credentials)
+    }
+
     pub async fn update_device_alias(
         &self,
         relay_url: &str,
@@ -1021,6 +1225,293 @@ mod tests {
         assert_eq!(aliased.device_client_version.as_deref(), Some("1.0.1"));
         assert_eq!(aliased.device_client_protocol, Some(2));
         assert_eq!(aliased.compatible, Some(true));
+    }
+
+    #[tokio::test]
+    async fn remote_desktop_discovery_and_device_key_reads_preserve_authenticated_http_boundaries()
+    {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/prefix", listener.local_addr().unwrap());
+        let first = super::super::encryption::KeyPair::generate();
+        let second = super::super::encryption::KeyPair::generate();
+        let expected_first =
+            super::super::encryption::parse_public_key(&first.public_key_base64()).unwrap();
+        let expected_second =
+            super::super::encryption::parse_public_key(&second.public_key_base64()).unwrap();
+        let key_body = |device: &str, key: &str| {
+            serde_json::json!({"device_id":device,"public_key":key}).to_string()
+        };
+        let replies = vec![
+            (
+                "/prefix/api/info",
+                "503 Unavailable",
+                r#"{"error":"unavailable"}"#.to_string(),
+            ),
+            ("/prefix/api/info", "200 OK", "{}".to_string()),
+            (
+                "/prefix/api/info",
+                "200 OK",
+                r#"{"capabilities":["remote_desktop_route_v1"]}"#.to_string(),
+            ),
+            (
+                "/prefix/api/devices/phone/key",
+                "200 OK",
+                key_body("phone", &first.public_key_base64()),
+            ),
+            (
+                "/prefix/api/devices/phone/key",
+                "200 OK",
+                key_body("phone", &second.public_key_base64()),
+            ),
+            (
+                "/prefix/api/devices/phone/key",
+                "200 OK",
+                key_body("other", &second.public_key_base64()),
+            ),
+            (
+                "/prefix/api/devices/phone/key",
+                "403 Forbidden",
+                r#"{"error":"forbidden"}"#.to_string(),
+            ),
+        ];
+        let server = tokio::spawn(async move {
+            for (path, status, body) in replies {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut bytes = Vec::new();
+                loop {
+                    let mut chunk = [0; 1024];
+                    let n = socket.read(&mut chunk).await.unwrap();
+                    assert!(n > 0);
+                    bytes.extend_from_slice(&chunk[..n]);
+                    assert!(bytes.len() <= 8192);
+                    if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let request = String::from_utf8(bytes).unwrap();
+                assert!(request.starts_with(&format!("GET {path} ")));
+                if path.ends_with("/key") {
+                    assert!(request
+                        .to_ascii_lowercase()
+                        .contains("authorization: bearer fixture"));
+                }
+                socket.write_all(format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
+            }
+        });
+        let client = AccountClient::new();
+        let session = AccountSession::new("fixture".into(), "account".into(), [7; 32]);
+        assert!(client.remote_desktop_capabilities(&url).await.is_err());
+        assert!(client
+            .remote_desktop_capabilities(&url)
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            client.remote_desktop_capabilities(&url).await.unwrap(),
+            vec!["remote_desktop_route_v1"]
+        );
+        assert_eq!(
+            client
+                .device_public_key(&url, &session, "phone")
+                .await
+                .unwrap(),
+            expected_first
+        );
+        assert_eq!(
+            client
+                .device_public_key(&url, &session, "phone")
+                .await
+                .unwrap(),
+            expected_second
+        );
+        assert!(client
+            .device_public_key(&url, &session, "phone")
+            .await
+            .is_err());
+        assert!(client
+            .device_public_key(&url, &session, "phone")
+            .await
+            .is_err());
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn remote_desktop_controller_directory_negotiates_and_bounds_authenticated_results() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/prefix", listener.local_addr().unwrap());
+        let device = serde_json::json!({"device_id":"phone", "device_name":"Phone",
+            "device_kind":"mobile", "future_field":true});
+        let bodies = vec![
+            ("200 OK", serde_json::json!([device.clone()]).to_string()),
+            ("200 OK", "[]".into()),
+            ("403 Forbidden", "{}".into()),
+            (
+                "200 OK",
+                serde_json::json!([{"device_id":"phone", "device_kind":"watch"}]).to_string(),
+            ),
+            (
+                "200 OK",
+                serde_json::json!([{"device_id":"../phone", "device_kind":"mobile"}]).to_string(),
+            ),
+            ("200 OK", serde_json::to_string(&vec![device; 257]).unwrap()),
+            ("200 OK", " ".repeat(64 * 1024 + 1)),
+        ];
+        let count = bodies.len();
+        let mut replies = vec![
+            ("/prefix/api/info", "503 Unavailable", "{}".into()),
+            ("/prefix/api/info", "200 OK", "{}".into()),
+        ];
+        for (status, body) in bodies {
+            replies.push((
+                "/prefix/api/info",
+                "200 OK",
+                r#"{"capabilities":["remote_desktop_controller_directory_v1"]}"#.into(),
+            ));
+            replies.push(("/prefix/api/remote-desktop/controllers", status, body));
+        }
+        let server = tokio::spawn(async move {
+            for (path, status, body) in replies {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut bytes = Vec::new();
+                loop {
+                    let mut chunk = [0; 1024];
+                    let n = socket.read(&mut chunk).await.unwrap();
+                    assert!(n > 0);
+                    bytes.extend_from_slice(&chunk[..n]);
+                    assert!(bytes.len() <= 8192);
+                    if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let request = String::from_utf8(bytes).unwrap();
+                assert!(request.starts_with(&format!("GET {path} ")));
+                if path.ends_with("/controllers") {
+                    assert!(request
+                        .to_ascii_lowercase()
+                        .contains("authorization: bearer fixture"));
+                }
+                let _ = socket.write_all(format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await;
+            }
+        });
+        let client = AccountClient::new();
+        let session = AccountSession::new("fixture".into(), "account".into(), [7; 32]);
+        assert!(client
+            .remote_desktop_controller_directory(&url, &session)
+            .await
+            .is_err());
+        assert!(matches!(
+            client
+                .remote_desktop_controller_directory(&url, &session)
+                .await
+                .unwrap(),
+            RemoteDesktopControllerDirectory::Unsupported
+        ));
+        match client
+            .remote_desktop_controller_directory(&url, &session)
+            .await
+            .unwrap()
+        {
+            RemoteDesktopControllerDirectory::Ready(devices) => {
+                assert_eq!(devices.len(), 1);
+                assert_eq!(devices[0].device_id, "phone");
+                assert!(devices[0].device_alias.is_none());
+            }
+            _ => panic!("Expected controller directory"),
+        }
+        assert!(
+            matches!(client.remote_desktop_controller_directory(&url, &session).await.unwrap(),
+            RemoteDesktopControllerDirectory::Ready(devices) if devices.is_empty())
+        );
+        for _ in 2..count {
+            assert!(client
+                .remote_desktop_controller_directory(&url, &session)
+                .await
+                .is_err());
+        }
+        tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn remote_desktop_turn_fetch_is_authenticated_scoped_bounded_and_never_logs_credentials()
+    {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/prefix", listener.local_addr().unwrap());
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let valid = serde_json::json!({"target_device_id":"desktop","attach_id":"a","expires_at":now+300,
+            "ice_servers":[{"urls":["turn:relay.example:3478?transport=udp"],"username":"fixture-user","credential":"fixture-credential"}]});
+        let mut wrong = valid.clone();
+        wrong["attach_id"] = serde_json::json!("other");
+        let mut expired = valid.clone();
+        expired["expires_at"] = serde_json::json!(now);
+        let replies = vec![
+            ("200 OK", valid.to_string()),
+            ("200 OK", wrong.to_string()),
+            ("200 OK", expired.to_string()),
+            (
+                "503 Unavailable",
+                r#"{"error":{"code":"fixture-credential"}}"#.into(),
+            ),
+            ("200 OK", " ".repeat(16 * 1024 + 1)),
+        ];
+        let server = tokio::spawn(async move {
+            for (status, body) in replies {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut bytes = Vec::new();
+                loop {
+                    let mut chunk = [0; 1024];
+                    let n = socket.read(&mut chunk).await.unwrap();
+                    assert!(n > 0);
+                    bytes.extend_from_slice(&chunk[..n]);
+                    assert!(bytes.len() <= 8192);
+                    if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let request = String::from_utf8(bytes).unwrap();
+                assert!(request.starts_with(
+                    "GET /prefix/api/remote-desktop/turn?target_device_id=desktop&attach_id=a "
+                ));
+                assert!(request
+                    .to_ascii_lowercase()
+                    .contains("authorization: bearer fixture"));
+                let _ = socket.write_all(format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await;
+            }
+        });
+        let client = AccountClient::new();
+        let session = AccountSession::new("fixture".into(), "account".into(), [7; 32]);
+        assert!(client
+            .remote_desktop_turn(&url, &session, "desktop", "a", &[])
+            .await
+            .is_err());
+        let caps = vec!["remote_desktop_turn_v1".into()];
+        assert!(client
+            .remote_desktop_turn("http://relay.example", &session, "desktop", "a", &caps)
+            .await
+            .is_err());
+        let credentials = client
+            .remote_desktop_turn(&url, &session, "desktop", "a", &caps)
+            .await
+            .unwrap();
+        assert_eq!(credentials.ice_servers[0].credential, "fixture-credential");
+        for _ in 0..4 {
+            let error = client
+                .remote_desktop_turn(&url, &session, "desktop", "a", &caps)
+                .await
+                .err()
+                .unwrap()
+                .to_string();
+            assert!(!error.contains("fixture-credential"));
+        }
+        server.await.unwrap();
     }
 
     #[tokio::test]

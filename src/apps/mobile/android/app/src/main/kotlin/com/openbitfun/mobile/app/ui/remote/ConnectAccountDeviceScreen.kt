@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,10 +37,12 @@ import com.openbitfun.mobile.app.R
 import com.openbitfun.mobile.app.ui.account.messageRes
 import com.openbitfun.mobile.app.ui.theme.openBitFunColors
 import com.openbitfun.mobile.core.feature.account.AccountUiState
+import com.openbitfun.mobile.core.feature.account.AccountDevicePolicy
 
 internal const val CONNECT_ACCOUNT_DEVICE_TEST_TAG: String = "connect-account-device"
 internal const val CONNECT_ACCOUNT_DEVICE_REFRESH_TEST_TAG: String = "connect-account-device-refresh"
 internal const val CONNECT_ACCOUNT_DEVICE_ROW_TEST_TAG_PREFIX: String = "connect-account-device-row:"
+internal const val CONNECT_ACCOUNT_DESKTOP_TEST_TAG_PREFIX: String = "connect-account-desktop:"
 
 /**
  * Signed-in landing page for remote control, matching HarmonyOS'
@@ -53,9 +56,11 @@ internal const val CONNECT_ACCOUNT_DEVICE_ROW_TEST_TAG_PREFIX: String = "connect
 @Composable
 internal fun ConnectAccountDeviceScreen(
     state: AccountUiState.Ready,
+    currentDeviceId: String,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     onSelect: (String) -> Unit,
+    onViewDesktop: (String) -> Unit,
     modifier: Modifier,
 ) {
     Column(
@@ -112,7 +117,8 @@ internal fun ConnectAccountDeviceScreen(
                 lineHeight = 21.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            DeviceListCard(state = state, onRefresh = onRefresh, onSelect = onSelect)
+            DeviceListCard(state = state, currentDeviceId = currentDeviceId, onRefresh = onRefresh,
+                onSelect = onSelect, onViewDesktop = onViewDesktop)
         }
     }
 }
@@ -120,8 +126,10 @@ internal fun ConnectAccountDeviceScreen(
 @Composable
 private fun DeviceListCard(
     state: AccountUiState.Ready,
+    currentDeviceId: String,
     onRefresh: () -> Unit,
     onSelect: (String) -> Unit,
+    onViewDesktop: (String) -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(8.dp),
@@ -189,61 +197,70 @@ private fun DeviceListCard(
                 state.devices.forEach { device ->
                     val selected = device.id == state.selectedDeviceId
                     val reconnectable = selected && !device.online
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(60.dp)
-                            .clickable(enabled = device.online || reconnectable, onClick = { onSelect(device.id) })
-                            .alpha(if (device.online || selected) 1f else 0.64f)
-                            .testTag(CONNECT_ACCOUNT_DEVICE_ROW_TEST_TAG_PREFIX + device.id),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.ic_symbol_desktop),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(26.dp).alpha(if (device.online || selected) 0.68f else 0.38f),
-                        )
-                        Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
-                            Text(
-                                device.name.ifBlank { device.id },
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                    Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp)
+                                .clickable(enabled = device.online || reconnectable, onClick = { onSelect(device.id) })
+                                .alpha(if (device.online || selected) 1f else 0.64f)
+                                .testTag(CONNECT_ACCOUNT_DEVICE_ROW_TEST_TAG_PREFIX + device.id),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.ic_symbol_desktop),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(26.dp).alpha(if (device.online || selected) 0.68f else 0.38f),
                             )
-                            Text(
-                                stringResource(
-                                    when {
-                                        selected && device.online -> R.string.account_device_current_control
-                                        device.online -> R.string.account_online
-                                        else -> R.string.account_offline
-                                    },
-                                ),
-                                fontSize = 13.sp,
-                                color = if (device.online) {
-                                    openBitFunColors.statusSuccess
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            )
-                        }
-                        if (reconnectable) {
-                            Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(14.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
                                 Text(
-                                    stringResource(R.string.remote_settings_reconnect),
-                                    fontSize = 14.sp,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    device.name.ifBlank { device.id },
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    stringResource(
+                                        when {
+                                            selected && device.online -> R.string.account_device_current_control
+                                            device.online -> R.string.account_online
+                                            else -> R.string.account_offline
+                                        },
+                                    ),
+                                    fontSize = 13.sp,
+                                    color = if (device.online) {
+                                        openBitFunColors.statusSuccess
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
                                 )
                             }
-                        } else if (device.online && !selected) {
-                            Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(14.dp)) {
-                                Text(
-                                    stringResource(R.string.account_connect),
-                                    fontSize = 14.sp,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                )
+                            if (reconnectable) {
+                                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(14.dp)) {
+                                    Text(
+                                        stringResource(R.string.remote_settings_reconnect),
+                                        fontSize = 14.sp,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    )
+                                }
+                            } else if (device.online && !selected) {
+                                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(14.dp)) {
+                                    Text(
+                                        stringResource(R.string.account_connect),
+                                        fontSize = 14.sp,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    )
+                                }
+                            }
+                        }
+                        if (AccountDevicePolicy.canViewDesktop(device, currentDeviceId)) {
+                            TextButton(onClick = { onViewDesktop(device.id) },
+                                modifier = Modifier.align(Alignment.End).testTag(CONNECT_ACCOUNT_DESKTOP_TEST_TAG_PREFIX + device.id)) {
+                                Icon(painterResource(R.drawable.ic_symbol_eye), null, modifier = Modifier.size(18.dp))
+                                Text(stringResource(R.string.remote_desktop_view), modifier = Modifier.padding(start = 8.dp))
                             }
                         }
                     }

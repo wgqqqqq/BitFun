@@ -37,6 +37,11 @@ macro_rules! json_event {
 json_event!(RpcCall, "rpc-call", HasAck<JsonAck>);
 json_event!(RpcRegister, "rpc-register", HasAck<JsonAck>);
 json_event!(RpcRequest, "rpc-request", HasAck<JsonAck>);
+json_event!(RemoteDesktopCall, "rd-call", HasAck<JsonAck>);
+json_event!(RemoteDesktopRegister, "rd-register", HasAck<JsonAck>);
+json_event!(RemoteDesktopRequest, "rd-request", HasAck<JsonAck>);
+json_event!(RemoteDesktopNotice, "rd-notice", HasAck<JsonAck>);
+json_event!(RemoteDesktopEnd, "rd-end", HasAck<JsonAck>);
 json_event!(AuthOk, "auth-ok", NoAck);
 json_event!(Update, "update", NoAck);
 json_event!(Ephemeral, "ephemeral", NoAck);
@@ -47,6 +52,8 @@ json_event!(Registered, "rpc-registered", NoAck);
 pub enum Incoming {
     AuthOk(Event<AuthOk>),
     RpcRequest(Event<RpcRequest>),
+    RemoteDesktopRequest(Event<RemoteDesktopRequest>),
+    RemoteDesktopNotice(Event<RemoteDesktopNotice>),
     Update(Event<Update>),
     Ephemeral(Event<Ephemeral>),
     Registered(Event<Registered>),
@@ -70,8 +77,28 @@ pub struct RealtimeSender {
     payloads: super::realtime_payload::PayloadClient,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum RealtimeRole {
+    AgentHost,
+    Controller,
+    RemoteDesktopHost,
+}
+
 impl RealtimeConnection {
     pub async fn connect(relay_url: &str, token: &str, machine: bool) -> Result<Self> {
+        let role = if machine {
+            RealtimeRole::AgentHost
+        } else {
+            RealtimeRole::Controller
+        };
+        Self::connect_with_role(relay_url, token, role).await
+    }
+
+    pub(crate) async fn connect_with_role(
+        relay_url: &str,
+        token: &str,
+        role: RealtimeRole,
+    ) -> Result<Self> {
         super::relay_client::ensure_rustls_crypto_provider();
         let mut base = reqwest::Url::parse(relay_url)?;
         if !matches!(base.scheme(), "http" | "https")
@@ -92,7 +119,8 @@ impl RealtimeConnection {
             .channels(64usize)
             .http_client(super::relay_http::relay_http_client().clone())
             .open()?;
-        let auth = account_auth_payload(token, machine).to_string();
+        let auth =
+            account_auth_payload(token, !matches!(role, RealtimeRole::Controller)).to_string();
         let (sender, mut receiver) = client.connect_with("/", auth).await?;
         let identity = tokio::time::timeout(Duration::from_secs(15), async {
             loop {
@@ -131,7 +159,9 @@ impl RealtimeConnection {
                 .ok_or_else(|| anyhow!("Missing device identity"))?
                 .into(),
         };
-        if machine {
+        // A desktop-only service explicitly refuses Agent RPC. Keep machine
+        // presence for its capture host without registering the invoke lane.
+        if matches!(role, RealtimeRole::AgentHost) {
             let ack = connection
                 .sender
                 .emit(RpcRegister(
@@ -204,6 +234,127 @@ impl RealtimeConnection {
     }
 }
 impl RealtimeSender {
+    /// A caller supplies capabilities from a successful /api/info read. Failed
+    /// discovery must remain a transport failure, never an empty capability list.
+    pub async fn register_remote_desktop(&self, capabilities: &[String]) -> Result<()> {
+        ensure_remote_desktop_route(capabilities)?;
+        let ack = self
+            .sender
+            .emit(RemoteDesktopRegister(json!({"version":1})))
+            .await?
+            .timeout(Duration::from_secs(10))
+            .await?;
+        if ack.payload.0["ok"] != true || ack.payload.0["version"] != 1 {
+            bail!("Remote desktop registration rejected");
+        }
+        Ok(())
+    }
+
+    /// Dedicated signaling never uploads bulk payloads or falls back to invoke.
+    /// The sender is tied to one socket epoch; a lost ACK is not retried.
+    pub async fn call_remote_desktop(
+        &self,
+        target: &str,
+        params: Value,
+        timeout: Duration,
+        capabilities: &[String],
+    ) -> Result<Value> {
+        ensure_remote_desktop_route(capabilities)?;
+        let request = remote_desktop_call(target, params, timeout)?;
+        self.submit_remote_desktop(request, timeout).await
+    }
+
+    pub async fn call_remote_desktop_attachment(
+        &self,
+        target: &str,
+        attach_id: &str,
+        params: Value,
+        timeout: Duration,
+        capabilities: &[String],
+    ) -> Result<Value> {
+        ensure_remote_desktop_route(capabilities)?;
+        let mut request = remote_desktop_call(target, params, timeout)?;
+        validate_remote_desktop_attachment(attach_id)?;
+        request["attachId"] = json!(attach_id);
+        self.submit_remote_desktop(request, timeout).await
+    }
+
+    async fn submit_remote_desktop(&self, request: Value, timeout: Duration) -> Result<Value> {
+        let ack = tokio::time::timeout(timeout + Duration::from_secs(2), async {
+            self.sender
+                .emit(RemoteDesktopCall(request))
+                .await?
+                .timeout(timeout)
+                .await
+                .map_err(anyhow::Error::from)
+        })
+        .await
+        .map_err(|_| {
+            anyhow!("Remote desktop acknowledgement timed out; delivery outcome is unknown")
+        })??;
+        let value = ack.payload.0;
+        if value["ok"] != true {
+            bail!(
+                "{}",
+                value["error"]
+                    .as_str()
+                    .unwrap_or("Remote desktop request rejected")
+            );
+        }
+        let result = value
+            .get("result")
+            .cloned()
+            .ok_or_else(|| anyhow!("Remote desktop response missing result"))?;
+        validate_remote_desktop_ciphertext(&result)?;
+        Ok(result)
+    }
+
+    pub async fn respond_remote_desktop_notice(
+        &self,
+        id: AckId<JsonAck>,
+        attach_id: &str,
+        handled: bool,
+    ) -> Result<()> {
+        tokio::time::timeout(
+            Duration::from_secs(5),
+            self.sender
+                .acknowledge(id, JsonAck(json!({"ok":handled,"attachId":attach_id}))),
+        )
+        .await
+        .map_err(|_| anyhow!("Remote desktop notice response timed out"))??;
+        Ok(())
+    }
+
+    pub async fn respond_remote_desktop(&self, id: AckId<JsonAck>, result: Value) -> Result<()> {
+        if result.get("$relayError").and_then(Value::as_str).is_none() {
+            validate_remote_desktop_ciphertext(&result)?;
+        }
+        tokio::time::timeout(
+            Duration::from_secs(5),
+            self.sender.acknowledge(id, JsonAck(result)),
+        )
+        .await
+        .map_err(|_| anyhow!("Remote desktop response write timed out"))??;
+        Ok(())
+    }
+
+    pub async fn end_remote_desktop(&self, attach_id: &str) -> Result<()> {
+        validate_remote_desktop_attachment(attach_id)?;
+        let ack = tokio::time::timeout(Duration::from_secs(5), async {
+            self.sender
+                .emit(RemoteDesktopEnd(json!({"version":1,"attachId":attach_id})))
+                .await?
+                .timeout(Duration::from_secs(5))
+                .await
+                .map_err(anyhow::Error::from)
+        })
+        .await
+        .map_err(|_| anyhow!("Remote desktop cleanup acknowledgement timed out"))??;
+        if ack.payload.0["ok"] != true {
+            bail!("Remote desktop cleanup rejected");
+        }
+        Ok(())
+    }
     pub async fn event(&self, target: &str, params: Value) -> Result<()> {
         let response = self
             .sender
@@ -254,5 +405,81 @@ impl RealtimeSender {
         .await
         .map_err(|_| anyhow!("Relay response write timed out"))??;
         Ok(())
+    }
+}
+
+pub(super) fn ensure_remote_desktop_route(capabilities: &[String]) -> Result<()> {
+    if !capabilities
+        .iter()
+        .any(|value| value == "remote_desktop_route_v1")
+    {
+        bail!("relay_upgrade_required");
+    }
+    Ok(())
+}
+
+fn validate_remote_desktop_ciphertext(value: &Value) -> Result<()> {
+    let (Some(data), Some(nonce)) = (value["encrypted_data"].as_str(), value["nonce"].as_str())
+    else {
+        bail!("Invalid remote desktop encryption envelope");
+    };
+    if data.is_empty() || data.len() > 128 * 1024 || nonce.is_empty() || nonce.len() > 128 {
+        bail!("Remote desktop encryption envelope exceeds signaling bounds");
+    }
+    Ok(())
+}
+
+pub(super) fn validate_remote_desktop_attachment(attach_id: &str) -> Result<()> {
+    if attach_id.is_empty()
+        || attach_id.len() > 128
+        || !attach_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
+    {
+        bail!("Invalid remote desktop attachment ID");
+    }
+    Ok(())
+}
+
+fn remote_desktop_call(target: &str, params: Value, timeout: Duration) -> Result<Value> {
+    if target.is_empty()
+        || target.len() > 128
+        || !target
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+        || timeout.as_millis() == 0
+        || timeout > Duration::from_secs(30)
+    {
+        bail!("Invalid remote desktop target or timeout");
+    }
+    validate_remote_desktop_ciphertext(&params)?;
+    Ok(json!({"version":1,"targetDeviceId":target,"params":params,"timeoutMs":timeout.as_millis()}))
+}
+
+#[cfg(test)]
+mod remote_desktop_tests {
+    use super::*;
+    #[test]
+    fn signaling_lane_requires_discovery_and_rejects_general_rpc_shapes() {
+        assert!(ensure_remote_desktop_route(&[]).is_err());
+        assert!(ensure_remote_desktop_route(&["device_metadata_v1".into()]).is_err());
+        ensure_remote_desktop_route(&["remote_desktop_route_v1".into()]).unwrap();
+        let payload = json!({"encrypted_data":"cipher","nonce":"nonce"});
+        let wire =
+            remote_desktop_call("desktop", payload.clone(), Duration::from_secs(10)).unwrap();
+        assert_eq!(wire["version"], 1);
+        assert_eq!(wire["targetDeviceId"], "desktop");
+        assert!(wire.get("method").is_none());
+        assert!(
+            remote_desktop_call("desktop:invoke", payload.clone(), Duration::from_secs(10))
+                .is_err()
+        );
+        assert!(remote_desktop_call("desktop", payload.clone(), Duration::from_secs(31)).is_err());
+        assert!(remote_desktop_call("desktop", payload, Duration::ZERO).is_err());
+        assert!(validate_remote_desktop_ciphertext(&json!({"op":"attach"})).is_err());
+        assert!(validate_remote_desktop_ciphertext(
+            &json!({"encrypted_data":"x".repeat(128*1024+1),"nonce":"n"})
+        )
+        .is_err());
     }
 }

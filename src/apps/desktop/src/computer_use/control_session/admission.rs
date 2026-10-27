@@ -49,12 +49,24 @@ impl ControlToken {
     }
 }
 
+/// An opaque local resource ticket; remote attachment/lease IDs stay elsewhere.
+/// No Drop-based release: native workers and injected state must drain first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ExternalReservationToken(u64);
+
+struct ExternalReservation {
+    token: ExternalReservationToken,
+    releasing: bool,
+}
+
 pub(super) struct Admission<E> {
     pub(super) snapshot: ControlSnapshot,
     pub(super) executor: Option<E>,
     pub(super) busy: bool,
     cleaning: bool,
     last_revoked_generation: Option<u64>,
+    external: Option<ExternalReservation>,
+    external_sequence: u64,
 }
 
 impl<E> Default for Admission<E> {
@@ -65,13 +77,82 @@ impl<E> Default for Admission<E> {
             busy: false,
             cleaning: false,
             last_revoked_generation: None,
+            external: None,
+            external_sequence: 0,
         }
     }
 }
 
 impl<E: Copy + PartialEq> Admission<E> {
+    /// No preemption, including idle-but-active AI owners and manual selection.
+    /// A stopped snapshot may retain owner/target; those are not live ownership.
+    pub(super) fn reserve_external(&mut self) -> Result<ExternalReservationToken, String> {
+        if self.external.is_some()
+            || self.busy
+            || self.cleaning
+            || self.executor.is_some()
+            || !matches!(self.snapshot.state.as_str(), "" | "idle" | "stopped")
+        {
+            return Err("[CONTROL_BUSY] Desktop control is active or awaiting cleanup".into());
+        }
+        let sequence = self
+            .external_sequence
+            .checked_add(1)
+            .ok_or("[CONTROL_FAILED] External reservation sequence exhausted")?;
+        let token = ExternalReservationToken(sequence);
+        self.external_sequence = sequence;
+        self.external = Some(ExternalReservation {
+            token,
+            releasing: false,
+        });
+        Ok(token)
+    }
+
+    pub(super) fn external_matches(&self, token: ExternalReservationToken) -> bool {
+        self.external
+            .as_ref()
+            .is_some_and(|current| current.token == token && !current.releasing)
+    }
+
+    pub(super) fn external_releasing(&self, token: ExternalReservationToken) -> bool {
+        self.external
+            .as_ref()
+            .is_some_and(|current| current.token == token && current.releasing)
+    }
+
+    /// Invalidate submission before any native cleanup; a failed drain holds
+    /// this reservation. A retry of the same release remains current.
+    pub(super) fn begin_external_release(&mut self, token: ExternalReservationToken) -> bool {
+        let Some(current) = self
+            .external
+            .as_mut()
+            .filter(|current| current.token == token)
+        else {
+            return false;
+        };
+        current.releasing = true;
+        true
+    }
+
+    pub(super) fn finish_external_release(
+        &mut self,
+        token: ExternalReservationToken,
+        drained: bool,
+    ) -> bool {
+        if !drained
+            || !self
+                .external
+                .as_ref()
+                .is_some_and(|current| current.token == token && current.releasing)
+        {
+            return false;
+        }
+        self.external = None;
+        true
+    }
+
     pub(super) fn active(&self) -> bool {
-        self.snapshot.state == "active" && !self.cleaning
+        self.snapshot.state == "active" && !self.cleaning && self.external.is_none()
     }
 
     pub(super) fn token(&self, executor: E) -> ControlToken {
@@ -108,7 +189,11 @@ impl<E: Copy + PartialEq> Admission<E> {
     /// Optional manual sharing has its own selection and input grant. Normal
     /// Agent sessions use begin_start/admit and never enter this workflow.
     pub(super) fn request_share(&mut self, owner: &str, mode: ControlMode) -> Result<(), String> {
-        if self.snapshot.owner.as_deref() != Some(owner) || self.busy || self.cleaning {
+        if self.external.is_some()
+            || self.snapshot.owner.as_deref() != Some(owner)
+            || self.busy
+            || self.cleaning
+        {
             return Err("[CONTROL_BUSY] Another task or action owns desktop control".into());
         }
         self.snapshot.mode = ControlMode::Observe;
@@ -234,6 +319,9 @@ impl<E: Copy + PartialEq> Admission<E> {
     }
 
     pub(super) fn check(&self, token: Option<ControlToken>) -> Result<(), String> {
+        if self.external.is_some() {
+            return Err("[CONTROL_BUSY] Manual control owns desktop admission".into());
+        }
         if !self.active() {
             return Err("[CONTROL_STOPPED] Start a new control session before capturing".into());
         }
@@ -281,7 +369,8 @@ impl<E: Copy + PartialEq> Admission<E> {
         if owner.trim().is_empty() {
             return Err("[CONTROL_OWNER_REQUIRED] A runtime session is required".into());
         }
-        if self.busy
+        if self.external.is_some()
+            || self.busy
             || self.cleaning
             || ((self.active() || self.snapshot.state == "awaiting_share")
                 && self.snapshot.owner.as_deref() != Some(owner))
@@ -380,6 +469,9 @@ impl<E: Copy + PartialEq> Admission<E> {
     }
 
     pub(super) fn bind(&mut self, target: String) -> Result<bool, String> {
+        if self.external.is_some() {
+            return Err("[CONTROL_BUSY] Manual control owns desktop admission".into());
+        }
         if target.trim().is_empty() {
             return Err("[CONTROL_TARGET_REQUIRED] A native target is required".into());
         }
@@ -423,6 +515,9 @@ impl<E: Copy + PartialEq> Admission<E> {
             .ok_or_else(|| format!("[CONTROL_ACTION_INVALID] {action} is not a resource action"))?;
         if owner.trim().is_empty() {
             return Err("[CONTROL_OWNER_REQUIRED] A runtime session is required".into());
+        }
+        if self.external.is_some() {
+            return Err("[CONTROL_BUSY] Manual control owns desktop admission".into());
         }
         let initial = self.snapshot.state.is_empty() || self.snapshot.state == "idle";
         if self.snapshot.state == "awaiting_share" {
@@ -773,3 +868,7 @@ mod tests {
         assert!(!state.active());
     }
 }
+
+#[cfg(test)]
+#[path = "external_reservation_tests.rs"]
+mod external_reservation_tests;

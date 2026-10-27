@@ -249,19 +249,21 @@ test('Codex session history imports stay behind reviewed composition roots', asy
   assert.match(session?.consumer ?? '', /external_session_import/);
 });
 
-test('Cargo manifest discovery ignores nested local-agent worktrees', async (t) => {
+test('Cargo manifest discovery ignores nested local-agent worktrees and native build caches', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'openbitfun-core-boundaries-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   await Promise.all([
     mkdir(join(root, 'src', 'crate'), { recursive: true }),
     mkdir(join(root, '.claude', 'worktrees', 'other'), { recursive: true }),
     mkdir(join(root, '.cursor', 'worktrees', 'other'), { recursive: true }),
+    mkdir(join(root, 'src', 'crate', 'target', 'generated'), { recursive: true }),
   ]);
   await Promise.all([
     writeFile(join(root, 'Cargo.toml'), '[workspace]\n'),
     writeFile(join(root, 'src', 'crate', 'Cargo.toml'), '[package]\nname="kept"\nversion="0.1.0"\n'),
     writeFile(join(root, '.claude', 'worktrees', 'other', 'Cargo.toml'), '[package]\nname="ignored-claude"\nversion="0.1.0"\n'),
     writeFile(join(root, '.cursor', 'worktrees', 'other', 'Cargo.toml'), '[package]\nname="ignored-cursor"\nversion="0.1.0"\n'),
+    writeFile(join(root, 'src', 'crate', 'target', 'generated', 'Cargo.toml'), '[package]\nname="ignored-native-cache"\nversion="0.1.0"\n'),
   ]);
 
   const manifests = discoverCargoManifestPaths(root)
@@ -3360,6 +3362,15 @@ test('services integrations WebSocket TLS stays attached to reviewed realtime ow
 
   assert.deepEqual(findThirdPartyCapabilityFeatureViolations([pkg]), []);
 
+  const withFixture = structuredClone(pkg);
+  withFixture.dependencies.push({
+    name: 'tokio-tungstenite', kind: 'dev', optional: false,
+    uses_default_features: true, features: ['handshake'],
+  });
+  assert.deepEqual(findThirdPartyCapabilityFeatureViolations([withFixture]), []);
+  withFixture.dependencies[1].features.push('rustls-tls-native-roots');
+  assert.ok(findThirdPartyCapabilityFeatureViolations([withFixture]).length > 0);
+
   const mutated = structuredClone(pkg);
   mutated.features['tokio-tungstenite'] = ['dep:tokio-tungstenite'];
   mutated.features['future-non-remote-owner'] = ['dep:tokio-tungstenite'];
@@ -3368,6 +3379,45 @@ test('services integrations WebSocket TLS stays attached to reviewed realtime ow
     .join('\n');
   assert.match(messages, /future-non-remote-owner enables Tokio Tungstenite outside its reviewed owner features/);
   assert.match(messages, /tokio-tungstenite enables Tokio Tungstenite outside its reviewed owner features/);
+});
+
+test('native media probe HTTP client stays JSON-only without TLS, streaming or defaults', () => {
+  const pkg = packageAt('openbitfun-native-media-probe', 'src/apps/desktop/probes/remote-desktop/Cargo.toml', [{
+    name: 'reqwest', kind: null, optional: false, uses_default_features: false, features: ['json'],
+  }]);
+  assert.deepEqual(findReqwestDependencyFeatureViolations([pkg]), []);
+  for (const change of [{ uses_default_features: true }, { optional: true }, { features: ['json', 'stream'] },
+    { features: ['json', 'rustls-no-provider'] }]) {
+    const mutated = structuredClone(pkg); Object.assign(mutated.dependencies[0], change);
+    assert.ok(findReqwestDependencyFeatureViolations([mutated]).length > 0);
+  }
+});
+
+test('resolved media SDK cannot bypass the native log privacy patch during an update', () => {
+  const check = records => findResolvedThirdPartyCapabilityFeatureViolations(records, { root: TEST_ROOT });
+  const patched = { name: 'webrtc-sys', version: '0.3.49', source: null, features: [] };
+  assert.deepEqual(check([]), []); // Media stays optional.
+  assert.deepEqual(check([patched]), []);
+  for (const record of [
+    { ...patched, source: 'registry+https://github.com/rust-lang/crates.io-index' },
+    { ...patched, source: 'git+https://example.test/sdk' },
+    { ...patched, version: '0.3.50' },
+  ]) {
+    assert.ok(check([record]).some(item => item.message.includes('diagnostic-privacy patch')));
+  }
+});
+
+test('resolved safe media SDK retains received-channel property access during an update', () => {
+  const check = records => findResolvedThirdPartyCapabilityFeatureViolations(records, { root: TEST_ROOT });
+  const patched = { name: 'libwebrtc', version: '0.3.52', source: null, features: [] };
+  assert.deepEqual(check([patched]), []);
+  for (const record of [
+    { ...patched, source: 'registry+https://github.com/rust-lang/crates.io-index' },
+    { ...patched, source: 'git+https://example.test/sdk' },
+    { ...patched, version: '0.3.53' },
+  ]) {
+    assert.ok(check([record]).some(item => item.message.includes('received-channel properties patch')));
+  }
 });
 
 test('resolved third-party feature unions reject global capability regressions', () => {
@@ -5052,6 +5102,42 @@ test('vendored Wry is external only at its reviewed version and stays in feature
   assert.ok(collect({ ...vendor, name: 'product-owner' }).packages.some(pkg => pkg.name === 'product-owner'));
 });
 
+test('vendored WebRTC bindings are external only at its reviewed version and stays in feature audits', () => {
+  const owner = packageAt('owner', 'src/apps/example/Cargo.toml');
+  const vendor = { ...packageAt('webrtc-sys', 'third_party/webrtc-sys/Cargo.toml'), version: '0.3.49' };
+  const collect = (pkg = vendor, members = [owner.id]) => collectCargoMetadataGraph({
+    root: TEST_ROOT,
+    manifestPaths: [join(TEST_ROOT, 'Cargo.toml')],
+    loadMetadata: () => ({
+      packages: [owner, pkg], workspace_members: members,
+      resolve: { nodes: [{ id: pkg.id, features: [], deps: [] }] },
+    }),
+  });
+  const graph = collect();
+  assert.deepEqual(graph.packages.map(pkg => pkg.name), ['owner']);
+  assert.ok(graph.resolvedPackageFeatures.some(record => record.name === 'webrtc-sys'));
+  assert.ok(collect(vendor, [owner.id, vendor.id]).packages.some(pkg => pkg.name === 'webrtc-sys'));
+  assert.ok(collect({ ...vendor, version: '0.3.50' }).packages.some(pkg => pkg.name === 'webrtc-sys'));
+  assert.ok(collect({ ...vendor, name: 'product-owner' }).packages.some(pkg => pkg.name === 'product-owner'));
+});
+
+test('vendored safe WebRTC SDK remains external only at its reviewed version', () => {
+  const owner = packageAt('owner', 'src/apps/example/Cargo.toml');
+  const vendor = { ...packageAt('libwebrtc', 'third_party/libwebrtc/Cargo.toml'), version: '0.3.52' };
+  const collect = (pkg = vendor, members = [owner.id]) => collectCargoMetadataGraph({
+    root: TEST_ROOT,
+    manifestPaths: [join(TEST_ROOT, 'Cargo.toml')],
+    loadMetadata: () => ({
+      packages: [owner, pkg], workspace_members: members,
+      resolve: { nodes: [{ id: pkg.id, features: [], deps: [] }] },
+    }),
+  });
+  assert.deepEqual(collect().packages.map(pkg => pkg.name), ['owner']);
+  assert.ok(collect().resolvedPackageFeatures.some(record => record.name === 'libwebrtc'));
+  assert.ok(collect(vendor, [owner.id, vendor.id]).packages.some(pkg => pkg.name === 'libwebrtc'));
+  assert.ok(collect({ ...vendor, version: '0.3.53' }).packages.some(pkg => pkg.name === 'libwebrtc'));
+  assert.ok(collect({ ...vendor, name: 'product-owner' }).packages.some(pkg => pkg.name === 'product-owner'));
+});
 
 test('workspace transfer admits IO without process or networking capabilities', () => {
   const pkg = {

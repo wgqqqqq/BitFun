@@ -45,11 +45,58 @@ pub(crate) async fn validate_user(
 pub fn device_router() -> Router<AppState> {
     Router::new()
         .route("/api/devices", get(list_devices))
+        .route(
+            "/api/remote-desktop/controllers",
+            get(remote_desktop_controllers),
+        )
         .route("/api/devices/{target_device_id}/key", get(device_key))
         .route(
             "/api/devices/{target_device_id}",
             patch(patch_device).delete(delete_device),
         )
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+struct RemoteDesktopController {
+    device_id: String,
+    device_name: Option<String>,
+    device_kind: String,
+    device_alias: Option<String>,
+}
+
+/// Local trust management needs controllers, whereas the legacy directory
+/// intentionally lists hosts. No keys or authority are returned by this list.
+async fn remote_desktop_controllers(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<RemoteDesktopController>>, StatusCode> {
+    if state.remote_desktop_pairing.is_none() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let auth = validate_user(&state, &headers).await?;
+    if !auth.is_device_token() {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    let rows = sqlx::query_as::<_, RemoteDesktopController>(
+        "SELECT device_id, device_name, device_kind, device_alias FROM devices \
+         WHERE user_id = ? AND device_id != ? \
+         AND device_kind IN ('desktop', 'mobile') AND public_key IS NOT NULL \
+         ORDER BY device_id LIMIT 257",
+    )
+    .bind(&auth.user_id)
+    .bind(&auth.device_id)
+    .fetch_all(state.db.as_ref())
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if rows.len() > 256
+        || serde_json::to_vec(&rows)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .len()
+            > 64 * 1024
+    {
+        return Err(StatusCode::PAYLOAD_TOO_LARGE);
+    }
+    Ok(Json(rows))
 }
 
 #[derive(Serialize)]

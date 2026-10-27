@@ -1,0 +1,34 @@
+{
+  "tag": "webrtc-89d790b",
+  "artifacts": {
+    "mac-arm64-release": {
+      "library": "libwebrtc.a",
+      "sha256": "979b6310063a49a022bc11cb55397e3ccef887ef23b613fed43afdc4769ea75e"
+    },
+    "linux-x64-release": {
+      "library": "libwebrtc.a",
+      "sha256": "daa499c9769ac884380dff248a533b8d1adb9a6c33e1a04f8e605dc0012bcb21",
+      "verification": "hash recorded from upstream release; native platform acceptance pending"
+    },
+    "linux-arm64-release": {
+      "library": "libwebrtc.a",
+      "sha256": "91f732b0f48d1b1894717b8f1ff591b75b35bd819d25c931bb2d7f70406aa600",
+      "verification": "hash recorded from upstream release; native platform acceptance pending"
+    },
+    "win-x64-release": {
+      "library": "webrtc.lib",
+      "sha256": "58352400f57b0a16b45fc5c734d45988205074ffe4e61b5a2afb9f4cb223a10a",
+      "verification": "hash recorded from upstream release; native platform acceptance pending"
+    },
+    "win-arm64-release": {
+      "library": "webrtc.lib",
+      "sha256": "6ab3c5343c6321cf95a0ae1317e4cfd100c07ffc268e29f97af4fd1beaf492ba",
+      "verification": "hash recorded from upstream release; native platform acceptance pending"
+    },
+    "mac-x64-release": {
+      "library": "libwebrtc.a",
+      "sha256": "84903466b3114d77ee05cc3174c4bbcde95c71717570a5efbc99b57f5310b11b",
+      "verification": "hash recorded from upstream release; native platform acceptance pending"
+    }
+  }
+}

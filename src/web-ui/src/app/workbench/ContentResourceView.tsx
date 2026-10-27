@@ -11,10 +11,19 @@ import { useSceneStore } from '../stores/sceneStore';
 import { getActiveSurfaceId } from '@/infrastructure/peer-device/deviceSurface';
 import { useShortcut } from '@/infrastructure/hooks/useShortcut';
 import { useWorkbenchResize } from './workbenchResize';
+import RemoteDesktopResourceView from '../components/RemoteConnectDialog/RemoteDesktopResourceView';
 
 export default function ContentResourceView({ resourceId, isActive }: { resourceId: string; isActive: boolean }) {
   const { measurementSuspended } = useWorkbenchResize();
   const focused = useSceneStore(state => state.activeTabId === `content:${resourceId}`);
+  const resource = useContentResourceStore(state => state.resources[resourceId]);
+  if (resource?.content.type === 'remote-desktop') {
+    return <RemoteDesktopResourceView resourceId={resourceId} data={resource.content.data} isActive={isActive} />;
+  }
+  return <DocumentResourceView resourceId={resourceId} isActive={isActive} />;
+}
+
+function DocumentResourceView({ resourceId, isActive }: { resourceId: string; isActive: boolean }) {
   const resource = useContentResourceStore(state => state.resources[resourceId]);
   const update = useContentResourceStore(state => state.update);
   const { t } = useI18n('components');

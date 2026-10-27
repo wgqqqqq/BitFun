@@ -46,6 +46,7 @@ export function useShortcut(
     meta: config.meta,
     scope: config.scope,
     allowInInput: config.allowInInput,
+    allowInExclusiveInput: config.allowInExclusiveInput,
   });
 
   useEffect(() => {

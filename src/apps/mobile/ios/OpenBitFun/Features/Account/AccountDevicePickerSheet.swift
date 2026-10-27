@@ -16,12 +16,15 @@ struct AccountDevicePickerSheet: View {
                 if model.accountUser != nil { model.refreshRemoteDevices() }
             }
             .onChange(of: model.accountUser) { user in
-                if user == nil { dismiss() }
+                if user == nil { model.remoteDesktopTarget = nil; dismiss() }
             }
             .onChange(of: model.accountSelectedDeviceID) { selectedDeviceID in
                 guard selectedDeviceID == switchingDeviceID else { return }
                 switchingDeviceID = nil
                 dismiss()
+            }
+            .fullScreenCover(item: $model.remoteDesktopTarget) { target in
+                RemoteDesktopView(target: target, factory: { model.createRemoteDesktopStore(target) })
             }
             .onChange(of: model.coreErrorMessage) { error in
                 if error != nil { switchingDeviceID = nil }
@@ -108,7 +111,19 @@ struct AccountDevicePickerSheet: View {
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 0) {
                             ForEach(accountDesktopDevices) { device in
-                                accountDeviceRow(device)
+                                HStack(spacing: 8) {
+                                    accountDeviceRow(device)
+                                    if device.desktopAvailable {
+                                        Button { model.openRemoteDesktop(device) } label: {
+                                            Image(systemName: "rectangle.inset.filled.and.person.filled").frame(width: 44, height: 44)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundStyle(OpenBitFunTheme.ink)
+                                        .accessibilityLabel(MobileLocalization.text("remoteDesktop.title"))
+                                        .accessibilityIdentifier("remote-desktop-open-\(device.id)")
+                                        .disabled(!device.online || switchingDeviceID != nil)
+                                    }
+                                }
                             }
                         }
                     }

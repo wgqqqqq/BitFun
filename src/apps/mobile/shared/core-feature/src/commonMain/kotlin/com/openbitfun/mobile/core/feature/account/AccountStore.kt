@@ -6,6 +6,11 @@ import com.openbitfun.mobile.core.transport.RemoteSessionStreamTransport
 import com.openbitfun.mobile.core.feature.CoreLog
 import com.openbitfun.mobile.core.feature.session.RemoteSessionStore
 import com.openbitfun.mobile.core.feature.workspace.RemoteWorkspaceStore
+import com.openbitfun.mobile.core.feature.remotedesktop.AccountRemoteDesktopSetupChannel
+import com.openbitfun.mobile.core.feature.remotedesktop.RemoteDesktopSetupChannel
+import com.openbitfun.mobile.core.feature.remotedesktop.RemoteDesktopSetupException
+import com.openbitfun.mobile.core.feature.remotedesktop.RemoteDesktopSetupFailure
+import com.openbitfun.mobile.core.feature.remotedesktop.RemoteDesktopSetupStore
 import com.openbitfun.mobile.core.persistence.MobilePersistenceStores
 import com.openbitfun.mobile.core.persistence.SecureStore
 import com.openbitfun.mobile.core.transport.AccountDeviceCommandTransport
@@ -19,8 +24,12 @@ import com.openbitfun.mobile.core.transport.TransportLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -61,6 +70,8 @@ internal interface AccountBackend {
     suspend fun profile(userId: String): com.openbitfun.mobile.core.transport.GitHubProfile? = null
 
     fun transport(session: AccountSessionData, targetDeviceId: String): RemoteCommandTransport
+    suspend fun remoteDesktop(session: AccountSessionData, targetDeviceId: String): RemoteDesktopSetupChannel =
+        throw RemoteDesktopSetupException(RemoteDesktopSetupFailure.UNSUPPORTED)
     fun closeAccount() {}
     fun resumeSessionStreams() {}
     fun directoryChanges(session: AccountSessionData): Flow<Unit> = emptyFlow()
@@ -77,11 +88,14 @@ public class AccountStore internal constructor(
     private val _state = MutableStateFlow<AccountUiState>(AccountUiState.Idle)
     public val state: StateFlow<AccountUiState> = _state.asStateFlow()
     private var session: AccountSessionData? = null
+    private var remoteDesktopSetup: RemoteDesktopSetupStore? = null
+    private var remoteDesktopCleanup: Deferred<Unit>? = null
+    private var remoteDesktopGeneration = 0L
     private var selectedRelayUrl: String = com.openbitfun.mobile.core.transport.DEFAULT_CLOUD_RELAY_URL
     private var catalogScope = CoroutineScope(scope.coroutineContext + kotlinx.coroutines.SupervisorJob())
     private fun closeCatalogs() { catalogScope.coroutineContext[Job]?.cancel(); catalogObservers.clear() }
     private val catalogObservers = mutableMapOf<String, Flow<HostCatalogNotice>>()
-    init { scope.coroutineContext[Job]?.invokeOnCompletion { closeCatalogs() } }
+    init { scope.coroutineContext[Job]?.invokeOnCompletion { closeCatalogs(); closeRemoteDesktopSetup() } }
     /** [transport] is the store's own transport; the catalog is read through it, on demand from the host. */
     private fun catalogChanges(current: AccountSessionData, target: String, transport: RemoteCommandTransport): Flow<HostCatalogNotice> {
         val source = transport as? RemoteSessionStreamTransport ?: return emptyFlow()
@@ -117,6 +131,7 @@ public class AccountStore internal constructor(
 
     /** Pause browser authorization polling while an OEM has backgrounded the app. */
     public fun setForeground(value: Boolean) {
+        if (!value) closeRemoteDesktopSetup()
         val wasForeground = authorizationForeground.value
         authorizationForeground.value = value
         if (value && !wasForeground) {
@@ -137,6 +152,7 @@ public class AccountStore internal constructor(
             is AccountIntent.SelectRelay -> {
                 val endpoint = com.openbitfun.mobile.core.transport.normalizeAccountRelayUrl(intent.relayUrl) ?: return
                 if (session?.relayUrl != endpoint) {
+                    closeRemoteDesktopSetup()
                     work?.cancel()
                     session?.masterKey?.fill(0)
                     session = null
@@ -221,7 +237,51 @@ public class AccountStore internal constructor(
         return controllableDevices.firstOrNull { it.id == target }?.id
     }
 
+    @OptIn(kotlin.uuid.ExperimentalUuidApi::class)
+    public fun createRemoteDesktopSetupStore(scope: CoroutineScope, deviceId: String): RemoteDesktopSetupStore? {
+        if (!this.scope.isActive || !authorizationForeground.value) return null
+        val current = session ?: return null
+        val ready = _state.value as? AccountUiState.Ready ?: return null
+        val device = ready.devices.singleOrNull { it.id == deviceId } ?: return null
+        if (!AccountDevicePolicy.canViewDesktop(device, this.deviceId)) return null
+        closeRemoteDesktopSetup()
+        val generation = remoteDesktopGeneration
+        val cleanup = remoteDesktopCleanup
+        val clock = kotlin.time.TimeSource.Monotonic.markNow()
+        val accountCurrent = {
+            val active = session
+            remoteDesktopGeneration == generation && active != null && active.token == current.token && active.userId == current.userId
+                && active.relayUrl == current.relayUrl && active.masterKey === current.masterKey
+                && _state.value is AccountUiState.Ready && authorizationForeground.value && this.scope.isActive
+        }
+        return RemoteDesktopSetupStore(scope,
+            openChannel = {
+                cleanup?.await()
+                if (!accountCurrent()) throw RemoteDesktopSetupException(RemoteDesktopSetupFailure.ACCOUNT_CHANGED)
+                backend.remoteDesktop(current, device.id)
+            },
+            accountCurrent = accountCurrent,
+            identifier = { kotlin.uuid.Uuid.random().toString() },
+            nowMillis = { clock.elapsedNow().inWholeMilliseconds },
+            wallMillis = { kotlin.time.Clock.System.now().toEpochMilliseconds() },
+        ).also { remoteDesktopSetup = it }
+    }
+
+    private fun closeRemoteDesktopSetup() {
+        remoteDesktopGeneration++
+        remoteDesktopSetup?.let { retired ->
+            retired.close()
+            val previous = remoteDesktopCleanup
+            remoteDesktopCleanup = scope.async(start = CoroutineStart.UNDISPATCHED) {
+                previous?.await()
+                retired.awaitCleanup()
+            }
+        }
+        remoteDesktopSetup = null
+    }
+
     public fun stop() {
+        closeRemoteDesktopSetup()
         closeCatalogs()
         directoryWork?.cancel(); directoryIdentity = null
         profileWork?.cancel()
@@ -230,6 +290,7 @@ public class AccountStore internal constructor(
     }
 
     private fun restore() {
+        closeRemoteDesktopSetup()
         pendingInitialDeviceSelection = false
         work?.cancel()
         _state.value = AccountUiState.Restoring
@@ -282,6 +343,7 @@ public class AccountStore internal constructor(
     }
 
     private fun login() {
+        closeRemoteDesktopSetup()
         pendingInitialDeviceSelection = false
         work?.cancel()
         _state.value = AccountUiState.SigningIn
@@ -488,6 +550,7 @@ public class AccountStore internal constructor(
     }
 
     private fun logout() {
+        closeRemoteDesktopSetup()
         closeCatalogs()
         directoryWork?.cancel(); directoryIdentity = null
         backend.closeAccount()
@@ -514,6 +577,7 @@ public class AccountStore internal constructor(
     }
 
     private fun expireSession(reason: AccountFailureReason, stage: AccountFailureStage) {
+        closeRemoteDesktopSetup()
         closeCatalogs()
         directoryWork?.cancel(); directoryIdentity = null
         backend.closeAccount()
@@ -778,16 +842,20 @@ private class CloudBackend(
     override suspend fun profile(userId: String): com.openbitfun.mobile.core.transport.GitHubProfile? = client.githubProfile(userId)
 
     override suspend fun listDevices(session: AccountSessionData, selfDeviceId: String): List<AccountDeviceUi> =
-        client.listDevices(session.relayUrl, session.toTransportSession(), selfDeviceId).map { it.toUi() }
+        client.listDevices(session.relayUrl, session.toTransportSession(), selfDeviceId).map { it.toAccountDeviceUi() }
 
     override fun transport(session: AccountSessionData, targetDeviceId: String): RemoteCommandTransport =
         AccountDeviceCommandTransport(client, session.relayUrl, session.toTransportSession(), targetDeviceId, log)
 
+    override suspend fun remoteDesktop(session: AccountSessionData, targetDeviceId: String): RemoteDesktopSetupChannel =
+        AccountRemoteDesktopSetupChannel(client.remoteDesktopChannel(session.relayUrl, session.toTransportSession(), targetDeviceId))
+
     private fun AccountSessionData.toTransportSession(): CloudAccountSession =
         CloudAccountSession(token, userId, masterKey)
-
-    private fun CloudAccountDevice.toUi(): AccountDeviceUi = AccountDeviceUi(deviceId, deviceName, online, lastSeenAt, compatible)
 }
+
+internal fun CloudAccountDevice.toAccountDeviceUi(): AccountDeviceUi =
+    AccountDeviceUi(deviceId, deviceName, online, lastSeenAt, compatible, deviceKind)
 
 @Serializable
 private data class AccountSessionRecord(

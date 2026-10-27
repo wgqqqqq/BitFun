@@ -61,6 +61,8 @@ exclude = [
     "third_party/eioc",
     "third_party/tao",
     "third_party/wry",
+    "third_party/webrtc-sys",
+    "third_party/libwebrtc",
 ]
 
 resolver = "2"
@@ -238,7 +240,11 @@ resvg = { version = "0.47", default-features = false }
 atspi = "0.29"
 gstreamer = { version = "0.24", default-features = false }
 gstreamer-app = { version = "0.24", default-features = false }
+gstreamer-video = { version = "0.24", default-features = false }
 cc = { version = "1", default-features = false }
+# Standalone native PC/raw-frame path proven by the macOS media probe.
+libwebrtc = { version = "=0.3.52", default-features = false }
+webrtc-sys-build = { version = "=0.3.19", default-features = false }
 leptess = "0.14"
 core-foundation = "0.9"
 core-graphics = { version = "0.23", features = ["elcapitan", "highsierra"] }
@@ -319,6 +325,12 @@ tao = { path = "third_party/tao" }
 # Keep macOS HTML drags in WebKit while preserving native file-drop paths.
 # See third_party/wry/OPENBITFUN-PATCH.md for source and removal conditions.
 wry = { path = "third_party/wry" }
+# Keep plaintext DataChannel packet dumps out of native process output.
+# See third_party/webrtc-sys/OPENBITFUN-PATCH.md for provenance and removal.
+webrtc-sys = { path = "third_party/webrtc-sys" }
+# Expose native received-channel reliability without changing the engine.
+# See third_party/libwebrtc/OPENBITFUN-PATCH.md for provenance and removal.
+libwebrtc = { path = "third_party/libwebrtc" }
 # Tauri 2.11 loses keyboard focus for child webviews after Windows reactivates
 # an `unstable` multi-webview window. Use the upstream fix until released;
 # this revision also adopts tao 0.36, which includes the Windows input deadlock fix.

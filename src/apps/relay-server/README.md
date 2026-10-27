@@ -96,6 +96,22 @@ Use the isolated [v1 Compose project](../../../deploy/relay-v1/README.md).
 Set `RELAY_LISTEN_ADDR=127.0.0.1:19702` with host networking so the service can
 verify the immediate loopback proxy peer. Invalid listener values fail startup.
 Expose only the TLS reverse proxy. Keep the database and asset paths distinct from older deployments.
+
+For the remote-desktop trial, set `RELAY_REMOTE_DESKTOP_TURN_URLS` to a
+comma-separated list of explicit `turn:`/`turns:` URLs, and
+`RELAY_REMOTE_DESKTOP_TURN_SECRET_FILE` to a private regular file containing
+coturn's matching REST signing secret. On Unix it must have no group/other
+permission bits (for example mode 0600). Configure both together; invalid or
+partial configuration fails startup without printing secret material. With
+neither set the original relay keeps working and does not advertise TURN issuance.
+The file must be readable by the Relay service's user. Public credential fetches
+use HTTPS; HTTP is limited to loopback development/SSH tunnels.
+The endpoint signs credentials only for accepted attachment participants;
+it does not grant screen access. Keep coturn allocation quotas and private-peer
+protections in its own configuration. See the [trial guide](../../../deploy/remote-desktop/README.md).
+
+Verify this startup configuration with
+`cargo test --locked -p openbitfun-relay-server --bin openbitfun-relay-server config::tests`.
 `relay-admin` supports listing and explicitly deleting accounts; GitHub login
 creates identities. Password provisioning, password reset, and user-entered
 Relay server URLs are retired.

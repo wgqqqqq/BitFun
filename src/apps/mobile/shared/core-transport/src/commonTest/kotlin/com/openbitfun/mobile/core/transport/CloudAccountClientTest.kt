@@ -145,8 +145,8 @@ class CloudAccountClientTest {
         val engine = MockEngine {
             json(
                 """[
-                  {"device_id":"desktop-1","device_name":"Studio Mac","online":true,"device_kind":"desktop"},
-                  {"device_id":"cli-1","device_name":"Build host","online":true,"device_kind":"cli"},
+                  {"device_id":"desktop-1","device_name":"HarmonyOS Phone","online":true,"device_kind":"desktop"},
+                  {"device_id":"cli-1","device_name":"HarmonyOS Watch","online":true,"device_kind":"cli"},
                   {"device_id":"phone-2","device_name":"Pixel 8","online":true,"device_kind":"mobile"},
                   {"device_id":"watch-1","device_name":"Watch","online":false,"device_kind":"watch"},
                   {"device_id":"phone-1","device_name":"Pixel 8","online":true},

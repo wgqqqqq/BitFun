@@ -67,7 +67,7 @@ describe('Remote Connect safety contracts', () => {
     expect(actionStyle).not.toContain('padding-top');
   });
 
-  it('presents one overview with account and connection destinations', () => {
+  it('presents independent remote computers alongside account and connection destinations', () => {
     const overview = dialogSource.slice(
       dialogSource.indexOf('const renderOverview ='),
       dialogSource.indexOf('const renderViewHeader'),
@@ -75,7 +75,8 @@ describe('Remote Connect safety contracts', () => {
 
     expect(overview).toContain('remote-connect-my-devices-title');
     expect(overview).toContain('remote-connect-access-title');
-    expect(overview.match(/renderOverviewAction\(\{/g)).toHaveLength(3);
+    expect(overview.match(/renderOverviewAction\(\{/g)).toHaveLength(4);
+    expect(overview).toContain("view: 'desktop'");
     expect(overview).toContain("view: 'account'");
     expect(overview).toContain("view: 'network'");
     expect(overview).toContain("view: 'bot'");

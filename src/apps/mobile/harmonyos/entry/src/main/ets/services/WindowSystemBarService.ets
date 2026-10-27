@@ -77,6 +77,35 @@ export type WindowInsetSubscription = () => void;
  * app's own to reserve rather than the framework's.
  */
 export class WindowSystemBarService {
+  private static barWindow?: window.Window;
+  private static normalBarContent: string = '';
+  private static mediaBarContent: string = '';
+  private static mediaOwners: number = 0;
+
+  static configureBarAppearance(appWindow: window.Window, normalContent: string, mediaContent: string): void {
+    WindowSystemBarService.barWindow = appWindow; WindowSystemBarService.normalBarContent = normalContent; WindowSystemBarService.mediaBarContent = mediaContent;
+    WindowSystemBarService.applyBarAppearance();
+  }
+
+  /** Media surfaces keep readable system icons and restore the current shell theme on exit. */
+  static retainMediaAppearance(): () => void {
+    WindowSystemBarService.mediaOwners++; WindowSystemBarService.applyBarAppearance();
+    let active = true;
+    return (): void => {
+      if (!active) return;
+      active = false; WindowSystemBarService.mediaOwners--; WindowSystemBarService.applyBarAppearance();
+    };
+  }
+
+  private static applyBarAppearance(): void {
+    if (!WindowSystemBarService.barWindow) return;
+    const content = WindowSystemBarService.mediaOwners > 0 ? WindowSystemBarService.mediaBarContent : WindowSystemBarService.normalBarContent;
+    try {
+      WindowSystemBarService.barWindow.setWindowSystemBarProperties({ statusBarContentColor: content, navigationBarContentColor: content })
+        .catch((): void => RemoteLogger.error('Window system bar appearance update failed'));
+    } catch (_error) { RemoteLogger.error('Window system bar appearance update failed'); }
+  }
+
   /**
    * Reads the insets once and re-reads them on every avoid-area change — folding,
    * rotation and the soft keyboard all move the avoid areas without recreating

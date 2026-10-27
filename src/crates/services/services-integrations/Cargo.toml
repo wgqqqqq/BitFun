@@ -519,6 +519,7 @@ tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "test-
 # emitted product events.
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+tokio-tungstenite = { workspace = true, features = ["handshake"] }
 
 [[test]]
 name = "script_tool_runtime"

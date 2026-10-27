@@ -55,6 +55,8 @@ import { VoiceInputLifecycleController } from '../../services/VoiceInputLifecycl
 import { VoiceInputService } from '../../services/VoiceInputService';
 import { ConversationIntent, MessageCopyScope, SessionRollbackRequest } from '../actions/ConversationIntent';
 import { AppRootHostPort } from '../host/AppRootHostAdapter';
+import { RemoteDesktopViewModel } from '../viewmodel/RemoteDesktopViewModel';
+import { RemoteDesktopServiceViewModel } from '../viewmodel/RemoteDesktopServiceViewModel';
 import { AppRootPresentationActions } from '../actions/AppRootPresentationActions';
 import {
   AppNavigationBackAction,
@@ -704,6 +706,9 @@ export abstract class AppRootRuntimeComposition {
         }
       }
     );
+  readonly remoteDesktopServiceViewModel: RemoteDesktopServiceViewModel = new RemoteDesktopServiceViewModel();
+  readonly remoteDesktopViewModel: RemoteDesktopViewModel =
+    new RemoteDesktopViewModel(() => this.remoteDesktopServiceViewModel.binding());
   readonly deviceDirectoryViewModel: DeviceDirectoryViewModel =
     new DeviceDirectoryViewModel(
       this.deviceDirectoryState,
@@ -872,6 +877,10 @@ export abstract class AppRootRuntimeComposition {
         await this.conversationController.createRemoteSession(agentType);
       },
       enterCode: (): void => { this.closeAppSidebar(); this.enterCodeEntry(); },
+      openRemoteDesktop: (): void => {
+        this.closeAppSidebar();
+        this.appShellState.openRemoteDesktopDevicePicker();
+      },
       openAccountDevices: (): void => {
         this.closeAppSidebar();
         this.appShellState.openSettings('account');
@@ -918,7 +927,9 @@ export abstract class AppRootRuntimeComposition {
         }
         return user;
       },
-      cloudLogout: (): Promise<void> => this.settingsController.logoutCloudAccount(),
+      cloudLogout: (): Promise<void> => {
+        return this.settingsController.logoutCloudAccount();
+      },
       cloudListDevices: (): Promise<CloudAccountDevice[]> => this.settingsController.listCloudAccountDevices(),
       cloudSelectDevice: (device: CloudAccountDevice): Promise<void> =>
         this.settingsController.selectCloudAccountDevice(device),
@@ -930,7 +941,23 @@ export abstract class AppRootRuntimeComposition {
       }
     },
     onConnect: {
-      back: (): void => this.appShellState.setConnectSheetVisible(false),
+      desktopServiceConnect: async (address: string, key: string): Promise<void> => {
+        this.remoteDesktopViewModel.close();
+        await this.remoteDesktopServiceViewModel.connect(this.host.context(), address, key);
+      },
+      desktopServiceDisconnect: (): void => {
+        this.remoteDesktopViewModel.close();
+        this.remoteDesktopServiceViewModel.disconnect();
+      },
+      desktopServiceDevices: (): Promise<CloudAccountDevice[]> => this.remoteDesktopServiceViewModel.listDevices(),
+      openRemoteDesktop: (device: CloudAccountDevice): void => {
+        this.appShellState.setConnectSheetVisible(false);
+        this.remoteDesktopViewModel.open(device);
+      },
+      back: (): void => {
+        this.remoteDesktopViewModel.close();
+        this.appShellState.setConnectSheetVisible(false);
+      },
       openAccount: (): void => {
         this.appShellState.setConnectSheetVisible(false);
         setTimeout(() => this.appShellState.openSettings('account'), 180);

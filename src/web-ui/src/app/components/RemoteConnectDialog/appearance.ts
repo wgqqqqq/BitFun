@@ -1,5 +1,10 @@
 import type { AppearanceSurfaceDescriptor } from '@/infrastructure/appearance';
 
+export const remoteDesktopViewerAppearanceDescriptor: AppearanceSurfaceDescriptor = {
+  id: 'remote-desktop-viewer',
+  parts: [{ id: 'root' }, { id: 'toolbar' }, { id: 'selection' }, { id: 'viewport' }, { id: 'canvas' }, { id: 'media' }, { id: 'input' }, { id: 'composer' }],
+};
+
 export const remoteConnectDialogAppearanceDescriptor: AppearanceSurfaceDescriptor = {
   id: 'remote-connect-dialog',
   parts: [
@@ -22,8 +27,8 @@ export const remoteConnectDialogAppearanceDescriptor: AppearanceSurfaceDescripto
     { id: 'error' },
   ],
   facets: [
-    { id: 'view', attribute: 'data-openbitfun-view', values: ['overview', 'network', 'bot', 'account'] },
-    { id: 'group', attribute: 'data-openbitfun-group', values: ['network', 'bot', 'account'] },
+    { id: 'view', attribute: 'data-openbitfun-view', values: ['overview', 'network', 'bot', 'account', 'desktop'] },
+    { id: 'group', attribute: 'data-openbitfun-group', values: ['network', 'bot', 'account', 'desktop'] },
   ],
   states: [
     { id: 'authenticated', selector: { kind: 'self', suffix: '[data-openbitfun-state~="authenticated"]' } },
@@ -41,6 +46,7 @@ export const remoteAccountPanelAppearanceDescriptor: AppearanceSurfaceDescriptor
     { id: 'scroll' },
     { id: 'form' },
     { id: 'actions' },
+    { id: 'trustSettings' },
     { id: 'deviceList' },
     { id: 'deviceCard' },
   ],
@@ -52,4 +58,9 @@ export const remoteAccountPanelAppearanceDescriptor: AppearanceSurfaceDescriptor
     { id: 'current', selector: { kind: 'self', suffix: '[data-openbitfun-state~="current"]' } },
     { id: 'syncing', selector: { kind: 'self', suffix: '[data-openbitfun-state~="syncing"]' } },
   ],
+};
+
+export const remoteDesktopServiceAppearanceDescriptor: AppearanceSurfaceDescriptor = {
+  id: 'remote-desktop-service',
+  parts: [{ id: 'root' }, { id: 'service' }, { id: 'setup' }, { id: 'deviceList' }, { id: 'deviceCard' }, { id: 'emptyState' }, { id: 'localAccess' }],
 };

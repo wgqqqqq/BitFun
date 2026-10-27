@@ -1083,6 +1083,168 @@ impl RemoteConnectService {
         Ok(true)
     }
 
+    /// Select the existing account transport, never create a controller socket.
+    /// The caller captures a socket token before directory IO and releases this
+    /// service's lifecycle lease before issuing any request.
+    pub async fn remote_desktop_client_if_connection(
+        &self,
+        expected_connection_id: u64,
+    ) -> Option<Arc<relay_client::RelayClient>> {
+        let _lifecycle = self.device_relay_lifecycle.lock().await;
+        if *self.active_device_connection_id.read().await != Some(expected_connection_id) {
+            return None;
+        }
+        self.device_relay_client.read().await.clone()
+    }
+
+    /// Register an app-local desktop provider on the existing account socket.
+    /// Capturing the client does not hold the account lifecycle lock over IO.
+    pub async fn register_remote_desktop_if_connection(
+        &self,
+        expected_connection_id: u64,
+        capabilities: &[String],
+    ) -> Result<bool> {
+        let _lifecycle = self.device_relay_lifecycle.lock().await;
+        if *self.active_device_connection_id.read().await != Some(expected_connection_id) {
+            return Ok(false);
+        }
+        let client = self
+            .device_relay_client
+            .read()
+            .await
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("device routing not connected"))?;
+        drop(_lifecycle);
+        client.register_remote_desktop(capabilities).await?;
+        Ok(true)
+    }
+
+    pub async fn remote_desktop_socket_is_current(
+        &self,
+        expected_connection_id: u64,
+        socket_generation: u64,
+    ) -> bool {
+        let _lifecycle = self.device_relay_lifecycle.lock().await;
+        if *self.active_device_connection_id.read().await != Some(expected_connection_id) {
+            return false;
+        }
+        self.device_relay_client
+            .read()
+            .await
+            .as_ref()
+            .is_some_and(|client| client.remote_desktop_socket_is_current(socket_generation))
+    }
+
+    pub async fn reply_remote_desktop_if_connection(
+        &self,
+        expected_connection_id: u64,
+        socket_generation: u64,
+        target: &str,
+        correlation: &str,
+        response: &openbitfun_services_integrations::remote_connect::remote_desktop_device::RemoteDesktopReply,
+    ) -> Result<bool> {
+        let lifecycle = self.device_relay_lifecycle.lock().await;
+        if *self.active_device_connection_id.read().await != Some(expected_connection_id) {
+            return Ok(false);
+        }
+        let client = self
+            .device_relay_client
+            .read()
+            .await
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("device routing not connected"))?;
+        drop(lifecycle);
+        client
+            .reply_remote_desktop(socket_generation, target, correlation, response)
+            .await?;
+        Ok(true)
+    }
+
+    pub async fn end_remote_desktop_if_connection(
+        &self,
+        expected_connection_id: u64,
+        socket_generation: u64,
+        attach_id: &str,
+    ) -> Result<bool> {
+        let lifecycle = self.device_relay_lifecycle.lock().await;
+        if *self.active_device_connection_id.read().await != Some(expected_connection_id) {
+            return Ok(false);
+        }
+        let client = self
+            .device_relay_client
+            .read()
+            .await
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("device routing not connected"))?;
+        drop(lifecycle);
+        client
+            .end_remote_desktop(socket_generation, attach_id)
+            .await?;
+        Ok(true)
+    }
+
+    pub async fn reject_remote_desktop_if_connection(
+        &self,
+        expected_connection_id: u64,
+        target: &str,
+        correlation: &str,
+    ) -> Result<bool> {
+        let _lifecycle = self.device_relay_lifecycle.lock().await;
+        if *self.active_device_connection_id.read().await != Some(expected_connection_id) {
+            return Ok(false);
+        }
+        let client = self
+            .device_relay_client
+            .read()
+            .await
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("device routing not connected"))?;
+        drop(_lifecycle);
+        client.reject_remote_desktop(target, correlation).await?;
+        Ok(true)
+    }
+
+    pub async fn remote_desktop_notice_socket_is_current(
+        &self,
+        expected_connection_id: u64,
+        socket_generation: u64,
+    ) -> bool {
+        let _lifecycle = self.device_relay_lifecycle.lock().await;
+        if *self.active_device_connection_id.read().await != Some(expected_connection_id) {
+            return false;
+        }
+        self.device_relay_client
+            .read()
+            .await
+            .as_ref()
+            .is_some_and(|client| client.remote_desktop_notice_socket_is_current(socket_generation))
+    }
+
+    pub async fn acknowledge_remote_desktop_notice_if_connection(
+        &self,
+        expected_connection_id: u64,
+        socket_generation: u64,
+        correlation: &str,
+        attach_id: &str,
+        handled: bool,
+    ) -> Result<bool> {
+        let _lifecycle = self.device_relay_lifecycle.lock().await;
+        if *self.active_device_connection_id.read().await != Some(expected_connection_id) {
+            return Ok(false);
+        }
+        let client = self
+            .device_relay_client
+            .read()
+            .await
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("device routing not connected"))?;
+        drop(_lifecycle);
+        client
+            .acknowledge_remote_desktop_notice(socket_generation, correlation, attach_id, handled)
+            .await?;
+        Ok(true)
+    }
+
     /// Current online devices in the account (presence list).
     pub async fn online_devices(&self) -> Vec<relay_client::DevicePresenceEntry> {
         self.online_devices.read().await.clone()

@@ -1745,6 +1745,12 @@ class RemoteSessionStoreTest {
         assertFalse(failed.busy)
 
         transport.sendMessageFailure = null
+        // Network failure suspends new sends. Re-establish the host connection
+        // before exercising the next acknowledgement and picker consumption.
+        assertEquals(ConnectionPhase.RECONNECTING, store.connectionPhase.value)
+        store.dispatch(RemoteSessionIntent.Refresh)
+        runCurrent()
+        assertEquals(ConnectionPhase.CONNECTED, store.connectionPhase.value)
         val gate = CompletableDeferred<Unit>()
         transport.commandGates["send_message"] = gate
         store.dispatch(RemoteSessionIntent.SendMessage("s-code", "look", images))

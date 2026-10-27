@@ -48,6 +48,22 @@ function fixture(store) {
 }
 const catalog = path => ({ source: 'opened', workspaces: [{ path }], recentWorkspaces: [{ path }] });
 
+test('explicit device kind survives active target refresh and absent legacy kind stays unknown', () => {
+  const f = fixture();
+  f.vm.syncDevices([
+    { deviceId: 'desktop', deviceName: 'Unreliable label', deviceKind: 'desktop', online: true },
+    { deviceId: 'cli', deviceName: 'Desktop', deviceKind: 'cli', online: true },
+    { deviceId: 'old', deviceName: 'Desktop', online: true }
+  ]);
+  f.active('desktop');
+  f.vm.refreshActive();
+  assert.equal(f.state.find('desktop').deviceKind, 'desktop');
+  assert.equal(f.state.find('cli').deviceKind, 'cli');
+  assert.equal(f.state.find('old').deviceKind, '');
+  f.vm.syncDevices([{ deviceId: 'desktop', deviceName: 'Desktop', online: true }]);
+  assert.equal(f.state.find('desktop').deviceKind, '', 'missing authority must not retain an old kind');
+});
+
 for (const outcome of ['success', 'failure']) {
   test(`old account ${outcome} cannot publish or release a newer device request`, async () => {
     const f = fixture();

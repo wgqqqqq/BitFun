@@ -4,9 +4,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AccountPanel } from './AccountPanel';
 import { useUpdateInstallStore } from '@/infrastructure/update/updateInstallStore';
+vi.mock('./remoteDesktopResource', () => ({ openRemoteDesktopResource: (...args: unknown[]) => mocks.openRemoteDesktopResource(...args) }));
 const mocks = vi.hoisted(() => ({
   identity: { resolved: true, status: 'signed-in', me: { user: { githubId: 42, login: 'alice' } } } as { resolved: boolean; status: string; me: { user: { githubId: number; login: string } } | null },
   reopenSignIn: vi.fn(),
+  openRemoteDesktopResource: vi.fn(),
   getDeviceInfo: vi.fn(), accountStatus: vi.fn(), accountLogin: vi.fn(),
   accountRelayCapabilities: vi.fn(), accountUpdateDevice: vi.fn(),
   accountConnectDevices: vi.fn(), accountListDevices: vi.fn(),
@@ -73,6 +75,28 @@ beforeEach(() => {
   container = document.createElement('div'); document.body.append(container); root = createRoot(container);
 });
 afterEach(() => { act(() => root.unmount()); container.remove(); vi.unstubAllGlobals(); });
+it('keeps account devices separate from self-hosted remote desktop even when a host is online', async () => {
+  vi.stubGlobal('__TAURI_INTERNALS__', { invoke: vi.fn() });
+  mocks.accountListDevices.mockResolvedValue([{ device_id: 'mac', device_name: 'Remote Mac', device_kind: 'desktop', online: true }]);
+  const close = vi.fn();
+  await act(async () => root.render(<AccountPanel onCloseDialog={close} />));
+  expect(container.textContent).toContain('Remote Mac');
+  expect(container.textContent).not.toContain('remoteDesktop.viewerOpen');
+  expect(container.textContent).not.toContain('remoteDesktop.localTitle');
+  expect(mocks.openRemoteDesktopResource).not.toHaveBeenCalled();
+  expect(close).not.toHaveBeenCalled();
+});
+it('does not offer desktop viewing for this computer, CLI, mobile or offline devices', async () => {
+  vi.stubGlobal('__TAURI_INTERNALS__', { invoke: vi.fn() });
+  mocks.accountListDevices.mockResolvedValue([
+    { device_id: 'local', device_name: 'Local', device_kind: 'desktop', online: true },
+    { device_id: 'cli', device_name: 'CLI', device_kind: 'cli', online: true },
+    { device_id: 'phone', device_name: 'Phone', device_kind: 'mobile', online: true },
+    { device_id: 'offline', device_name: 'Offline Mac', device_kind: 'desktop', online: false },
+  ]);
+  await act(async () => { root.render(<AccountPanel onCloseDialog={() => {}} />); });
+  expect(Array.from(container.querySelectorAll('button')).some(node => node.textContent === 'remoteDesktop.viewerOpen')).toBe(false);
+});
 it('keeps initialization alive when the local device ID arrives', async () => {
   await act(async () => { root.render(<AccountPanel onCloseDialog={() => {}} />); });
   expect(mocks.accountStatus).toHaveBeenCalledTimes(1);
@@ -80,6 +104,15 @@ it('keeps initialization alive when the local device ID arrives', async () => {
   expect(container.textContent).toContain('My computer');
   expect(container.textContent).not.toContain('accountLogin.loadingDevices');
   expect(mocks.accountListDevices).toHaveBeenCalledTimes(1);
+});
+
+it('never attaches remote desktop sharing controls to the account Relay directory', async () => {
+  vi.stubGlobal('__TAURI_INTERNALS__', { invoke: vi.fn() });
+  mocks.accountConnectDevices.mockImplementation(() => new Promise(() => {}));
+  mocks.accountListDevices.mockImplementation(() => new Promise(() => {}));
+  await act(async () => root.render(<AccountPanel onCloseDialog={() => {}} />));
+  expect(container.textContent).toContain('accountLogin.loadingDevices');
+  expect(container.textContent).not.toContain('remoteDesktop.stop');
 });
 
 it('loads the device snapshot and retains it across a normal rerender', async () => {

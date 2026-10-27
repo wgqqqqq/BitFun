@@ -18,6 +18,10 @@ cc = { workspace = true }
 tauri-build = { workspace = true }
 serde_json = { workspace = true }
 
+# Uses the same artifact resolver as webrtc-sys; verify its library before link.
+webrtc-sys-build = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+
 [dependencies]
 openbitfun-miniapp-ipc = { path = "../../crates/adapters/miniapp-ipc" }
 openbitfun-services-core = { path = "../../crates/services/services-core", features = ["pet-packages"] }
@@ -52,6 +56,9 @@ time = { workspace = true }
 brotli-decompressor = { workspace = true }
 alloc-no-stdlib = { workspace = true }
 alloc-stdlib = { workspace = true }
+
+# Native remote media belongs to this Desktop feature on each desktop OS.
+libwebrtc = { workspace = true, optional = true }
 
 # Inherited from workspace
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
@@ -132,6 +139,7 @@ windows = { workspace = true, features = [
   "Win32_System_LibraryLoader",
   "Win32_System_SystemServices",
   "Win32_System_Threading",
+  "Win32_System_StationsAndDesktops",
   "Win32_System_Com",
   "Win32_System_Com_StructuredStorage",
   "Win32_System_Ole",
@@ -141,6 +149,7 @@ windows = { workspace = true, features = [
   "Win32_System_WinRT_Graphics",
   "Win32_System_WinRT_Graphics_Capture",
   "Win32_UI_Accessibility",
+  "Win32_UI_HiDpi",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_Shell",
   "Win32_UI_Shell_PropertiesSystem",
@@ -154,18 +163,22 @@ webview2-com = { workspace = true }
 windows = { workspace = true, features = ["Win32_UI_Shell_Common"] }
 
 [features]
-default = []
+default = ["remote-desktop-media"]
+# The Desktop product selects native remote media; minimal host checks may opt out.
+remote-desktop-media = ["dep:libwebrtc", "dep:webrtc-sys-build", "dep:sha2", "dep:x11rb", "dep:gstreamer-video"]
 # Enable webview devtools and element inspector for development builds.
 # Only active in debug builds or when explicitly requested via --features devtools.
 # Never enabled in release profile intended for end users.
 devtools = ["tauri/devtools", "openbitfun-webdriver/embedded"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
+x11rb = { version = "0.13", features = ["randr", "xtest", "screensaver"], optional = true }
 libc = { workspace = true }
 gtk = { workspace = true }
 atspi = { workspace = true, features = ["zbus"] }
 gstreamer = { workspace = true }
 gstreamer-app = { workspace = true }
+gstreamer-video = { workspace = true, optional = true }
 leptess = { workspace = true }
 
 [lints]

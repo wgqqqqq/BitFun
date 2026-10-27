@@ -429,6 +429,7 @@ struct MobileAccountDevice: Identifiable, Equatable {
     let name: String
     let online: Bool
     let selected: Bool
+    var desktopAvailable: Bool = false
 }
 
 struct MobileDeviceDirectoryEntry: Identifiable, Equatable {

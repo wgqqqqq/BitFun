@@ -92,6 +92,12 @@ pub(crate) async fn broadcast(io: &SocketIo, state: &AppState, account: &str) {
         Ok(rows) => rows.into_iter().filter(|row| state.device_manager.is_device_online(account, &row.device_id)).map(|row| json!({"device_id":row.device_id,"device_name":row.device_name.unwrap_or_default(),"device_alias":row.device_alias,"device_model":row.device_model,"device_os":row.device_os,"device_os_version":row.device_os_version,"client_version":row.client_version,"client_protocol":row.client_protocol})).collect(),
         Err(error) => {
             tracing::warn!(%error, "Failed to read device presence metadata");
+            for socket in io.within(account_room(account)).sockets() {
+                if let Some(identity) = socket.extensions.get::<Identity>() {
+                    identity.remote_desktop_associations.account_unknown(io, account).await;
+                    break;
+                }
+            }
             return;
         }
     };

@@ -106,14 +106,14 @@ const identityRules = Object.freeze([
     id: 'retired-product-name',
     description: 'retired product name',
     pattern: new RegExp(retiredProductPatternSource, 'giu'),
-    allowedMatch: ({ location }) => {
+    allowedMatch: ({ location, externalAttributionOnly }) => {
       if (location.file === '.gitignore'
         && location.location === 'content'
         && location.lineText?.trim() === `.${retiredProductToken}/`) {
         return true;
       }
       return location.location === 'content'
-        && isExternalAttributionOnlyLine(location.lineText);
+        && externalAttributionOnly();
     },
     allowedFiles: retiredIdentityDataBoundaryFiles,
     allowedFilePrefixes: retiredIdentityDataBoundaryPrefixes,
@@ -279,11 +279,18 @@ export function shouldAuditContent(file) {
 
 function collectMatches(value, location) {
   const violations = [];
+  // Many matches can share one long generated line. Compute this whole-line
+  // attribution decision once, retaining neither the line nor a global cache.
+  let externalAttribution;
+  const externalAttributionOnly = () => {
+    externalAttribution ??= isExternalAttributionOnlyLine(location.lineText);
+    return externalAttribution;
+  };
 
   for (const rule of identityRules) {
     const pattern = new RegExp(rule.pattern.source, rule.pattern.flags);
     for (const match of value.matchAll(pattern)) {
-      if (rule.allowedMatch?.({ match: match[0], location })) {
+      if (rule.allowedMatch?.({ match: match[0], location, externalAttributionOnly })) {
         continue;
       }
       if (rule.allowedFiles?.has(location.file)) {

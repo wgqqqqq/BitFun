@@ -359,3 +359,14 @@ test('normalizes Windows separators and skips dependency and generated output ro
     assert.equal(shouldAuditContent(file), false, file);
   }
 });
+
+test('long attributed lines keep exact exemption semantics without hiding mixed legacy names', () => {
+  const publicIdentity = `https://github.com/${retiredLowerName}-ai`;
+  const repetitions = 2000;
+  const attributed = Array(repetitions).fill(publicIdentity).join(' ');
+  assert.deepEqual(violationsFor(attributed), []);
+  const mixed = violationsFor(`${attributed} ${retiredName}`);
+  assert.equal(mixed.length, repetitions + 1);
+  assert.ok(mixed.every(violation => violation.rule === 'retired-product-name'));
+  assert.ok(mixed.every(violation => violation.line === 1));
+});

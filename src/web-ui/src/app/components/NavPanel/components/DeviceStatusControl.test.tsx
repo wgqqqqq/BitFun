@@ -101,9 +101,9 @@ let container: HTMLDivElement;
 const onOpenChange = vi.fn();
 const onManageDevices = vi.fn();
 
-function render(open = true) {
+function render(open = true, onOpenRemoteDesktop?: () => void) {
   act(() => root.render(
-    <DeviceStatusControl open={open} onOpenChange={onOpenChange} onManageDevices={onManageDevices} />,
+    <DeviceStatusControl open={open} onOpenChange={onOpenChange} onManageDevices={onManageDevices} onOpenRemoteDesktop={onOpenRemoteDesktop} />,
   ));
 }
 
@@ -857,4 +857,14 @@ describe('device status card', () => {
     )).toBe(false);
     expect(state.switchToDevice).not.toHaveBeenCalled();
   });
+});
+
+it('opens remote computer control from the footer without switching the OpenBitFun peer', () => {
+  const openRemoteDesktop = vi.fn();
+  render(true, openRemoteDesktop);
+  act(() => element('nav-device-status-remote-desktop').click());
+  expect(onOpenChange).toHaveBeenCalledWith(false);
+  expect(openRemoteDesktop).toHaveBeenCalledTimes(1);
+  expect(state.switchToDevice).not.toHaveBeenCalled();
+  expect(onManageDevices).not.toHaveBeenCalled();
 });

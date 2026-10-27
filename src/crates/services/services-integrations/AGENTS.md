@@ -152,6 +152,16 @@ pnpm run check:core-boundaries
 Other family-specific targets remain in `Cargo.toml`; add a guide command only
 for a recurring workflow, not to mirror every test target.
 
+For remote desktop device encryption and the dedicated signaling sender, use
+`cargo test --locked -p openbitfun-services-integrations --no-default-features --features remote-connect --lib remote_desktop`.
+Keep it separate from generic RemoteCommand/invoke; unsupported hosts must answer
+explicitly and must not route read-only desktop commands into Agent sessions.
+The controller sender captures `RelayClient::remote_desktop_connection()` before
+resolving a fixed peer key and retains it for the attachment. Reconnect/account
+replacement invalidates it; never recapture a token to retry an old mutation.
+The same focused command includes real loopback Socket.IO delayed-ACK tests;
+these prove client fencing, not Relay authorization or Desktop UI delivery.
+
 For persistent public marketplace image caching (restart/offline reuse, URL
 boundaries, and bounded disk storage), run:
 
@@ -205,3 +215,14 @@ For models.dev snapshot reuse, last-valid recovery, and background refresh:
 ```bash
 cargo test --locked -p openbitfun-services-integrations --no-default-features --features models-dev --lib models_dev::tests
 ```
+
+For independent self-hosted remote desktop enrollment and credential isolation,
+run `cargo test --locked -p openbitfun-services-integrations --no-default-features --features remote-connect --lib remote_desktop_service`.
+Keep the endpoint, device secret and encrypted store independent of account login;
+never migrate account grants or send account credentials to a configured desktop
+service. An unreadable/unsupported credential record is retained and reported.
+Independent desktop hosts must use `RelayClient::new_remote_desktop()`: they
+authenticate with machine presence and register `rd-register`, without the
+Agent `rpc-register` handshake that desktop-only deployments reject. The
+`remote_desktop` filter includes the real Socket.IO handshake regression and
+checks that ordinary Agent hosts retain their existing RPC registration.

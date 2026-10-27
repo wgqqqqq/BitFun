@@ -13,6 +13,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import com.openbitfun.mobile.app.ui.remote.CONNECT_ACCOUNT_DESKTOP_TEST_TAG_PREFIX
 import com.openbitfun.mobile.app.ui.remote.CONNECT_ACCOUNT_DEVICE_REFRESH_TEST_TAG
 import com.openbitfun.mobile.app.ui.remote.CONNECT_ACCOUNT_DEVICE_ROW_TEST_TAG_PREFIX
 import com.openbitfun.mobile.app.ui.remote.ConnectAccountDeviceScreen
@@ -32,6 +34,31 @@ import org.junit.Assert.assertEquals
 class AccountRemoteScreenTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test fun desktopEntryUsesTheExplicitTargetAndLeavesChatSelectionAlone() {
+        var chatSelections = 0
+        var desktop = ""
+        composeRule.setContent {
+            OpenBitFunTheme(dark = false) {
+                ConnectAccountDeviceScreen(
+                    state = AccountUiState.Ready("fixture-user", "Fixture", listOf(
+                        AccountDeviceUi("desk", "Fixture Mac", true, null, false, "desktop"),
+                        AccountDeviceUi("cli", "Fixture CLI", true, null, true, "cli"),
+                        AccountDeviceUi("offline", "Offline Mac", false, null, true, "desktop"),
+                        AccountDeviceUi("self", "Self", true, null, true, "desktop"),
+                    ), "cli", "Fixture CLI"),
+                    currentDeviceId = "self", onBack = {}, onRefresh = {},
+                    onSelect = { chatSelections++ }, onViewDesktop = { desktop = it }, modifier = Modifier,
+                )
+            }
+        }
+        for (id in listOf("cli", "offline", "self")) {
+            composeRule.onNodeWithTag(CONNECT_ACCOUNT_DESKTOP_TEST_TAG_PREFIX + id).assertDoesNotExist()
+        }
+        // Session protocol mismatch does not replace remote desktop negotiation.
+        composeRule.onNodeWithTag(CONNECT_ACCOUNT_DESKTOP_TEST_TAG_PREFIX + "desk").performScrollTo().performClick()
+        composeRule.runOnIdle { assertEquals("desk", desktop); assertEquals(0, chatSelections) }
+    }
 
     @Test
     fun aSelectedAccountDeviceBypassesThePairingForm() {
@@ -114,6 +141,8 @@ class AccountRemoteScreenTest {
         composeRule.setContent {
             OpenBitFunTheme(dark = false) {
                 ConnectAccountDeviceScreen(
+                    currentDeviceId = "controller",
+                    onViewDesktop = {},
                     state = AccountUiState.Ready(
                         userId = "user-1",
                         username = "tester",
@@ -147,6 +176,8 @@ class AccountRemoteScreenTest {
         composeRule.setContent {
             OpenBitFunTheme(dark = false) {
                 ConnectAccountDeviceScreen(
+                    currentDeviceId = "controller",
+                    onViewDesktop = {},
                     state = AccountUiState.Ready(
                         userId = "user-1",
                         username = "tester",
