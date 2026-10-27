@@ -99,10 +99,10 @@ export struct ConnectAccountDevicePage {
           }
           .width('100%')
         }
-        .width('100%').height(120).scrollBar(BarState.Off)
+        .width('100%').constraintSize({ maxHeight: 320 }).scrollBar(BarState.Off)
       }
     }
-    .width('100%').height(174)
+    .width('100%').constraintSize({ minHeight: 174 })
     .padding({ left: 16, right: 16, top: 8, bottom: 8 })
     .backgroundColor(CARD).borderRadius(8).border({ width: 1, color: LINE })
   }

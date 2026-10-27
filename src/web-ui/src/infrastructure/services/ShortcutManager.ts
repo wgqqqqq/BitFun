@@ -4,6 +4,7 @@ import type { ShortcutConfig, ShortcutScope } from '@/shared/types/shortcut';
 import { compareShortcutScope } from '@/shared/constants/shortcuts';
 import { createLogger } from '@/shared/utils/logger';
 import { isImeOwnedKeyboardEvent } from '@/shared/utils/ime';
+import { isExclusiveShortcutTarget } from '@/shared/utils/keyboardOwnership';
 
 const log = createLogger('ShortcutManager');
 
@@ -292,7 +293,9 @@ export class ShortcutManager {
     const activeScope = this.detectScope(event.target);
 
     // Collect candidates: always check 'app' scope, plus active panel scope if different
-    const candidates = this.findCandidates(event, activeScope, inInput);
+    const exclusive = isExclusiveShortcutTarget(event);
+    const candidates = this.findCandidates(event, activeScope, inInput)
+      .filter(registration => !exclusive || registration.config.allowInExclusiveInput === true);
 
     if (candidates.length === 0) return;
 

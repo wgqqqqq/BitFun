@@ -15,6 +15,8 @@ use std::{
 use tokio_tungstenite::tungstenite::Message;
 use tower::ServiceExt;
 
+mod remote_desktop;
+
 async fn request(
     app: &Router,
     method: &str,
@@ -505,6 +507,10 @@ struct BuildFixture {
 }
 
 async fn client_build_fixture() -> BuildFixture {
+    client_build_fixture_with_desktop(false).await
+}
+
+async fn client_build_fixture_with_desktop(remote_desktop: bool) -> BuildFixture {
     let db = Arc::new(db::connect(":memory:").await.unwrap());
     db::UserRow::create(&db, "owner", "alice").await.unwrap();
     db::UserRow::create(&db, "outsider", "bob").await.unwrap();
@@ -529,11 +535,18 @@ async fn client_build_fixture() -> BuildFixture {
         .await
         .unwrap()
         .token;
-    let app = build_relay_router(
+    let app = crate::build_relay_router_with_options(
         Arc::new(MemoryAssetStore::new()),
         Instant::now(),
         db.clone(),
         "test",
+        crate::RelayRuntimeOptions {
+            remote_desktop_pairing: remote_desktop.then(|| {
+                crate::RemoteDesktopPairingConfig::new("fixture-only-enrollment-key-with-32-bytes")
+                    .unwrap()
+            }),
+            ..Default::default()
+        },
     );
     BuildFixture {
         app,

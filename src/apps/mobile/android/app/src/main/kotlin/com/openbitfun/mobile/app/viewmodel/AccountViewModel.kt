@@ -12,6 +12,7 @@ import com.openbitfun.mobile.core.feature.account.AccountIntent
 import com.openbitfun.mobile.core.feature.account.AccountStore
 import com.openbitfun.mobile.core.feature.account.AccountUiState
 import com.openbitfun.mobile.core.feature.account.create
+import com.openbitfun.mobile.core.feature.remotedesktop.RemoteDesktopSetupStore
 import com.openbitfun.mobile.core.feature.connection.ConnectionPhase
 import com.openbitfun.mobile.core.feature.session.RemoteSessionIntent
 import com.openbitfun.mobile.core.feature.session.RemoteSessionStore
@@ -26,6 +27,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/** App-local destination; the shared store owns authorization and attachment state. */
+internal data class RemoteDesktopDestination(val deviceId: String, val deviceName: String, val store: RemoteDesktopSetupStore?)
+
 internal class AccountViewModel(application: Application) : AndroidViewModel(application) {
     private val completionNotifier = com.openbitfun.mobile.app.platform.TaskCompletionNotifier(application)
     private var foreground = true
@@ -38,6 +42,7 @@ internal class AccountViewModel(application: Application) : AndroidViewModel(app
         remoteStore?.dispatch(RemoteSessionIntent.SetForeground(foreground))
     }
     private val identity = application.deviceIdentity()
+    val currentDeviceId: String get() = identity.installId
     private val store = AccountStore.create(
         viewModelScope,
         application,
@@ -47,6 +52,22 @@ internal class AccountViewModel(application: Application) : AndroidViewModel(app
         LEGACY_MOBILE_DEVICE_NAMES,
     )
     val state: StateFlow<AccountUiState> = store.state
+    private val _desktop = MutableStateFlow<RemoteDesktopDestination?>(null)
+    val desktop: StateFlow<RemoteDesktopDestination?> = _desktop.asStateFlow()
+
+    fun viewDesktop(deviceId: String) {
+        val ready = state.value as? AccountUiState.Ready ?: run { closeDesktop(); return }
+        val name = ready.devices.singleOrNull { it.id == deviceId }?.name.orEmpty()
+        _desktop.value?.store?.close()
+        // The shared factory validates membership/kind/foreground again. Null
+        // becomes an explicit unavailable page, never a local or chat fallback.
+        _desktop.value = RemoteDesktopDestination(deviceId, name, store.createRemoteDesktopSetupStore(viewModelScope, deviceId))
+    }
+
+    fun closeDesktop() {
+        _desktop.value?.store?.close()
+        _desktop.value = null
+    }
     private val _remoteState = MutableStateFlow<RemoteSessionUiState>(RemoteSessionUiState.Idle)
     val remoteState: StateFlow<RemoteSessionUiState> = _remoteState.asStateFlow()
     private val _connectionPhase = MutableStateFlow(ConnectionPhase.IDLE)
@@ -71,6 +92,7 @@ internal class AccountViewModel(application: Application) : AndroidViewModel(app
     init {
         viewModelScope.launch {
             store.state.collect { current ->
+                if (current !is AccountUiState.Ready) closeDesktop()
                 val target = (current as? AccountUiState.Ready)?.selectedDeviceId
                 if (target != releasedTarget) releasedTarget = null
                 if (target != activeTarget && target != releasedTarget) bindTarget(target)
@@ -174,6 +196,7 @@ internal class AccountViewModel(application: Application) : AndroidViewModel(app
     }
 
     override fun onCleared() {
+        closeDesktop()
         bindTarget(null)
         store.stop()
         super.onCleared()

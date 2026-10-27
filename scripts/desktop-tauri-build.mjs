@@ -15,6 +15,7 @@ import {
 } from 'fs';
 import { ensureFlashgrepBinary } from './prepare-flashgrep-resource.mjs';
 import { prepareMiniAppShell } from './prepare-miniapp-shell.mjs';
+import { prepareSherpaDev } from './prepare-sherpa-dev.mjs';
 import { extractProductConfigArg } from './product-customization/cli.mjs';
 import { productBuildEnvironment } from './product-customization/projections.mjs';
 import { resolveProductDefinition } from './product-customization/resolver.mjs';
@@ -53,7 +54,12 @@ async function main() {
   const desktopDir = join(ROOT, 'src', 'apps', 'desktop');
   const macosBundle = requestsMacosBundle(forward);
   if (macosBundle) requireModernIconTools();
-  if (!bundleOnly) preparePluginHost();
+  if (!bundleOnly) {
+    // Reuse the locked architecture-specific library/archive across product
+    // caches; the SDK downloader cannot use every supported developer proxy.
+    prepareSherpaDev(ROOT);
+    preparePluginHost();
+  }
   const miniappShell = prepareMiniAppShell({
     target: optionValue(forward, '--target'),
     profile: forward.includes('--debug') ? 'debug' : optionValue(forward, '--profile') || 'release',

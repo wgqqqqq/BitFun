@@ -11,6 +11,8 @@ mod device_lifecycle;
 mod origin;
 mod payloads;
 pub(crate) mod presence;
+mod remote_desktop;
+pub(crate) use remote_desktop::Associations as RemoteDesktopAssociations;
 pub(crate) mod retired_session_history;
 
 use crate::{db::AuthToken, routes::api::AppState};
@@ -48,6 +50,9 @@ struct Identity {
     client_protocol: Option<u32>,
     account_calls: Arc<Semaphore>,
     server_calls: Arc<Semaphore>,
+    remote_desktop_calls: Arc<Semaphore>,
+    remote_desktop_server_calls: Arc<Semaphore>,
+    remote_desktop_associations: Arc<remote_desktop::Associations>,
     _connection: Arc<OwnedSemaphorePermit>,
 }
 #[derive(Clone, Copy, Deserialize, PartialEq)]
@@ -103,9 +108,17 @@ fn failure(error: &str) -> Value {
     json!({"ok":false,"error":error})
 }
 
+async fn authorization_status(state: &AppState, identity: &Identity) -> Result<bool, ()> {
+    AuthToken::find(&state.db, &identity.token)
+        .await
+        .map(|auth| {
+            auth.is_some_and(|auth| auth.user_id == identity.account && auth.can_control_devices())
+        })
+        .map_err(|_| ())
+}
+
 async fn authorized(state: &AppState, identity: &Identity) -> bool {
-    matches!(AuthToken::find(&state.db,&identity.token).await,
-        Ok(Some(auth)) if auth.user_id==identity.account && auth.can_control_devices())
+    authorization_status(state, identity).await == Ok(true)
 }
 
 fn can_register(identity: &Identity, method: &str) -> bool {
@@ -164,8 +177,12 @@ pub(crate) fn mount(router: Router<AppState>, state: AppState) -> Router<AppStat
     // Admission accounts for retained JSON and per-call state rather than an
     // arbitrary number of requests. Bulk ciphertext travels through HTTP.
     let server_calls = Arc::new(Semaphore::new(64 * 1024 * 1024));
+    let remote_desktop_server_calls = Arc::new(Semaphore::new(8 * 1024 * 1024));
     let account_budgets: Arc<Mutex<HashMap<String, Weak<Semaphore>>>> =
         Arc::new(Mutex::new(HashMap::new()));
+    let remote_desktop_budgets: Arc<Mutex<HashMap<String, Weak<Semaphore>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+    let remote_desktop_associations = state.remote_desktop_associations.clone();
     let auth_state = state.clone();
     let handler_state = state.clone();
     let handler_io = io.clone();
@@ -184,6 +201,9 @@ pub(crate) fn mount(router: Router<AppState>, state: AppState) -> Router<AppStat
                 let connections = connections.clone();
                 let server_calls = server_calls.clone();
                 let account_budgets = account_budgets.clone();
+                let remote_desktop_server_calls = remote_desktop_server_calls.clone();
+                let remote_desktop_budgets = remote_desktop_budgets.clone();
+                let remote_desktop_associations = remote_desktop_associations.clone();
                 async move {
                     let data = data.map_err(|_| "invalid authentication payload")?;
                     if !origin::is_websocket_origin_allowed(
@@ -234,6 +254,19 @@ pub(crate) fn mount(router: Router<AppState>, state: AppState) -> Router<AppStat
                     let client_version =
                         crate::db::normalize_client_version(data.client_version.as_deref());
                     let client_protocol = data.client_protocol;
+                    let remote_desktop_calls = {
+                        let mut budgets = remote_desktop_budgets
+                            .lock()
+                            .map_err(|_| "remote desktop capacity unavailable")?;
+                        budgets.retain(|_, budget| budget.strong_count() > 0);
+                        if let Some(budget) = budgets.get(&auth.user_id).and_then(Weak::upgrade) {
+                            budget
+                        } else {
+                            let budget = Arc::new(Semaphore::new(2 * 1024 * 1024));
+                            budgets.insert(auth.user_id.clone(), Arc::downgrade(&budget));
+                            budget
+                        }
+                    };
                     // Refresh the device's recorded build from *this* connection
                     // on every handshake, including reconnects. Unreported values
                     // are written as NULL. A failure here must not tear down an
@@ -258,6 +291,9 @@ pub(crate) fn mount(router: Router<AppState>, state: AppState) -> Router<AppStat
                         client_protocol,
                         account_calls,
                         server_calls,
+                        remote_desktop_calls,
+                        remote_desktop_server_calls,
+                        remote_desktop_associations,
                         _connection: Arc::new(permit),
                     });
                     Ok(())
@@ -312,22 +348,56 @@ async fn install(socket: SocketRef, state: AppState, io: SocketIo) {
     let auth_socket = socket.clone();
     let auth_identity = identity.clone();
     let auth_state = state.clone();
+    let auth_io = io.clone();
     // Also applies to idle sockets. Revoked credentials cannot keep receiving
     // another device's encrypted traffic indefinitely after logout.
     tokio::spawn(async move {
         let mut timer = tokio::time::interval(Duration::from_secs(5));
         loop {
             timer.tick().await;
+            let status = authorization_status(&auth_state, &auth_identity).await;
             if !auth_socket.connected() {
+                let revoked = status == Ok(false);
+                auth_identity
+                    .remote_desktop_associations
+                    .socket_lost(&auth_io, auth_socket.id, revoked)
+                    .await;
                 break;
             }
-            if !authorized(&auth_state, &auth_identity).await {
+            if status != Ok(true) {
+                auth_identity
+                    .remote_desktop_associations
+                    .socket_lost(&auth_io, auth_socket.id, status == Ok(false))
+                    .await;
                 let _ = auth_socket.disconnect();
                 break;
             }
+            auth_identity
+                .remote_desktop_associations
+                .check_host(&auth_state, &auth_io, &auth_identity)
+                .await;
         }
     });
 
+    if state.remote_desktop_pairing.is_some() {
+        // A paired desktop credential is never a generic Agent/RPC credential.
+        for event in [
+            "rpc-register",
+            "rpc-unregister",
+            "rpc-call",
+            "machine-event",
+        ] {
+            socket.on(event, |ack: AckSender| async move {
+                let _ = ack.send(&failure("remote_desktop_only"));
+            });
+        }
+        remote_desktop::install(&socket, &state, &io);
+        let _ = socket.emit(
+            "auth-ok",
+            &json!({"userId":identity.account,"deviceId":identity.device}),
+        );
+        return;
+    }
     let register_state = state.clone();
     socket.on(
         "rpc-register",
@@ -446,6 +516,7 @@ async fn install(socket: SocketRef, state: AppState, io: SocketIo) {
             let _ = ack.send(&failure(retired_session_history::HANDSHAKE_MESSAGE));
         },
     );
+    remote_desktop::install(&socket, &state, &io);
     let _ = socket.emit(
         "auth-ok",
         &json!({"userId":identity.account,"deviceId":identity.device}),

@@ -14,6 +14,7 @@ final class MobileCoreAdapter {
     private var foreground = true
     func setForeground(_ active: Bool) {
         foreground = active
+        account.setForeground(value: active)
         #if DEBUG
         log.info("Remote health lifecycle: foreground=\(active) bound=\(self.remoteSession != nil)")
         #endif
@@ -149,6 +150,11 @@ final class MobileCoreAdapter {
 
     func notifyAuthorizationCallback() {
         account.notifyAuthorizationCallback()
+    }
+
+    func createRemoteDesktopStore(deviceID: String) -> RemoteDesktopSetupStore? {
+        guard foreground else { return nil }
+        return account.createRemoteDesktopSetupStore(scope: scope, deviceId: deviceID)
     }
 
     func selectAccountDevice(id: String) {

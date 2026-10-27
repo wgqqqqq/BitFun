@@ -90,6 +90,7 @@ export class DeviceDirectoryViewModel {
       return {
         deviceId: item.deviceId,
         deviceName: item.deviceName,
+        deviceKind: item.deviceKind.length > 0 ? item.deviceKind : undefined,
         online: item.online
       };
     }));
@@ -256,6 +257,7 @@ export class DeviceDirectoryViewModel {
       const existing = this.state.find(device.deviceId);
       if (existing) {
         existing.deviceName = device.deviceName || existing.deviceName;
+        existing.deviceKind = device.deviceKind || '';
         if (existing.online && !online) {
           this.inFlight.delete(device.deviceId);
           if (existing.status === 'loading') existing.status = 'idle';
@@ -268,6 +270,7 @@ export class DeviceDirectoryViewModel {
         device.deviceName || device.deviceId,
         online
       );
+      created.deviceKind = device.deviceKind || '';
       return created;
     });
     this.state.replace(next);

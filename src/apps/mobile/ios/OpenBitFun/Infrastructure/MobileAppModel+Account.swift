@@ -261,7 +261,8 @@ extension MobileAppModel {
                     name: device.name,
                     online: device.online ||
                         (targetKey == remoteExpectedDeviceKey && remoteConnected && remoteInitialSessionReady),
-                    selected: device.id == ready.selectedDeviceId
+                    selected: device.id == ready.selectedDeviceId,
+                    desktopAvailable: AccountDevicePolicy.shared.canViewDesktop(device: device, currentDeviceId: localDeviceID)
                 )
             }
             accountDirectoryGeneration = coreAdapter?.syncDeviceDirectory(accountDevices) ?? (accountDirectoryGeneration &+ 1)
@@ -354,7 +355,7 @@ extension MobileAppModel {
             id: device.id,
             name: device.name,
             online: true,
-            selected: device.selected
+            selected: device.selected, desktopAvailable: device.desktopAvailable
         )
         accountDirectoryGeneration = coreAdapter?.syncDeviceDirectory(accountDevices) ??
             (accountDirectoryGeneration &+ 1)

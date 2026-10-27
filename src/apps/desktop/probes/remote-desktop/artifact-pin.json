@@ -1,0 +1,9 @@
+{
+  "tag": "webrtc-89d790b",
+  "artifacts": {
+    "mac-arm64-release": {
+      "library": "libwebrtc.a",
+      "sha256": "979b6310063a49a022bc11cb55397e3ccef887ef23b613fed43afdc4769ea75e"
+    }
+  }
+}

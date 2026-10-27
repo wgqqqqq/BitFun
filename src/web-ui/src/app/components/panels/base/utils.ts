@@ -19,6 +19,14 @@ import { PanelContentType, PanelContentConfig } from './types';
 
 // Configuration mapping for each panel content type
 export const PANEL_CONTENT_CONFIGS: Record<PanelContentType, PanelContentConfig> = {
+  'remote-desktop': {
+    type: 'remote-desktop',
+    displayName: 'Remote Desktop',
+    icon: { glyph: Network },
+    supportsCopy: false,
+    supportsDownload: false,
+    showHeader: false,
+  },
   'empty': {
     type: 'empty',
     displayName: 'Empty',

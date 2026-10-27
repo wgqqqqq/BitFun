@@ -11,6 +11,31 @@ enum MobileLaunchConfiguration {
         false
         #endif
     }
+
+    static var remoteDesktopAccountPreview: Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        ProcessInfo.processInfo.arguments.contains("--remote-desktop-account-probe")
+        #else
+        false
+        #endif
+    }
+
+    static var remoteDesktopLayoutPreview: Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        ProcessInfo.processInfo.arguments.contains("--remote-desktop-layout-probe")
+        #else
+        false
+        #endif
+    }
+
+    static var remoteDesktopProbePreview: Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        ProcessInfo.processInfo.arguments.contains("--remote-desktop-media-probe")
+        #else
+        false
+        #endif
+    }
+
     static var streamingRegressionPreview: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("--streaming-regression")

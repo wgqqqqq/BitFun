@@ -39,6 +39,7 @@ export struct AppSidebar {
   @Param showWorkspaceSection: boolean = false;
   @Event onClose: () => void = () => {};
   @Event onOpenMiniApps: () => void = () => {};
+  @Event onOpenRemoteDesktop: () => void = () => {};
   @Event onNewChat: (agentType: string) => void = (_agentType: string) => {};
   @Event onEnterCode: () => void = () => {};
   @Event onCollapse: () => void = () => {};
@@ -111,6 +112,23 @@ export struct AppSidebar {
             .margin({ top: 4, bottom: 8 }).stateEffect(true)
             .accessibilityText(RemoteI18n.t('miniapp.title'))
             .onClick(() => this.onOpenMiniApps())
+            Button({ type: ButtonType.Normal }) {
+              Row({ space: 14 }) {
+                Stack({ alignContent: Alignment.Center }) {
+                  SidebarGlyph({ kind: 'remote_control' })
+                }.width(24).height(24)
+                Text(RemoteI18n.t('remoteDesktop.navigation'))
+                  .fontSize(MobileDesignTypography.bodyLarge.size)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(SIDEBAR_INK)
+                Blank()
+              }.width('100%').alignItems(VerticalAlign.Center)
+            }
+            .width('100%').height(48).padding({ left: 4, right: 8 })
+            .backgroundColor(TRANSPARENT).borderRadius(12)
+            .margin({ bottom: 8 }).stateEffect(true)
+            .accessibilityText(RemoteI18n.t('remoteDesktop.navigation'))
+            .onClick(() => this.onOpenRemoteDesktop())
             if (this.showWorkspaceSection) {
               this.contentSlot()
             }

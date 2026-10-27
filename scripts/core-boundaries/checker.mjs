@@ -38,7 +38,7 @@ import {
   unexpectedDependencyOwnerFeatures,
   unexpectedReachableLocalFeatures,
 } from './manifest-feature-helpers.mjs';
-import { checkCargoDependencyBoundariesSafely } from './cargo-dependency-boundaries.mjs';
+import { checkCargoDependencyBoundariesSafely, discoverCargoManifestPaths } from './cargo-dependency-boundaries.mjs';
 import { checkPeerCommandPolicySync } from './peer-command-policy.mjs';
 import {
   listTrackedRustRepoPaths,
@@ -489,13 +489,12 @@ function checkForbiddenManifestDependencyRule(rule) {
     }
   }
   for (const repoDir of rule.scanRoots) {
-    walkFiles(repoPathToFsPath(repoDir), (path) => {
-      if (!path.endsWith('Cargo.toml')) {
-        return;
-      }
+    // Share Cargo's source manifest discovery; native probe build caches may
+    // contain generated manifests and stale cxxbridge symlinks.
+    for (const path of discoverCargoManifestPaths(repoPathToFsPath(repoDir))) {
       const repoPath = toRepoPath(path);
       if (allowManifestPaths.has(repoPath)) {
-        return;
+        continue;
       }
       const deps = parseManifestDependencies(readText(path).split(/\r?\n/));
       for (const dep of deps) {
@@ -514,7 +513,7 @@ function checkForbiddenManifestDependencyRule(rule) {
           }`,
         });
       }
-    });
+    }
   }
 }
 

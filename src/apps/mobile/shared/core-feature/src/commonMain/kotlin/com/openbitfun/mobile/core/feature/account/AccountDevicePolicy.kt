@@ -3,32 +3,23 @@ package com.openbitfun.mobile.core.feature.account
 /**
  * Which of an account's registered devices can be driven from this one.
  *
- * Ports the `desktopDevices()` / `canSelectAccountDevice()` pair that
- * `ConnectAccountDevicePage.ets` and `RemoteControlSettingsSheet.ets` both
- * apply — the same rule in both places, which is why it is a rule and not a
- * detail of either screen.
- *
- * The relay's device record carries a name and a presence flag and no kind, so
- * "is this a desktop" has to be answered from the name. That answer is exact for
- * the clients we ship — a HarmonyOS phone registers under a fixed name — and
- * absent for the ones we do not: an Android phone registers under `Build.MODEL`,
- * so a *second* Android install shows up here looking like a desktop. Only the
- * relay can close that gap by reporting a kind; until it does, this is the same
- * list HarmonyOS shows, which is the point.
+ * The transport filters host rows by Relay kind. Preserve that fact at the UI
+ * seam: an explicit kind takes precedence over a display name. Only rows from
+ * older Relays fall back to the known names of our phone/watch clients.
+ * Desktop and CLI are session hosts; desktop capture/input still requires a
+ * separate remote-desktop capability probe.
  */
 public object AccountDevicePolicy {
-    /**
-     * Names our own mobile clients register under.
-     *
-     * A phone is never a control target — it is the thing doing the
-     * controlling — and the current device is excluded separately by id, so this
-     * set is about the user's *other* phones.
-     */
-    private val MOBILE_CLIENT_NAMES: Set<String> = setOf("HarmonyOS Phone")
+    private val LEGACY_CONTROLLER_NAMES: Set<String> = setOf("HarmonyOS Phone", "HarmonyOS Watch")
+
+    private fun isHost(device: AccountDeviceUi): Boolean {
+        val kind = device.deviceKind?.trim().orEmpty()
+        if (kind.isNotEmpty()) return kind == "desktop" || kind == "cli"
+        return LEGACY_CONTROLLER_NAMES.none { it.equals(device.name.trim(), ignoreCase = true) }
+    }
 
     /**
-     * The rows a device list shows: everything the account has registered except
-     * this device and the user's other phones.
+     * Session hosts, excluding this device. Unknown legacy rows remain visible.
      *
      * Offline devices stay in the list. They are what tells a user the desktop
      * they are looking for is known to the account and simply not running, which
@@ -38,12 +29,18 @@ public object AccountDevicePolicy {
         devices: List<AccountDeviceUi>,
         currentDeviceId: String,
     ): List<AccountDeviceUi> = devices.filter { device ->
-        device.id != currentDeviceId && device.name !in MOBILE_CLIENT_NAMES
+        device.id != currentDeviceId && isHost(device)
     }
 
     /** Whether tapping [device] can do anything. */
     public fun canSelect(device: AccountDeviceUi, currentDeviceId: String): Boolean =
-        device.online && device.id != currentDeviceId && device.name !in MOBILE_CLIENT_NAMES
+        device.online && device.id != currentDeviceId && isHost(device)
+
+    /** The desktop protocol probes legacy rows; CLI is never a display source.
+     * Generic session protocol compatibility does not authorize or reject this lane. */
+    public fun canViewDesktop(device: AccountDeviceUi, currentDeviceId: String): Boolean =
+        device.online && device.id != currentDeviceId && isHost(device)
+            && device.deviceKind?.trim().orEmpty().let { it.isEmpty() || it == "desktop" }
 
     /**
      * The device to drive when the user has not picked one — after a fresh sign

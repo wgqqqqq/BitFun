@@ -111,6 +111,7 @@ final class MobileAppModel: ObservableObject {
     @Published var accountFailureCanRetry = false
     @Published var accountDeviceName: String?
     @Published var accountDeviceCount = 0
+    @Published var remoteDesktopTarget: MobileRemoteDesktopTarget?
     @Published var accountDevices: [MobileAccountDevice] = []
     @Published var accountSelectedDeviceID: String?
     // The selected device the user disconnected from. The selection stays so the
@@ -291,6 +292,15 @@ final class MobileAppModel: ObservableObject {
             coreAdapter?.setForeground(phase == .active)
         }
         if phase == .active, accountUser != nil { coreAdapter?.resumeSessionStreams(); refreshRemoteDevices() }
+    }
+
+    func openRemoteDesktop(_ device: MobileAccountDevice) {
+        guard device.desktopAvailable, device.online, !accountBusy else { return }
+        remoteDesktopTarget = MobileRemoteDesktopTarget(id: device.id, name: device.name)
+    }
+
+    func createRemoteDesktopStore(_ target: MobileRemoteDesktopTarget) -> RemoteDesktopSetupStore? {
+        coreAdapter?.createRemoteDesktopStore(deviceID: target.id)
     }
 
     func verifyRemoteConnection() {

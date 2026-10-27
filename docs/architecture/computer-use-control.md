@@ -1,5 +1,14 @@
 # Computer Use control-session SPEC
 
+Related proposal: [产品与交互](../features/remote-desktop-control.md) and
+[协议与媒体](remote-desktop-control.md) define manual cross-device display control.
+The pure external Admission reservation and facade ports are prepared for manual
+input, keeping remote display and connection state outside the existing AI
+owner/target model. The view-only media owner does not acquire this reservation.
+Legacy admission and new exclusion/cleanup race tests pass; input-stage wiring
+still requires separate review and actual native worker/key cleanup evidence.
+It does not add preemption or widen the window-scoped/background contracts here.
+
 Status: Agent tasks select applications and execute through the existing tool
 permission policy without a manual App-sharing or per-application grant step.
 Optional manual-sharing APIs remain compatible for existing clients. The October

@@ -15,6 +15,8 @@ own environment before running commands.
 | [relay-v1/](relay-v1/README.md) | Versioned Relay deployment |
 | [outbound-mail/](outbound-mail/README.md) | Send-only Postfix/OpenDKIM: auth integration, DNS, maintenance and rollback |
 | [model-router/](model-router/README.md) | Client-side router launcher and system prompt |
+| [remote-desktop/](remote-desktop/README.md) | Trial TURN, probes and prior validation; production rollout pending |
+| [remote-desktop/self-hosted/](remote-desktop/self-hosted/README.md) | Independent device-pairing service, separate from login Relay; native platform release work remains |
 
 Component source guides:
 

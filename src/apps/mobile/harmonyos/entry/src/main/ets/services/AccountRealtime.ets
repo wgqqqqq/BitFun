@@ -2,12 +2,16 @@ import { webSocket } from '@kit.NetworkKit';
 import { RpcPayload } from './RpcPayload';
 import { EncryptedPayload } from '../model/RemoteModels';
 import { normalizeAccountRelayUrl } from './AccountDeviceLink';
+import { normalizeRemoteDesktopServiceUrl } from './RemoteDesktopServiceEndpoint';
 import { CLIENT_PROTOCOL_VERSION, clientVersion } from './ClientBuild';
+import { RemoteLogger } from './RemoteLogger';
 
 interface EngineOpen { sid: string; pingInterval: number; pingTimeout: number; }
+interface RelayNamespaceError { message: string; }
 interface Auth { token: string; clientType: string; clientVersion: string; clientProtocol: number; }
 interface RpcCall { method: string; params: Object; timeoutMs: number; }
 interface RpcResult { ok: boolean; result?: Object; error?: string; }
+interface RemoteDesktopCall { version: number; targetDeviceId: string; params: EncryptedPayload; timeoutMs: number; attachId?: string; }
 interface PendingCall {
   resolve: (value: Object) => void;
   reject: (error: Error) => void;
@@ -37,8 +41,8 @@ export class AccountRealtime {
   private token: string;
   private payloads: RpcPayload;
 
-  constructor(relayUrl: string, token: string) {
-    const base = normalizeAccountRelayUrl(relayUrl);
+  constructor(relayUrl: string, token: string, desktopService: boolean = false) {
+    const base = desktopService ? normalizeRemoteDesktopServiceUrl(relayUrl) : normalizeAccountRelayUrl(relayUrl);
     if (!base) throw new Error('Invalid Relay URL');
     this.relayUrl = base;
     this.token = token;
@@ -82,6 +86,59 @@ export class AccountRealtime {
     return result as EncryptedPayload;
   }
 
+  /** Dedicated v1 signaling. Capabilities must come from successful native
+   * /api/info discovery. No generic invoke, bulk upload or automatic replay. */
+  async callRemoteDesktop(target: string, params: EncryptedPayload, timeoutMs: number,
+    relayCapabilities: string[], attachId: string = ''): Promise<EncryptedPayload> {
+    if (!relayCapabilities.includes('remote_desktop_route_v1')) throw new Error('relay_upgrade_required');
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000
+      || target.length === 0 || target.length > 128 || !/^[A-Za-z0-9_.-]+$/.test(target)) {
+      throw new Error('invalid_request');
+    }
+    if (attachId.length > 128 || (attachId.length > 0 && !/^[A-Za-z0-9_.-]+$/.test(attachId))) {
+      throw new Error('invalid_request');
+    }
+    this.validateRemoteDesktopCiphertext(params);
+    if (this.closed) throw new Error('relay_closed');
+    try { await this.ready(); }
+    catch (_error) { throw new Error(this.closed ? 'relay_authentication_ended' : 'relay_connect_timeout'); }
+    const socket = this.socket;
+    const epoch = this.epoch;
+    if (!socket || !this.connected || this.closed) throw new Error('relay_disconnected');
+    const id = this.nextAck++;
+    const call: RemoteDesktopCall = { version: 1, targetDeviceId: target, params: params, timeoutMs: timeoutMs };
+    if (attachId.length > 0) call.attachId = attachId;
+    const result = await new Promise<Object>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error('delivery_unknown'));
+      }, timeoutMs);
+      this.pending.set(id, { resolve: resolve, reject: reject, timer: timer });
+      socket.send(`42${id}${JSON.stringify(['rd-call', call])}`).then((sent: boolean) => {
+        if (!sent) this.fail(epoch, false);
+      }).catch(() => { this.fail(epoch, false); });
+    }).catch((error: Error): Object => {
+      if (this.closed) throw new Error('relay_authentication_ended');
+      if (this.epoch !== epoch) throw new Error('relay_disconnected');
+      throw error;
+    });
+    if (this.closed) throw new Error('relay_authentication_ended');
+    if (this.epoch !== epoch) throw new Error('delivery_unknown');
+    const ciphertext = result as EncryptedPayload;
+    this.validateRemoteDesktopCiphertext(ciphertext);
+    return ciphertext;
+  }
+
+  private validateRemoteDesktopCiphertext(value: EncryptedPayload): void {
+    if (!value || typeof value.encrypted_data !== 'string' || typeof value.nonce !== 'string'
+      || value.encrypted_data.length === 0 || value.encrypted_data.length > 128 * 1024
+      || value.nonce.length === 0 || value.nonce.length > 128
+      || !/^[A-Za-z0-9+/]+={0,2}$/.test(value.encrypted_data)
+      || !/^[A-Za-z0-9+/]+={0,2}$/.test(value.nonce)) {
+      throw new Error('invalid_signal_envelope');
+    }
+  }
+
   private ready(): Promise<void> {
     if (this.closed) return Promise.reject(new Error('Relay is closed'));
     if (this.connected) return Promise.resolve();
@@ -111,7 +168,11 @@ export class AccountRealtime {
     socket.on('close', () => { this.fail(epoch, false); });
     socket.on('error', () => { this.fail(epoch, false); });
     const url = this.relayUrl.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
-    socket.connect(`${url}/v1/updates/?EIO=4&transport=websocket`)
+    // API 26 preserves non-default ports in the SDK-generated Origin. A
+    // custom Origin header is appended alongside that generated header and
+    // cannot correct it. Keep the server's origin and device-token checks.
+    const options: webSocket.WebSocketRequestOptions = { supportOriginPort: true };
+    socket.connect(`${url}/v1/updates/?EIO=4&transport=websocket`, options)
       .then((success: boolean) => { if (!success) this.fail(epoch, false); })
       .catch(() => { this.fail(epoch, false); });
   }
@@ -143,6 +204,14 @@ export class AccountRealtime {
     } else if (frame.startsWith('40')) {
       if (!this.opened) throw new Error('Missing Engine.IO handshake');
     } else if (frame.startsWith('44')) {
+      let reason = 'unclassified';
+      try {
+        const message = (JSON.parse(frame.substring(2)) as RelayNamespaceError).message;
+        if (['invalid authentication payload', 'origin is not allowed', 'connection capacity exceeded',
+          'authentication unavailable', 'invalid or expired token', 'device identity unavailable',
+          'machine identity mismatch'].includes(message)) reason = message.replace(/ /g, '_');
+      } catch (_error) {}
+      RemoteLogger.warn(`relay authentication refused code=${reason}`);
       this.fail(epoch, true);
     } else if (frame === '1' || frame === '41') {
       this.fail(epoch, false);

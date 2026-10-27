@@ -58,6 +58,7 @@ export interface RemoteHomePresentationActions {
 }
 
 export interface SidebarPresentationActions {
+  readonly openRemoteDesktop: () => void;
   readonly close: () => void;
   readonly newChat: (agentType?: string) => void;
   readonly enterCode: () => void;
@@ -106,6 +107,10 @@ export interface SettingsPresentationActions {
 }
 
 export interface ConnectPresentationActions {
+  readonly desktopServiceConnect: (address: string, key: string) => Promise<void>;
+  readonly desktopServiceDisconnect: () => void;
+  readonly desktopServiceDevices: () => Promise<CloudAccountDevice[]>;
+  readonly openRemoteDesktop: (device: CloudAccountDevice) => void;
   readonly back: () => void;
   readonly openAccount: () => void;
   readonly connect: (password?: string) => void;
@@ -134,6 +139,7 @@ export function emptyAppRootPresentationActions(): AppRootPresentationActions {
       openSession: () => {}, openSessionInPlace: () => {}, deleteSession: () => {}
     },
     onSidebar: {
+      openRemoteDesktop: () => {},
       close: () => {}, newChat: () => {}, enterCode: () => {}, openAccountDevices: () => {},
       refreshDevices: async () => {}, refreshSessions: async () => {}, settings: () => {}, openAccount: () => {},
       openSession: () => {}, deleteSession: () => {}
@@ -161,6 +167,8 @@ export function emptyAppRootPresentationActions(): AppRootPresentationActions {
       setLanguage: async () => {}
     },
     onConnect: {
+      desktopServiceConnect: async () => {}, desktopServiceDisconnect: () => {}, desktopServiceDevices: async () => [],
+      openRemoteDesktop: () => {},
       back: () => {}, openAccount: () => {}, connect: () => {}, clearPairing: () => {},
       cloudListDevices: async () => [], cloudSelectDevice: async () => {}
     },

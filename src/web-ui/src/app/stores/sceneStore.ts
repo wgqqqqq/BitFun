@@ -495,7 +495,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     abandonSettingsDraftsForContextSwitch();
     useNavSceneStore.getState().closeNavScene();
     const state = get();
-    const contentTabs = state.openTabs.filter(tab => tab.contentId);
+    const isControllerTab = (tab: SceneTab) => tab.contentId
+      && useContentResourceStore.getState().resources[tab.contentId]?.content.type === 'remote-desktop';
+    // Controller-owned remote desktops must not be filed under a Peer surface
+    // or make that surface's files appear to have a local origin.
+    const controllerTabs = state.openTabs.filter(isControllerTab);
+    const contentTabs = state.openTabs.filter(tab => tab.contentId && !isControllerTab(tab));
     const origin = contentTabs[0]?.contentId
       ? useContentResourceStore.getState().resources[contentTabs[0].contentId]?.scope.surfaceId : undefined;
     if (origin) contentSurfaceTabs.set(origin, { ...projectPaneState(state), openTabs: contentTabs });
@@ -506,7 +511,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     // keeps its session in front.
     const held = state.openTabs.find(isHeldSessionTab);
     const sessionTabs = state.openTabs.filter(tab => tab.session);
-    const tabs = [...sessionTabs, ...restored.filter(tab => !tab.session && !sessionTabs.some(kept => kept.id === tab.id))];
+    const tabs = orderPinnedTabsFirst([...sessionTabs, ...controllerTabs, ...restored.filter(tab => !tab.session && !isControllerTab(tab) && !sessionTabs.some(kept => kept.id === tab.id))]);
     // A kept session tab is shown again only through its own activation.
     const base = saved ?? state;
     const unselected = (pane: WorkbenchPane) => {

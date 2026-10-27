@@ -149,6 +149,17 @@ identity; document cleanup checks retained canvas snapshots.
   content-tab batch close. Batch close skips pinned content and stops on a canceled
   close. Paths, unsaved changes and missing files are exposed by the tab chrome.
 
+Remote desktop is a controller-local non-document resource. Its key contains the
+account and target device, with no workspace or remote-filesystem scope. Reopening
+focuses its existing main tab; it never activates a Peer/session. These tabs remain
+available when the selected Peer changes, separately from that Peer’s file tabs.
+The dedicated view owns its controller and no EditorDocument. Hiding the view
+pauses a negotiated source; returning rebuilds viewing only. Manual pause stays
+paused, and unsupported/expired/in-flight connections require explicit reconnect
+and display selection. Its close guard retires input/media before fallback
+navigation or resource removal. Account replacement gates the old view while
+retaining its metadata. None of these tabs owns the target’s Agent work.
+
 ## Boundaries and verification
 
 This is a Web UI composition change over the existing filesystem and terminal

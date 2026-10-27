@@ -29,6 +29,8 @@ pub mod relay_failure;
 mod relay_http;
 pub mod routing_lease;
 pub mod rpc_execution;
+pub mod remote_desktop_device;
+pub mod remote_desktop_service;
 pub mod session_records;
 pub mod session_store;
 

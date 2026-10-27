@@ -16,7 +16,19 @@ struct OpenBitFunApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if MobileLaunchConfiguration.streamingRegressionPreview {
+            if MobileLaunchConfiguration.remoteDesktopAccountPreview {
+                #if DEBUG && targetEnvironment(simulator)
+                RemoteDesktopAccountProbeView()
+                #endif
+            } else if MobileLaunchConfiguration.remoteDesktopLayoutPreview {
+                #if DEBUG && targetEnvironment(simulator)
+                RemoteDesktopLayoutProbeView()
+                #endif
+            } else if MobileLaunchConfiguration.remoteDesktopProbePreview {
+                #if DEBUG && targetEnvironment(simulator)
+                RemoteDesktopMediaProbeView()
+                #endif
+            } else if MobileLaunchConfiguration.streamingRegressionPreview {
                 #if DEBUG
                 StreamingRegressionView()
                 #endif

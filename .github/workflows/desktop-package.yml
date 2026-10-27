@@ -36,7 +36,7 @@ on:
         required: false
         type: string
       target_platform:
-        description: "Build one Desktop platform as signed artifacts only; all retains full release publication."
+        description: "Build one Desktop platform as CI artifacts only; all retains full release publication."
         required: false
         default: all
         type: choice
@@ -44,6 +44,7 @@ on:
           - all
           - macos-arm64
           - macos-x64
+          - windows-x64
       relay_image_only:
         description: "Publish only the Relay Server image and signed descriptor (no Desktop packages)."
         required: false
@@ -175,7 +176,7 @@ jobs:
               (!/^\d+(,\d+)*$/.test(process.env.ARTIFACT_RUN_IDS) || target !== 'all' || process.env.RELAY_IMAGE_ONLY === 'true')) {
             throw new Error('Artifact finalization requires run IDs, target all, and no relay_image_only');
           }
-          if (!['all', 'macos-arm64', 'macos-x64'].includes(target)) {
+          if (!['all', 'macos-arm64', 'macos-x64', 'windows-x64'].includes(target)) {
             throw new Error(`Unsupported Desktop recovery target: ${target}`);
           }
           if (target !== 'all' && process.env.RELAY_IMAGE_ONLY === 'true') {

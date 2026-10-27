@@ -1,8 +1,9 @@
 import { useAccountIdentity } from '@/infrastructure/account-identity';
+import { isTauriRuntime } from '@/infrastructure/runtime';
 /**
  * Device & Connections center.
  *
- * Every connection uses the signed-in GitHub account. The detail views expose:
+ * Account connections and independent desktop pairing have separate owners:
  *   - My devices (account and peer-device control)
  *   - Phone or browser (official or locally hosted Relay)
  *   - Chat apps (Telegram / Feishu / WeChat)
@@ -55,6 +56,8 @@ import { isDeviceInvitation, invitationRelayUrl, OFFICIAL_RELAY_URL, remoteNetwo
 import { useNotification } from '@/shared/notification-system';
 import { copyTextToClipboard } from '@/shared/utils/textSelection';
 import { AccountPanel } from './AccountPanel';
+import { useRemoteDesktopService } from '@/infrastructure/remote-desktop/RemoteDesktopService';
+import { RemoteDesktopServicePanel } from './RemoteDesktopServicePanel';
 import {
   remoteConnectAPI,
   type ConnectionResult,
@@ -79,7 +82,7 @@ import './RemoteConnectDialog.scss';
 // ── Types ────────────────────────────────────────────────────────────
 
 type ActiveGroup = 'network' | 'bot' | 'account';
-type ActiveView = 'overview' | ActiveGroup;
+type ActiveView = 'overview' | 'desktop' | ActiveGroup;
 type ConnectionOwner = Exclude<ActiveGroup, 'account'>;
 type NetworkTab = RemoteNetworkMethod;
 type BotTab = 'telegram' | 'feishu' | 'weixin';
@@ -115,6 +118,7 @@ const NETWORK_TABS: { id: NetworkTab; labelKey: string; descriptionKey: string }
 ];
 
 const VIEW_COPY: Record<ActiveView, { titleKey: string; descriptionKey: string }> = {
+  desktop: { titleKey: 'remoteDesktop.serviceTitle', descriptionKey: 'remoteDesktop.serviceDescription' },
   overview: { titleKey: 'remoteConnect.overviewTitle', descriptionKey: 'remoteConnect.overviewIntro' },
   account: { titleKey: 'remoteConnect.myDevicesTitle', descriptionKey: 'remoteConnect.myDevicesDescription' },
   network: { titleKey: 'remoteConnect.mobileBrowserTitle', descriptionKey: 'remoteConnect.mobileBrowserDescription' },
@@ -162,7 +166,7 @@ interface RemoteConnectDialogProps {
    * Optional focused destination for contextual entry points. The generic
    * Device & Connections entry opens the overview.
    */
-  initialGroup?: ActiveGroup;
+  initialGroup?: ActiveGroup | 'desktop';
 }
 
 export const RemoteConnectDialog: React.FC<RemoteConnectDialogProps> = ({
@@ -177,6 +181,7 @@ export const RemoteConnectDialog: React.FC<RemoteConnectDialogProps> = ({
   } = useAccountLoginState();
   const accountIdentity = useAccountIdentity();
 
+  const desktopService = useRemoteDesktopService();
   const [activeView, setActiveView] = useState<ActiveView>(initialGroup ?? 'overview');
   const [networkTab, setNetworkTab] = useState<NetworkTab>(NETWORK_TABS[0].id);
   const [botTab, setBotTab] = useState<BotTab>(BOT_TABS[0].id);
@@ -1293,7 +1298,7 @@ export const RemoteConnectDialog: React.FC<RemoteConnectDialogProps> = ({
     state,
     disabled = false,
   }: {
-    view: ActiveGroup;
+    view: ActiveGroup | 'desktop';
     icon: React.ReactNode;
     title: string;
     description: string;
@@ -1359,6 +1364,14 @@ export const RemoteConnectDialog: React.FC<RemoteConnectDialogProps> = ({
           </h3>
         </div>
         <div className="openbitfun-remote-connect__overview-actions">
+          {isTauriRuntime() && renderOverviewAction({
+            view: 'desktop',
+            icon: <MonitorSmartphone size={18} />,
+            title: t('remoteDesktop.quickEntry'),
+            description: t('remoteDesktop.entryDescription'),
+            statusLabel: t(desktopService?.connected ? 'remoteDesktop.serviceConnected' : 'remoteDesktop.serviceNotConnected'),
+            statusPositive: desktopService?.connected === true,
+          })}
           {renderOverviewAction({
             view: 'account',
             icon: <Monitor size={18} />,
@@ -1567,6 +1580,7 @@ export const RemoteConnectDialog: React.FC<RemoteConnectDialogProps> = ({
             </div>
             <nav className="openbitfun-remote-connect__navigation" aria-label={t('remoteConnect.centerTitle')}>
               {renderNavigationItem('overview', t('remoteConnect.overviewTitle'), <LayoutGrid size={16} />)}
+              {isTauriRuntime() && renderNavigationItem('desktop', t('remoteDesktop.serviceTitle'), <Monitor size={16} />)}
               {renderNavigationItem('account', t('remoteConnect.myDevicesTitle'), <Monitor size={16} />)}
               {accountLoggedIn && renderNavigationItem('network', t('remoteConnect.mobileBrowserTitle'), <Smartphone size={16} />)}
               {accountLoggedIn && renderNavigationItem('bot', t('remoteConnect.chatAppsTitle'), <MessageCircle size={16} />)}
@@ -1632,7 +1646,10 @@ export const RemoteConnectDialog: React.FC<RemoteConnectDialogProps> = ({
               </div>
             ) : null}
 
-            {activeView === 'overview' ? renderOverview() : activeView === 'account' ? (
+            {activeView === 'desktop' ? <ScrollArea id="remote-connect-panel-desktop" className="openbitfun-remote-connect__desktop-scroll"
+              data-openbitfun-component="remote-connect-dialog" data-openbitfun-part="panel" data-openbitfun-group="desktop">
+              <RemoteDesktopServicePanel onClose={handleDialogClose} />
+            </ScrollArea> : activeView === 'overview' ? renderOverview() : activeView === 'account' ? (
               <div
                 id="remote-connect-panel-account"
                 data-openbitfun-component="remote-connect-dialog"

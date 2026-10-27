@@ -1,0 +1,9 @@
+@use './remote-connect-surface' as surface;
+
+.remote-desktop-trust {
+  &__body { padding: var(--openbitfun-space-4); gap: var(--openbitfun-space-3); }
+  &__hint { @include surface.supporting-text; }
+  &__actions { display: flex; flex-wrap: wrap; gap: var(--openbitfun-space-2); }
+  &__grant { display: flex; align-items: center; gap: var(--openbitfun-space-3); }
+  &__identity { @include surface.row-copy; min-width: 0; flex: 1; }
+}

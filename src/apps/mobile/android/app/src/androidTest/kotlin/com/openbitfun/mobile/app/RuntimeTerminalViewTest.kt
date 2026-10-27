@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
+import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.platform.app.InstrumentationRegistry
 import com.openbitfun.mobile.app.ui.remote.RuntimeTerminalDialog
 import com.openbitfun.mobile.app.ui.theme.OpenBitFunTheme
@@ -41,7 +42,7 @@ class RuntimeTerminalViewTest {
             }
         }
         compose.waitUntil(10_000) { intents.any { it is RemoteWorkspaceIntent.ResizeTerminal } }
-        onView(isAssignableFrom(WebView::class.java)).perform(click()).check { view, error ->
+        onView(isAssignableFrom(WebView::class.java)).inRoot(isDialog()).perform(click()).check { view, error ->
             if (error != null) throw error
             assertTrue("The native WebView must own focus, not only its DOM textarea", view.hasFocus())
         }
@@ -67,7 +68,7 @@ class RuntimeTerminalViewTest {
         }
         compose.waitUntil(10_000) { intents.any { it is RemoteWorkspaceIntent.ResizeTerminal } }
         var terminal: WebView? = null
-        onView(isAssignableFrom(WebView::class.java)).check { view, error ->
+        onView(isAssignableFrom(WebView::class.java)).inRoot(isDialog()).check { view, error ->
             if (error != null) throw error
             terminal = view as WebView
         }
@@ -89,7 +90,7 @@ class RuntimeTerminalViewTest {
         compose.runOnIdle { dark.value = true }
         compose.waitUntil(10_000) { snapshot() != light }
         assertTrue(snapshot().contains("retained output"))
-        onView(isAssignableFrom(WebView::class.java)).check { view, error ->
+        onView(isAssignableFrom(WebView::class.java)).inRoot(isDialog()).check { view, error ->
             if (error != null) throw error
             assertSame("A theme update must not recreate the PTY renderer", webView, view)
         }

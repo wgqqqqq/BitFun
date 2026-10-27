@@ -1,6 +1,6 @@
 import { useDeviceDirectory, resolveDeviceName, isDeviceControllable, deviceClientVersion, refreshDeviceDirectory } from '@/infrastructure/account/deviceDirectory';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { subscribeOverlayInteraction, createOverlayPortal, OverflowText, Button, Card, CardBody, CardHeader, Icon, IconButton, Input, ScrollArea, type IconSize } from '@openbitfun/ui';
+import { subscribeOverlayInteraction, createOverlayPortal, OverflowText, Button, Card, CardBody, CardFooter, CardHeader, Icon, IconButton, Input, ScrollArea, type IconSize } from '@openbitfun/ui';
 import { ArrowRightLeft, Check, ChevronLeft, ChevronRight, CircleAlert, House, MessageCircle, Pencil, X, Monitor, MonitorSmartphone, Smartphone, Undo2, Unplug } from 'lucide-react';
 import { useI18n } from '@/infrastructure/i18n/hooks/useI18n';
 import { getAppearanceOverlayHost } from '@/infrastructure/appearance/runtime/AppearanceOverlayHost';
@@ -35,6 +35,7 @@ interface DeviceStatusControlProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onManageDevices: () => void;
+  onOpenRemoteDesktop?: () => void;
 }
 
 /** Resolve the provider from backend ids, aliases, or display names. */
@@ -101,6 +102,7 @@ const DeviceStatusControl: React.FC<DeviceStatusControlProps> = ({
   open,
   onOpenChange,
   onManageDevices,
+  onOpenRemoteDesktop,
 }) => {
   useDeviceDirectory();
   const { t, formatNumber } = useI18n('common');
@@ -739,6 +741,18 @@ const DeviceStatusControl: React.FC<DeviceStatusControlProps> = ({
 
             </CardBody>
 
+            {onOpenRemoteDesktop && <CardFooter align="center" className="openbitfun-device-overview__actions">
+              <Button
+                className="openbitfun-device-overview__action"
+                variant="outline"
+                size="sm"
+                leadingIcon={<Icon glyph={Monitor} size="sm" />}
+                onClick={() => { onOpenChange(false); onOpenRemoteDesktop(); }}
+                data-testid="nav-device-status-remote-desktop"
+              >
+                {t('remoteDesktop.quickEntry')}
+              </Button>
+            </CardFooter>}
           </Card>
         </>,
         getAppearanceOverlayHost(),

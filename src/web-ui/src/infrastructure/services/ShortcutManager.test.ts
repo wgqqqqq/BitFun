@@ -143,6 +143,18 @@ describe('ShortcutManager platform primary modifier', () => {
     expect(callback).toHaveBeenCalledTimes(2);
   });
 
+  it('limits exclusive key ownership to the focused surface', () => {
+    setPlatform('Win32');
+    const callback = vi.fn();
+    shortcutManager.register('fixture.exclusive', { key: 'k', ctrl: true, allowInInput: true }, callback);
+    const target = document.createElement('div'); target.tabIndex = 0; target.dataset.shortcutExclusive = 'true'; document.body.append(target);
+    const key = () => target.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true }));
+    key(); expect(callback).toHaveBeenCalledTimes(1);
+    target.focus(); key(); expect(callback).toHaveBeenCalledTimes(1);
+    target.blur(); key(); expect(callback).toHaveBeenCalledTimes(2);
+    target.remove();
+  });
+
   it('maps logical Ctrl shortcuts to Command on macOS', () => {
     setPlatform('MacIntel');
     const callback = vi.fn();

@@ -78,8 +78,10 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(dark, showWelcomeNavigationProtection, showStartupBrand, showColdStart, allowColdStart) {
                     val welcomeIsVisible = showWelcomeNavigationProtection &&
                         !showStartupBrand && !showColdStart && !allowColdStart
-                    WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars =
-                        !dark && !welcomeIsVisible
+                    WindowCompat.getInsetsController(window, window.decorView).apply {
+                        isAppearanceLightStatusBars = !dark && !welcomeIsVisible
+                        isAppearanceLightNavigationBars = !dark && !welcomeIsVisible
+                    }
                 }
                 val target = remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
                 var origin by remember { mutableStateOf(Offset.Zero) }

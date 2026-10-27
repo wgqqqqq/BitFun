@@ -45,6 +45,7 @@ export class AppRootRuntime extends AppRootRuntimeComposition {
     // still running. Initialize its secure store first so the login path never
     // races the asynchronous cache and onboarding setup below.
     await this.settingsController.initializeCloudAccount(this.host.context());
+    await this.remoteDesktopServiceViewModel.init(this.host.context());
     await this.localeController.initialize(this.host.context());
     if (this.host.offerTaskNotifications) {
       await this.taskCompletionNotificationPort.offerOnboarding(
@@ -115,6 +116,7 @@ export class AppRootRuntime extends AppRootRuntimeComposition {
   }
 
   aboutToDisappear(): void {
+    this.remoteDesktopViewModel.close();
     this.miniAppViewModel.close();
     this.settingsController.stopPresencePolling();
     this.watchProvisionController.stop();
@@ -137,6 +139,10 @@ export class AppRootRuntime extends AppRootRuntimeComposition {
   }
 
   handleNavigationBack(route: AppRoute): boolean {
+    if (this.remoteDesktopViewModel.state.visible) {
+      this.remoteDesktopViewModel.close();
+      return true;
+    }
     if (this.appShellState.showConnectSheet) {
       this.appShellState.setConnectSheetVisible(false);
       return true;
@@ -162,6 +168,10 @@ export class AppRootRuntime extends AppRootRuntimeComposition {
   }
 
   handleRootBack(): boolean {
+    if (this.remoteDesktopViewModel.state.visible) {
+      this.remoteDesktopViewModel.close();
+      return true;
+    }
     if (this.appShellState.showConnectSheet) {
       this.appShellState.setConnectSheetVisible(false);
       return true;

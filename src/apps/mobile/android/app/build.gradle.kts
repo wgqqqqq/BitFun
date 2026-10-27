@@ -5,6 +5,27 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+abstract class StageRemoteDesktopAssets : DefaultTask() {
+    @get:InputDirectory abstract val sourceDirectory: DirectoryProperty
+    @get:OutputDirectory abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction fun stage() {
+        val destination = outputDirectory.get().dir("remote-desktop").asFile
+        destination.mkdirs()
+        listOf("index.html", "control.js", "receiver.js").forEach { name ->
+            sourceDirectory.file(name).get().asFile.copyTo(destination.resolve(name), overwrite = true)
+        }
+    }
+}
+
+val stageRemoteDesktopAssets by tasks.registering(StageRemoteDesktopAssets::class) {
+    sourceDirectory.set(file("../../../../shared/remote-desktop-media"))
+    outputDirectory.set(layout.buildDirectory.dir("generated/remoteDesktopAssets"))
+}
+androidComponents.onVariants { variant ->
+    variant.sources.assets?.addGeneratedSourceDirectory(stageRemoteDesktopAssets) { it.outputDirectory }
+}
+
 val releaseKeystorePath = providers.environmentVariable("OPENBITFUN_ANDROID_KEYSTORE").orNull
 val releaseKeystorePassword = providers.environmentVariable("OPENBITFUN_ANDROID_KEYSTORE_PASSWORD").orNull
 val releaseKeyAlias = providers.environmentVariable("OPENBITFUN_ANDROID_KEY_ALIAS").orNull

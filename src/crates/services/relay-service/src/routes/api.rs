@@ -30,6 +30,9 @@ pub struct AppState {
     /// Optional isolated browser origins for untrusted Page content and the
     /// trusted Relay account login UI.
     pub page_browser_auth: Option<Arc<crate::PageBrowserAuthConfig>>,
+    pub(crate) remote_desktop_associations: Arc<crate::realtime::RemoteDesktopAssociations>,
+    pub(crate) remote_desktop_turn: Option<Arc<crate::RemoteDesktopTurnConfig>>,
+    pub(crate) remote_desktop_pairing: Option<Arc<crate::RemoteDesktopPairingConfig>>,
 }
 
 // ── Health & Info ──────────────────────────────────────────────────────────
@@ -58,7 +61,7 @@ pub(crate) async fn health_check_for_host(
         status: "healthy".to_string(),
         version: host_version.to_string(),
         uptime_seconds: state.start_time.elapsed().as_secs(),
-        account_features: true,
+        account_features: state.remote_desktop_pairing.is_none(),
         device_connections: state.device_manager.connection_count(),
         pending_device_rpcs: state.device_manager.pending_rpc_count(),
         asset_store_bytes: state.asset_store.stored_bytes(),
@@ -79,7 +82,15 @@ pub async fn server_info() -> Json<ServerInfo> {
 }
 
 pub(crate) async fn server_info_for_host(host_version: &'static str) -> Json<ServerInfo> {
-    Json(ServerInfo {
+    server_info_for_service(host_version, false, false).await
+}
+
+pub(crate) async fn server_info_for_service(
+    host_version: &'static str,
+    remote_desktop: bool,
+    turn: bool,
+) -> Json<ServerInfo> {
+    let mut info = ServerInfo {
         name: "OpenBitFun Relay Server".to_string(),
         version: host_version.to_string(),
         protocol_version: 3,
@@ -92,5 +103,18 @@ pub(crate) async fn server_info_for_host(host_version: &'static str) -> Json<Ser
             // unknown kind outright, which would fail the whole login.
             "device_kind_cli_v1",
         ],
-    })
+    };
+    if remote_desktop {
+        info.name = "OpenBitFun Self-hosted Remote Desktop".into();
+        info.capabilities.extend([
+            "remote_desktop_pairing_v1",
+            "remote_desktop_route_v1",
+            "remote_desktop_credential_binding_v1",
+            "remote_desktop_controller_directory_v1",
+        ]);
+        if turn {
+            info.capabilities.push("remote_desktop_turn_v1");
+        }
+    }
+    Json(info)
 }

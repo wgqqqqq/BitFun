@@ -151,7 +151,7 @@ public data class CloudAccountDevice public constructor(
     public val deviceName: String,
     public val online: Boolean,
     public val lastSeenAt: Long?,
-    /** `desktop`, or null for a row the relay stored before kinds existed. */
+    /** `desktop` or `cli`, or null for a row the Relay stored before kinds existed. */
     public val deviceKind: String? = null,
     /**
      * Relay-computed mutual-control compatibility of this device with this one.
@@ -230,6 +230,19 @@ public class CloudAccountClient internal constructor(
 
     public fun closeAccount() { forgetPeerKeys(); realtime.value?.socket?.close() }
 
+    /** One explicit remote-desktop target. Never changes the selected Agent host. */
+    public suspend fun remoteDesktopChannel(
+        relayUrl: String, session: CloudAccountSession, targetDeviceId: String,
+    ): RemoteDesktopAccountChannel {
+        val base = remoteDesktopRelayUrl(relayUrl)
+        RemoteDesktopRpcWire.requireTarget(targetDeviceId)
+        val socket = connection(base, session.token)
+        val captured = realtime.value
+        val current = { captured != null && captured.socket === socket && realtime.value === captured }
+        return RemoteDesktopAccountChannel.open(client, base, session, targetDeviceId, socket,
+            captured ?: throw RemoteDesktopTransportException(RemoteDesktopTransportFailure.ACCOUNT_CHANGED), current, processingDispatcher)
+    }
+
     private val normalizedLegacyMobileDeviceNames =
         (KNOWN_NON_DESKTOP_DEVICE_NAMES + legacyMobileDeviceNames).mapTo(mutableSetOf()) {
             it.trim().lowercase()
@@ -268,7 +281,7 @@ public class CloudAccountClient internal constructor(
     }
 
     /**
-     * The account's controllable devices — desktops only.
+     * The account's session hosts — desktops and CLI hosts.
      *
      * A relay that stores device kinds already filters this list; the client
      * repeats the judgement so a phone stops listing itself and its peers

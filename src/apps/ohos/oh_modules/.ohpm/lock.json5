@@ -1,0 +1,60 @@
+{
+  "lockVersion": "1.0",
+  "settings": {
+    "resolveConflict": true,
+    "resolveConflictStrict": false,
+    "installAll": true
+  },
+  "overrides": {},
+  "overrideDependencyMap": {},
+  "modules": {
+    ".": {
+      "name": "",
+      "dependencies": {},
+      "devDependencies": {},
+      "dynamicDependencies": {},
+      "maskedByOverrideDependencyMap": false
+    },
+    "ability": {
+      "name": "ability",
+      "dependencies": {},
+      "devDependencies": {},
+      "dynamicDependencies": {},
+      "maskedByOverrideDependencyMap": false
+    },
+    "entry": {
+      "name": "entry",
+      "dependencies": {
+        "@ohos-rs/ability": {
+          "specifier": "file:ability",
+          "version": "file:ability"
+        },
+        "libopenbitfun_desktop_lib.so": {
+          "specifier": "file:entry/src/main/cpp/types/libopenbitfun_desktop_lib",
+          "version": "file:entry/src/main/cpp/types/libopenbitfun_desktop_lib"
+        }
+      },
+      "devDependencies": {},
+      "dynamicDependencies": {},
+      "maskedByOverrideDependencyMap": false
+    }
+  },
+  "packages": {
+    "@ohos-rs/ability@file:ability": {
+      "storePath": "ability",
+      "dependencies": {},
+      "dynamicDependencies": {},
+      "dev": false,
+      "dynamic": false,
+      "maskedByOverrideDependencyMap": false
+    },
+    "libopenbitfun_desktop_lib.so@file:entry/src/main/cpp/types/libopenbitfun_desktop_lib": {
+      "storePath": "entry/src/main/cpp/types/libopenbitfun_desktop_lib",
+      "dependencies": {},
+      "dynamicDependencies": {},
+      "dev": false,
+      "dynamic": false,
+      "maskedByOverrideDependencyMap": false
+    }
+  }
+}

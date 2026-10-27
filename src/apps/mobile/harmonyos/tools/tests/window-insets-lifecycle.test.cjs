@@ -23,7 +23,7 @@ function harness() {
     name => name === '@kit.ArkUI' ? { window } : { RemoteLogger: { info() {}, error() {} } },
     exports, value => value, () => {}
   );
-  return { requests, Binding: exports.WindowInsetsBinding };
+  return { requests, Binding: exports.WindowInsetsBinding, Bars: exports.WindowSystemBarService };
 }
 
 function appWindow(right) {
@@ -102,4 +102,29 @@ test('completion after the last unbind cannot seed the next generation cache', a
   assert.equal(next.right, 64);
   next.unbind();
   assert.equal(liveWindow.detached, 1);
+});
+
+
+test('media system icons remain readable across theme changes and restore the latest shell appearance', () => {
+  const { Bars } = harness();
+  const paints = [];
+  const app = { setWindowSystemBarProperties: value => { paints.push(value); return Promise.resolve(); } };
+  Bars.configureBarAppearance(app, 'normal-light', 'media');
+  const release = Bars.retainMediaAppearance();
+  Bars.configureBarAppearance(app, 'normal-dark', 'media');
+  assert.equal(paints.at(-1).statusBarContentColor, 'media');
+  release();
+  assert.equal(paints.at(-1).statusBarContentColor, 'normal-dark');
+  const count = paints.length;
+  release();
+  assert.equal(paints.length, count);
+});
+
+test('a media appearance opened before window readiness cannot leave media icons after exit', () => {
+  const { Bars } = harness();
+  const release = Bars.retainMediaAppearance();
+  release();
+  const paints = [];
+  Bars.configureBarAppearance({ setWindowSystemBarProperties: value => { paints.push(value); return Promise.resolve(); } }, 'normal', 'media');
+  assert.deepEqual(paints, [{ statusBarContentColor: 'normal', navigationBarContentColor: 'normal' }]);
 });

@@ -1,5 +1,8 @@
 import { HostSessionStream, HostSessionCallbacks, HostSessionSource, HostStreamHint, HostStreamPage, HostStreamReadRequest, HostStreamHintPlaintext, parseHostStreamHint } from './HostSessionStream';
 import { AccountRealtime } from './AccountRealtime';
+import { normalizeRemoteDesktopServiceUrl } from './RemoteDesktopServiceEndpoint';
+import { RemoteDesktopAccountChannel } from './RemoteDesktopAccountChannel';
+import { RemoteDesktopIceServer, RemoteDesktopPeerKey, RemoteDesktopRelayInfo, RemoteDesktopTurn, RemoteDesktopReply } from '../model/RemoteDesktopModels';
 import { CLIENT_PROTOCOL_VERSION, clientVersion } from './ClientBuild';
 import { normalizeAccountRelayUrl, OFFICIAL_RELAY_URL } from './AccountDeviceLink';
 import { http } from '@kit.NetworkKit';
@@ -186,21 +189,29 @@ function isHostDeviceRow(device: CloudAccountDeviceWire, selfDeviceId: string): 
 interface DeviceKeyPair { privateKey: Uint8Array; publicKey: Uint8Array; }
 
 export class CloudAccountClient {
+  private readonly desktopService: boolean;
+  constructor(desktopService: boolean = false) { this.desktopService = desktopService; }
+  private normalizeUrl(value: string): string {
+    return this.desktopService ? normalizeRemoteDesktopServiceUrl(value) : normalizeAccountRelayUrl(value);
+  }
   private realtime?: AccountRealtime;
   private realtimeUrl: string = '';
   private realtimeToken: string = '';
+  private accountConnectionGeneration: number = 0;
 
   private connection(relayUrl: string, token: string): AccountRealtime {
-    const url = normalizeAccountRelayUrl(relayUrl);
+    const url = this.normalizeUrl(relayUrl);
     if (!url) throw new Error('Invalid Relay URL');
     if (this.realtime && this.realtimeUrl === url && this.realtimeToken === token) return this.realtime;
     this.realtime?.close();
+    this.accountConnectionGeneration++;
     this.realtimeUrl = url; this.realtimeToken = token;
-    this.realtime = new AccountRealtime(url, token);
+    this.realtime = new AccountRealtime(url, token, this.desktopService);
     return this.realtime;
   }
 
   closeAccount(): void {
+    this.accountConnectionGeneration++;
     this.realtime?.close(); this.realtime = undefined;
     this.realtimeUrl = ''; this.realtimeToken = '';
     this.peerKeys.clear();
@@ -230,6 +241,63 @@ export class CloudAccountClient {
   }
 
   private readonly cipher: HarmonyRemoteCryptoCipher = new HarmonyRemoteCryptoCipher();
+
+  async pairDesktopService(endpoint: string, pairingKey: string, deviceId: string, name: string,
+    requestId: string, secret: Uint8Array): Promise<CloudAccountSession> {
+    if (!this.desktopService || !this.normalizeUrl(endpoint)) throw new Error('remote_desktop_service_required');
+    const info = await this.request<RemoteDesktopRelayInfo>(endpoint, '/api/info', 'GET', undefined, '', 5000, 16 * 1024);
+    if (!info.capabilities?.includes('remote_desktop_pairing_v1')) throw new Error('remote_desktop_service_required');
+    const pairingRequest: ProvisionDeviceRequest = {
+      device_id: deviceId, device_name: name, device_kind: DEVICE_KIND_MOBILE,
+      request_id: requestId, public_key: Encoding.bytesToBase64(X25519.scalarMultBase(secret))
+    };
+    const issued = await this.request<ProvisionDeviceWire>(endpoint, '/api/remote-desktop/pair', 'POST', pairingRequest, pairingKey, 15000, 16 * 1024);
+    if (issued.user_id !== 'remote-desktop-self-hosted' || issued.device_id !== deviceId || !issued.token || issued.token.length > 1024) {
+      throw new Error('invalid_pairing_response');
+    }
+    return { token: issued.token, userId: issued.user_id, masterKey: new Uint8Array(secret) };
+  }
+
+  async remoteDesktopChannel(relayUrl: string, session: CloudAccountSession, target: string): Promise<RemoteDesktopAccountChannel> {
+    if (!this.desktopService) throw new Error('remote_desktop_service_required');
+    const base = this.normalizeUrl(relayUrl);
+    if (!base || !/^[A-Za-z0-9_.-]{1,128}$/.test(target)) throw new Error('invalid_request');
+    if (!base.startsWith('https://') && !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:[0-9]+)?(\/|$)/.test(base)) throw new Error('remote_desktop_requires_https');
+    const socket = this.connection(base, session.token);
+    const generation = this.accountConnectionGeneration;
+    const info = await this.request<RemoteDesktopRelayInfo>(base, '/api/info', 'GET', undefined, '', 5000, 16 * 1024);
+    const capabilities = info.capabilities || [];
+    if (!capabilities.includes('remote_desktop_pairing_v1')) throw new Error('remote_desktop_service_required');
+    if (!capabilities.includes('remote_desktop_route_v1')) throw new Error('relay_upgrade_required');
+    if (!capabilities.includes('remote_desktop_turn_v1')) throw new Error('turn_unavailable');
+    const peer = await this.request<RemoteDesktopPeerKey>(base, `/api/devices/${encodeURIComponent(target)}/key`, 'GET', undefined, session.token, 5000, 16 * 1024);
+    if (peer.device_id !== target) throw new Error('device_identity_changed');
+    const publicKey = Encoding.base64ToBytes(peer.public_key);
+    if (publicKey.length !== 32) throw new Error('invalid_peer_key');
+    let key: Uint8Array;
+    try { key = await CloudAccountCrypto.deriveDeviceKey(session.masterKey, publicKey); }
+    catch (_error) { throw new Error('device_key_derivation_failed'); }
+    if (generation !== this.accountConnectionGeneration) { key.fill(0); throw new Error('account_changed'); }
+    return new RemoteDesktopAccountChannel({ socket, target, key, capabilities,
+      current: (): boolean => generation === this.accountConnectionGeneration,
+      turn: async (attachment: string): Promise<RemoteDesktopTurn> => {
+        if (!/^[A-Za-z0-9_.-]{1,128}$/.test(attachment)) throw new Error('invalid_request');
+        const result = await this.request<RemoteDesktopTurn>(base,
+          `/api/remote-desktop/turn?target_device_id=${encodeURIComponent(target)}&attach_id=${encodeURIComponent(attachment)}`, 'GET', undefined, session.token, 5000, 16 * 1024);
+        const now = Math.floor(Date.now() / 1000);
+        if (result.target_device_id !== target || result.attach_id !== attachment || !Number.isInteger(result.expires_at)
+          || result.expires_at <= now || result.expires_at > now + 660 || !Array.isArray(result.ice_servers)
+          || result.ice_servers.length === 0 || result.ice_servers.length > 4) throw new Error('invalid_turn_credentials');
+        result.ice_servers.forEach((server: RemoteDesktopIceServer): void => {
+          if (!Array.isArray(server.urls) || server.urls.length === 0 || server.urls.length > 4
+            || typeof server.username !== 'string' || server.username.length === 0 || server.username.length > 256
+            || typeof server.credential !== 'string' || server.credential.length === 0 || server.credential.length > 256
+            || server.urls.some((url: string): boolean => typeof url !== 'string' || url.length > 1024 || !/^turns?:[^\s]+$/.test(url))) throw new Error('invalid_turn_credentials');
+        });
+        return result;
+      }
+    });
+  }
 
   private authorizationGeneration: number = 0;
   private authorizationForeground: boolean = true;
@@ -558,10 +626,11 @@ export class CloudAccountClient {
     method: string,
     body?: Object,
     token: string = '',
-    readTimeoutMs: number = 120000
+    readTimeoutMs: number = 120000,
+    maxResponseBytes: number = 0
   ): Promise<T> {
     const request = http.createHttp();
-    const base = normalizeAccountRelayUrl(relayUrl);
+    const base = this.normalizeUrl(relayUrl);
     if (!base) throw new Error('Invalid Relay URL');
     // Timed so the watch has something to be slow relative to. Phone and watch
     // reach the same relay and the same desktop, so a gap between them is the
@@ -577,6 +646,8 @@ export class CloudAccountClient {
         connectTimeout: 15000,
         readTimeout: readTimeoutMs
       };
+      if (maxResponseBytes > 0) requestOptions.maxLimit = maxResponseBytes;
+      if (this.desktopService) requestOptions.maxRedirects = 0;
       let bodyBytes = 0;
       if (body !== undefined) {
         const encoded = JSON.stringify(body);
@@ -598,8 +669,14 @@ export class CloudAccountClient {
         let message = response.responseCode === 413 ? RemoteI18n.t('errors.payloadTooLarge') :
           `Relay request failed (HTTP ${response.responseCode}).`;
         try {
-          const error = JSON.parse(text) as RelayErrorResponse;
-          if (error.error) message = error.error;
+          if (path.startsWith('/api/remote-desktop/')) {
+            const error = JSON.parse(text) as RemoteDesktopReply;
+            const code = error.error?.code || '';
+            if (['turn_unavailable', 'authorization_unknown', 'authorization_expired', 'authorization_required', 'attachment_unavailable', 'forbidden', 'invalid_request'].includes(code)) message = code;
+          } else {
+            const error = JSON.parse(text) as RelayErrorResponse;
+            if (error.error) message = error.error;
+          }
         } catch (_err) {
           // Keep the status-based error when the relay did not return JSON.
         }
