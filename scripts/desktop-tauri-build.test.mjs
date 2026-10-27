@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   configureDesktopWebFontProfile,
+  configureWindowsCrt,
   configureWindowsSigning,
   prepareMacOSFlashgrepForSigning,
   prepareTauriConfig,
@@ -72,6 +73,16 @@ test('Desktop packaging selects the Web font profile from its target triple', ()
     configureDesktopWebFontProfile([], { env: {}, platform: 'linux' }),
     HARMONY_BUNDLED_FONT_PROFILE,
   );
+});
+
+test('Windows desktop builds select the CRT used by the pinned WebRTC archive', () => {
+  const env = { RUSTFLAGS: '-C opt-level=2' };
+  configureWindowsCrt('x86_64-pc-windows-msvc', env);
+  assert.equal(env.RUSTFLAGS, '-C opt-level=2 -C target-feature=+crt-static');
+  configureWindowsCrt('x86_64-pc-windows-msvc', env);
+  assert.equal(env.RUSTFLAGS, '-C opt-level=2 -C target-feature=+crt-static');
+  configureWindowsCrt('aarch64-apple-darwin', env);
+  assert.equal(env.RUSTFLAGS, '-C opt-level=2 -C target-feature=+crt-static');
 });
 
 test('macOS capture bridge avoids unresolved availability compiler runtime helpers', () => {

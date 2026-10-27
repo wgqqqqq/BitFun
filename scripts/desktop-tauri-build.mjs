@@ -59,6 +59,7 @@ async function main() {
   const sherpaRuntimeFiles = bundleOnly && target?.endsWith('-windows-msvc')
     ? stageWindowsSherpaRuntime({ desktopDir, targetDir, target, profile })
     : [];
+  configureWindowsCrt(target);
   const macosBundle = requestsMacosBundle(forward);
   if (macosBundle) requireModernIconTools();
   if (!bundleOnly) {
@@ -150,6 +151,16 @@ async function main() {
   }
 
   process.exit(r.status ?? 1);
+}
+
+// The pinned Windows WebRTC archive is built with the static MSVC CRT. Keep
+// Rust and cc-rs objects on the same CRT or link.exe reports RuntimeLibrary
+// mismatches and duplicate C++ runtime symbols.
+export function configureWindowsCrt(target, env = process.env) {
+  if (!target?.endsWith('-windows-msvc')) return;
+  const flag = '-C target-feature=+crt-static';
+  const existing = String(env.RUSTFLAGS || '').trim();
+  if (!existing.includes(flag)) env.RUSTFLAGS = `${existing} ${flag}`.trim();
 }
 
 export function requestsMacosBundle(args, platform = process.platform) {
