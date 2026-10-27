@@ -72,6 +72,11 @@ points under `src/apps/data-tools`.
 
 ## Fast builds
 
+The Desktop library emits only `rlib`, consumed by `src/main.rs` and Rust tests.
+Do not add `staticlib` or `cdylib` without a real native-library consumer: they
+add optimized link outputs even when Cargo is invoked with `--bins`. Mobile Web
+has its own delivery path and does not consume the Desktop Rust library.
+
 | Command | When to use |
 |---|---|
 | `pnpm run desktop:build:fast` | Debug build without bundling; fastest compile for manual testing |

@@ -50,6 +50,10 @@ pnpm run prepare:dsh-profile   # 可选：本地 DeepSeek Harness 会话
 
 ## 快速构建
 
+Desktop 库只生成 `rlib`，由 `src/main.rs` 和 Rust 测试消费。没有真实的原生库
+消费者时不要添加 `staticlib` 或 `cdylib`：即便 Cargo 使用 `--bins`，它们仍会
+增加原生库产物的编译和链接工作。Mobile Web 有独立交付路径，不消费 Desktop Rust 库。
+
 | 命令 | 使用场景 |
 |---|---|
 | `pnpm run desktop:build:fast` | Debug 构建，不打包；手动测试时编译最快 |
