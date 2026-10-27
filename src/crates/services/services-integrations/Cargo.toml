@@ -58,7 +58,6 @@ rustls = { workspace = true, optional = true }
 rustls-native-certs = { version = "0.8", optional = true }
 sha2 = { workspace = true, optional = true }
 hkdf = { workspace = true, optional = true }
-sherpa-onnx = { workspace = true, optional = true }
 sse-stream = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 tar = { workspace = true, optional = true }
@@ -80,6 +79,7 @@ terminal-core = { path = "../terminal", optional = true }
 x25519-dalek = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]
+sherpa-onnx = { workspace = true, optional = true, features = ["shared"] }
 keyring-core = { workspace = true, optional = true }
 schannel = { version = "0.1", optional = true }
 windows-native-keyring-store = { workspace = true, optional = true }
@@ -89,8 +89,12 @@ windows = { workspace = true, optional = true, features = [
 ] }
 
 [target.'cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))'.dependencies]
+sherpa-onnx = { workspace = true, optional = true, features = ["static"] }
 keyring-core = { workspace = true, optional = true }
 zbus-secret-service-keyring-store = { workspace = true, optional = true }
+
+[target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))'.dependencies]
+sherpa-onnx = { workspace = true, optional = true, features = ["static"] }
 
 [features]
 default = []

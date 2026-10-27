@@ -294,7 +294,7 @@ tokio-tungstenite = "0.29"
 sioc = { version = "0.5.0", default-features = false }
 
 # Local speech recognition
-sherpa-onnx = "1.13.4"
+sherpa-onnx = { version = "1.13.4", default-features = false }
 
 # MCP and remote runtimes
 # Keep RMCP's Reqwest TLS provider-neutral; services-core owns ring selection.

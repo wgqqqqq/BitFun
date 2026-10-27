@@ -8,7 +8,7 @@ const ARCHIVES = {
   'x86_64-apple-darwin': 'osx-x64-static-lib',
   'x86_64-unknown-linux-gnu': 'linux-x64-static-lib',
   'aarch64-unknown-linux-gnu': 'linux-aarch64-static-lib',
-  'x86_64-pc-windows-msvc': 'win-x64-static-MT-Release-lib',
+  'x86_64-pc-windows-msvc': 'win-x64-shared-MT-Release-lib',
 };
 
 export function prepareSherpaDev(root, env = process.env, runtime = {}) {

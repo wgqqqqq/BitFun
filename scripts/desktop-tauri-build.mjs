@@ -52,6 +52,13 @@ async function main() {
   console.log(`[release] channel=${releaseChannel.channel}`);
 
   const desktopDir = join(ROOT, 'src', 'apps', 'desktop');
+  const target = optionValue(forward, '--target');
+  const profile = forward.includes('--debug') ? 'debug' : optionValue(forward, '--profile') || 'release';
+  const targetDir = process.env.CARGO_TARGET_DIR
+    ? resolve(desktopDir, process.env.CARGO_TARGET_DIR) : join(ROOT, 'target');
+  const sherpaRuntimeFiles = bundleOnly && target?.endsWith('-windows-msvc')
+    ? stageWindowsSherpaRuntime({ desktopDir, targetDir, target, profile })
+    : [];
   const macosBundle = requestsMacosBundle(forward);
   if (macosBundle) requireModernIconTools();
   if (!bundleOnly) {
@@ -83,6 +90,7 @@ async function main() {
     miniappShell,
     resolution,
     releaseChannel,
+    sherpaRuntimeFiles,
   });
   const tauriBin = join(ROOT, 'node_modules', '.bin', 'tauri');
   const tauriArgs = [bundleOnly ? 'bundle' : 'build', '--config', tauriConfig, ...forward];
@@ -342,7 +350,7 @@ export function configureWindowsSigning(config, env = process.env, platform = pr
 
 export function prepareTauriConfig(
   baseConfigPath,
-  { desktopDir, flashgrepBinary, miniappShell, resolution, releaseChannel }
+  { desktopDir, flashgrepBinary, miniappShell, resolution, releaseChannel, sherpaRuntimeFiles = [] }
 ) {
   const config = JSON.parse(readFileSync(baseConfigPath, 'utf8'));
   if (resolution) {
@@ -362,6 +370,9 @@ export function prepareTauriConfig(
       toTauriPath(relative(desktopDir, miniappShell.sidecarBase))];
   }
   injectTargetFlashgrepResource(config, desktopDir, flashgrepBinary);
+  for (const file of sherpaRuntimeFiles) {
+    config.bundle.resources[toTauriPath(file.source)] = file.target;
+  }
   // The DeepSeek bridge is not a compile-time resource: cargo check and
   // desktop:dev must not require packages/dsh-acp/dist-profile. Official
   // packaging injects it here; frontend:build-all (beforeBuildCommand)
@@ -426,6 +437,26 @@ export function prepareTauriConfig(
   );
   writeFileSync(generatedConfig, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
   return generatedConfig;
+}
+
+function stageWindowsSherpaRuntime({ desktopDir, targetDir, target, profile }) {
+  const profileDir = join(targetDir, target, profile);
+  const dlls = readdirSync(profileDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.dll'))
+    .map((entry) => entry.name)
+    .filter((name) => /sherpa|onnx/i.test(name));
+  if (dlls.length === 0) {
+    throw new Error(`No Sherpa runtime DLLs found in ${profileDir}; build the Windows desktop target before bundling.`);
+  }
+  const stagingDir = join(desktopDir, 'gen', 'sherpa-runtime');
+  mkdirSync(stagingDir, { recursive: true });
+  return dlls.map((name) => {
+    copyFileSync(join(profileDir, name), join(stagingDir, name));
+    return {
+      source: `gen/sherpa-runtime/${name}`,
+      target: `resources/sherpa-onnx/${name}`,
+    };
+  });
 }
 
 const DSH_PROFILE_RESOURCE_SOURCE = '../../../packages/dsh-acp/dist-profile';
