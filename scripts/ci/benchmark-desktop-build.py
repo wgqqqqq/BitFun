@@ -2,6 +2,7 @@
 """Fork-only cold release experiments; never publishes product artifacts."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -17,7 +18,19 @@ import tomllib
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
-VARIANTS = ("baseline", "rlib", "rlib-codegen16")
+VARIANTS = ("baseline", "rlib", "rlib-codegen16", "rlib-serial", "rlib-native", "rlib-native-serial", "rlib-jobs1")
+CONTROLLED_VARIANTS = ("rlib-serial", "rlib-native", "rlib-native-serial", "rlib-jobs1")
+resource_spec = importlib.util.spec_from_file_location("benchmark_resources", Path(__file__).with_name("benchmark-resources.py"))
+resources = importlib.util.module_from_spec(resource_spec)
+resource_spec.loader.exec_module(resources)
+
+
+def wrapper_environment(variant, output):
+    return {"RUSTC_WRAPPER": str(ROOT / "scripts/ci/benchmark-rustc-wrapper.py"),
+            "OPENBITFUN_BENCH_WRAPPER_LOG": str(output / "rustc-invocations"),
+            "OPENBITFUN_BENCH_SERIAL_CORE": "1" if variant in ("rlib-serial", "rlib-native-serial") else "0",
+            "OPENBITFUN_BENCH_NATIVE_LIBS": "1" if variant in ("rlib-native", "rlib-native-serial") else "0"}
+
 NATIVE_TARGETS = {
     "x86_64-unknown-linux-gnu": "linux-x64",
     "aarch64-unknown-linux-gnu": "linux-aarch64",
@@ -120,9 +133,14 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--target-dir", required=True, type=Path)
     parser.add_argument("--jobs", type=int, default=os.cpu_count())
+    parser.add_argument("--instrument", action="store_true", help="Use identical rustc wrapper and richer system sampling in every compared arm")
     args = parser.parse_args()
     if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("GITHUB_REPOSITORY") != "wgqqqqq/BitFun":
         parser.error("This experiment must run in the authorized fork's Actions runner")
+    if args.target != "aarch64-apple-darwin" and (args.variant in CONTROLLED_VARIANTS or args.instrument):
+        parser.error("Instrumented causal controls currently require macOS ARM64")
+    if args.variant == "rlib-jobs1":
+        args.jobs = 1
     if args.jobs < 1:
         parser.error("jobs must be positive")
     output = args.output.resolve()
@@ -141,6 +159,11 @@ def main():
         lib = native_dir / lib.relative_to(output / "native")
         env = dict(os.environ, CARGO_TARGET_DIR=str(target_dir), CARGO_INCREMENTAL="0",
                    CARGO_TERM_COLOR="never", OPENBITFUN_TARGET_GC="0", SHERPA_ONNX_LIB_DIR=str(lib))
+        instrument = args.instrument or args.variant in CONTROLLED_VARIANTS
+        if instrument:
+            if any(os.getenv(k) for k in ['RUSTC_WRAPPER', 'RUSTC_WORKSPACE_WRAPPER', 'RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS']):
+                raise ValueError("Unexpected compiler wrapper or flags would confound the experiment")
+            env.update(wrapper_environment(args.variant, output))
         args_command = build_command(args.target, args.variant, args.jobs)
         info = {"variant": args.variant, "target": args.target, "command": args_command,
                 "source_sha": command_output(["git", "rev-parse", "HEAD"]),
@@ -154,6 +177,11 @@ def main():
                              "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT"]},
                 "scope": "Cold Rust release build; excludes downloads, frontend, sidecar, bundle, signing and notarization",
                 "memory_method": "500ms sampled process-tree RSS sum; shared pages may be counted more than once"}
+        info.update(instrumented=instrument,
+                    controls={"serial_core_metadata": env.get("OPENBITFUN_BENCH_SERIAL_CORE") == "1",
+                              "native_library_codegen": env.get("OPENBITFUN_BENCH_NATIVE_LIBS") == "1"},
+                    sampler_sha256=file_hash(ROOT / 'scripts/ci/benchmark-resources.py'),
+                    wrapper_sha256=file_hash(ROOT / 'scripts/ci/benchmark-rustc-wrapper.py') if instrument else None)
         (output / "environment.json").write_text(json.dumps(info, indent=2))
         (output / "source.patch").write_text(command_output(["git", "diff", "--", "src/apps/desktop/Cargo.toml"]))
         (output / "desktop-manifest.toml").write_text(manifest.read_text())
@@ -179,7 +207,11 @@ def main():
                         peaks["sampled_peak_process_rss_bytes"] = max([peaks["sampled_peak_process_rss_bytes"], *rss])
                         samples.write(json.dumps({"elapsed_s": time.perf_counter() - started, "tree_rss_bytes": sum(rss)}) + "\n")
                         stopped.wait(0.5)
-            monitor = threading.Thread(target=sample, daemon=True)
+            if instrument:
+                monitor = threading.Thread(target=resources.monitor_resources,
+                    args=(psutil, process.pid, output, stopped, started, peaks), daemon=True)
+            else:
+                monitor = threading.Thread(target=sample, daemon=True)
             monitor.start()
             while process.poll() is None:
                 try:
@@ -193,6 +225,23 @@ def main():
         result = dict(info, exit_code=process.returncode, wall_seconds=elapsed, **peaks, **collect_units(target_dir, output))
         if binary.exists():
             result.update(binary_bytes=binary.stat().st_size, binary_sha256=file_hash(binary))
+        if instrument:
+            invocations = [json.loads(p.read_text()) for p in (output / 'rustc-invocations').glob('*.json')]
+            main_units = [r for r in invocations if r['crate'] in ['openbitfun_core', 'openbitfun_desktop_lib', 'openbitfun_desktop'] and '--target' in r['actual_args']]
+            if process.returncode == 0:
+                if len(main_units) != 3 or any(r.get('exit_code') != 0 for r in main_units):
+                    raise ValueError("Missing successful Core/Desktop wrapper observations")
+                core = next(r for r in main_units if r['crate'] == 'openbitfun_core')
+                desktop = next(r for r in main_units if r['crate'] == 'openbitfun_desktop_lib')
+                if result['controls']['serial_core_metadata']:
+                    if not any(m['deferred'] for m in core['metadata']) or desktop['start_epoch'] < core['end_epoch']:
+                        raise ValueError("Core metadata barrier did not prevent Desktop overlap")
+                result['core_desktop_overlap_seconds'] = max(0, min(core['end_epoch'], desktop['end_epoch']) - max(core['start_epoch'], desktop['start_epoch']))
+                result['rustc_user_seconds'] = sum(r.get('user_seconds', 0) for r in invocations)
+                result['rustc_system_seconds'] = sum(r.get('system_seconds', 0) for r in invocations)
+                result['native_codegen_invocations'] = sum(r['native_codegen'] for r in invocations)
+            (output / 'critical-invocations.json').write_text(json.dumps(main_units, indent=2))
+            result['sampler_status'] = json.loads((output / 'sampler-status.json').read_text())
         (output / "result.json").write_text(json.dumps(result, indent=2))
         print(json.dumps(result, indent=2), flush=True)
         if process.returncode:

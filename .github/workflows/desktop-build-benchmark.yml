@@ -14,7 +14,11 @@ on:
         description: Isolated optimization variant
         type: choice
         default: all
-        options: [all, baseline, rlib, rlib-codegen16, sequential, sequential-ab, sequential-bc]
+        options: [all, baseline, rlib, rlib-codegen16, sequential, sequential-ab, sequential-bc, causal, rlib-serial, rlib-native, rlib-native-serial, rlib-jobs1]
+      instrument:
+        description: Collect CPU, system memory, swap, and actual compiler phase evidence
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -37,9 +41,12 @@ jobs:
           import fs from 'node:fs';
           const platforms = JSON.parse(fs.readFileSync('scripts/desktop-package-platforms.json'));
           const selected = platforms.filter(p => process.env.SELECT_PLATFORM === 'all' || p.name === process.env.SELECT_PLATFORM);
-          const variants = process.env.SELECT_VARIANT.startsWith('sequential')
+          if (['causal', 'rlib-serial', 'rlib-native', 'rlib-native-serial', 'rlib-jobs1'].includes(process.env.SELECT_VARIANT) && process.env.SELECT_PLATFORM !== 'macos-arm64') throw new Error('Causal experiments require macos-arm64');
+          const variants = process.env.SELECT_VARIANT === 'causal'
+            ? ['baseline', 'rlib', 'rlib-serial', 'rlib-native', 'rlib-native-serial', 'rlib-jobs1']
+            : process.env.SELECT_VARIANT.startsWith('sequential')
             ? [process.env.SELECT_VARIANT]
-            : ['baseline', 'rlib', 'rlib-codegen16'].filter(v => process.env.SELECT_VARIANT === 'all' || v === process.env.SELECT_VARIANT);
+            : (process.env.SELECT_VARIANT === 'all' ? ['baseline', 'rlib', 'rlib-codegen16'] : ['baseline', 'rlib', 'rlib-codegen16', 'rlib-serial', 'rlib-native', 'rlib-native-serial', 'rlib-jobs1'].filter(v => v === process.env.SELECT_VARIANT));
           if (!selected.length || !variants.length) throw new Error('Empty benchmark matrix');
           fs.appendFileSync(process.env.GITHUB_OUTPUT, 'platforms=' + JSON.stringify(selected) + '\nvariants=' + JSON.stringify(variants) + '\n');
           NODE
@@ -102,6 +109,7 @@ jobs:
       - name: Measure cold Rust release build
         shell: bash
         env:
+          BENCHMARK_INSTRUMENT: ${{ inputs.instrument || inputs.variant == 'causal' }}
           BENCHMARK_VARIANT: ${{ matrix.variant }}
           BENCHMARK_TARGET: ${{ matrix.platform.target }}
         run: |
@@ -112,11 +120,12 @@ jobs:
                     'sequential-ab': ['baseline', 'rlib'],
                     'sequential-bc': ['rlib', 'rlib-codegen16']}
           variants = groups.get(selected, [selected])
+          instrumentation = ['--instrument'] if os.environ.get('BENCHMARK_INSTRUMENT') == 'true' else []
           for variant in variants:
               target = pathlib.Path(os.environ['RUNNER_TEMP']) / ('desktop-benchmark-' + variant)
               subprocess.run(['python', 'scripts/ci/benchmark-desktop-build.py',
                   '--variant', variant, '--target', os.environ['BENCHMARK_TARGET'],
-                  '--target-dir', str(target), '--output', 'benchmark-results/' + variant], check=True)
+                  '--target-dir', str(target), '--output', 'benchmark-results/' + variant, *instrumentation], check=True)
               # Prevent cumulative disk pressure; every variant starts fully cold.
               shutil.rmtree(target)
               shutil.rmtree(pathlib.Path('benchmark-results') / (variant + '-native'))
