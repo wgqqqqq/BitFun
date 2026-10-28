@@ -35,8 +35,12 @@ struct WindowsInstallState {
 
 const MIN_WINDOWS_APP_EXE_BYTES: u64 = 5 * 1024 * 1024;
 const PAYLOAD_MANIFEST_FILE: &str = "payload-manifest.json";
-const REQUIRED_PAYLOAD_FILES: [&str; 6] = [
+const REQUIRED_PAYLOAD_FILES: [&str; 10] = [
     MAIN_APP_EXE,
+    "sherpa-onnx-c-api.dll",
+    "sherpa-onnx-cxx-api.dll",
+    "onnxruntime.dll",
+    "onnxruntime_providers_shared.dll",
     "frontend/dist/index.html",
     "mobile-web/dist/index.html",
     "resources/ext-host/extension-host.js",

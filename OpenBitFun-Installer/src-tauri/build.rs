@@ -5,8 +5,12 @@ use std::path::{Path, PathBuf};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
-const REQUIRED_PAYLOAD_FILES: [&str; 6] = [
+const REQUIRED_PAYLOAD_FILES: [&str; 10] = [
     "openbitfun-desktop.exe",
+    "sherpa-onnx-c-api.dll",
+    "sherpa-onnx-cxx-api.dll",
+    "onnxruntime.dll",
+    "onnxruntime_providers_shared.dll",
     "frontend/dist/index.html",
     "mobile-web/dist/index.html",
     "resources/ext-host/extension-host.js",

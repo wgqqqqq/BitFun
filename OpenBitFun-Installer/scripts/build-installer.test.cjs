@@ -10,6 +10,7 @@ const {
   getPayloadSourceExeName,
   resolveAppExePath,
   shouldCopySiblingRuntimeFile,
+  stageWindowsSherpaRuntime,
   validateRequiredPayloadFiles,
 } = require("./build-installer.cjs");
 
@@ -64,6 +65,26 @@ test("payload validation requires every desktop runtime surface", () => {
     () => validateRequiredPayloadFiles(payload, manifest),
     /frontend\/dist\/index\.html/
   );
+});
+
+test("Windows Sherpa and ONNX DLLs are staged beside the desktop executable", () => {
+  const payload = fs.mkdtempSync(path.join(os.tmpdir(), "openbitfun-sherpa-payload-"));
+  const resourceDir = path.join(payload, "resources", "sherpa-onnx");
+  fs.mkdirSync(resourceDir, { recursive: true });
+  const manifest = { files: [] };
+  const names = [
+    "sherpa-onnx-c-api.dll",
+    "sherpa-onnx-cxx-api.dll",
+    "onnxruntime.dll",
+    "onnxruntime_providers_shared.dll",
+  ];
+  for (const name of names) fs.writeFileSync(path.join(resourceDir, name), name);
+
+  assert.deepEqual(stageWindowsSherpaRuntime(payload, manifest).sort(), names.sort());
+  for (const name of names) {
+    assert.equal(fs.readFileSync(path.join(payload, name), "utf8"), name);
+    assert.ok(manifest.files.some((file) => file.path === name));
+  }
 });
 
 test("Cargo implementation locks are not copied into the installer", () => {
