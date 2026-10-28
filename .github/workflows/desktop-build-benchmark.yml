@@ -14,7 +14,17 @@ on:
         description: Isolated optimization variant
         type: choice
         default: all
-        options: [all, baseline, rlib, rlib-codegen16, sequential, sequential-ab, sequential-bc, causal, rlib-serial, rlib-native, rlib-native-serial, rlib-jobs1]
+        options: [all, baseline, rlib, rlib-codegen16, sequential, sequential-ab, sequential-bc, causal-pair, causal, rlib-serial, rlib-native, rlib-native-serial, rlib-jobs1]
+      pair_left:
+        description: First causal-pair arm (separate cold target)
+        type: choice
+        default: rlib
+        options: [baseline, rlib, rlib-serial, rlib-native, rlib-native-serial, rlib-jobs1]
+      pair_right:
+        description: Second causal-pair arm (separate cold target)
+        type: choice
+        default: rlib-serial
+        options: [baseline, rlib, rlib-serial, rlib-native, rlib-native-serial, rlib-jobs1]
       instrument:
         description: Collect CPU, system memory, swap, and actual compiler phase evidence
         type: boolean
@@ -41,9 +51,10 @@ jobs:
           import fs from 'node:fs';
           const platforms = JSON.parse(fs.readFileSync('scripts/desktop-package-platforms.json'));
           const selected = platforms.filter(p => process.env.SELECT_PLATFORM === 'all' || p.name === process.env.SELECT_PLATFORM);
-          if (['causal', 'rlib-serial', 'rlib-native', 'rlib-native-serial', 'rlib-jobs1'].includes(process.env.SELECT_VARIANT) && process.env.SELECT_PLATFORM !== 'macos-arm64') throw new Error('Causal experiments require macos-arm64');
+          if (['causal', 'causal-pair', 'rlib-serial', 'rlib-native', 'rlib-native-serial', 'rlib-jobs1'].includes(process.env.SELECT_VARIANT) && process.env.SELECT_PLATFORM !== 'macos-arm64') throw new Error('Causal experiments require macos-arm64');
           const variants = process.env.SELECT_VARIANT === 'causal'
             ? ['baseline', 'rlib', 'rlib-serial', 'rlib-native', 'rlib-native-serial', 'rlib-jobs1']
+            : process.env.SELECT_VARIANT === 'causal-pair' ? ['causal-pair']
             : process.env.SELECT_VARIANT.startsWith('sequential')
             ? [process.env.SELECT_VARIANT]
             : (process.env.SELECT_VARIANT === 'all' ? ['baseline', 'rlib', 'rlib-codegen16'] : ['baseline', 'rlib', 'rlib-codegen16', 'rlib-serial', 'rlib-native', 'rlib-native-serial', 'rlib-jobs1'].filter(v => v === process.env.SELECT_VARIANT));
@@ -109,8 +120,10 @@ jobs:
       - name: Measure cold Rust release build
         shell: bash
         env:
-          BENCHMARK_INSTRUMENT: ${{ inputs.instrument || inputs.variant == 'causal' }}
+          BENCHMARK_INSTRUMENT: ${{ inputs.instrument || inputs.variant == 'causal' || inputs.variant == 'causal-pair' }}
           BENCHMARK_VARIANT: ${{ matrix.variant }}
+          BENCHMARK_PAIR_LEFT: ${{ inputs.pair_left }}
+          BENCHMARK_PAIR_RIGHT: ${{ inputs.pair_right }}
           BENCHMARK_TARGET: ${{ matrix.platform.target }}
         run: |
           python - <<'PY'
@@ -120,6 +133,11 @@ jobs:
                     'sequential-ab': ['baseline', 'rlib'],
                     'sequential-bc': ['rlib', 'rlib-codegen16']}
           variants = groups.get(selected, [selected])
+          if selected == 'causal-pair':
+              variants = [os.environ['BENCHMARK_PAIR_LEFT'], os.environ['BENCHMARK_PAIR_RIGHT']]
+              if len(set(variants)) != 2:
+                  raise ValueError('Causal pair must select two different arms')
+
           instrumentation = ['--instrument'] if os.environ.get('BENCHMARK_INSTRUMENT') == 'true' else []
           for variant in variants:
               target = pathlib.Path(os.environ['RUNNER_TEMP']) / ('desktop-benchmark-' + variant)
