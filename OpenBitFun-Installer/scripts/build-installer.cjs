@@ -28,6 +28,10 @@ const STRICT_PAYLOAD_VALIDATION = !isDev;
 const MIN_APP_EXE_BYTES = 5 * 1024 * 1024;
 const REQUIRED_PAYLOAD_FILES = [
   "openbitfun-desktop.exe",
+  "sherpa-onnx-c-api.dll",
+  "sherpa-onnx-cxx-api.dll",
+  "onnxruntime.dll",
+  "onnxruntime_providers_shared.dll",
   "frontend/dist/index.html",
   "mobile-web/dist/index.html",
   "resources/ext-host/extension-host.js",
@@ -207,6 +211,24 @@ function validateRequiredPayloadFiles(payloadDir, manifest) {
   }
 }
 
+function stageWindowsSherpaRuntime(payloadDir, manifest) {
+  const runtimeDir = path.join(payloadDir, "resources", "sherpa-onnx");
+  if (!fs.existsSync(runtimeDir)) return [];
+
+  const dlls = fs.readdirSync(runtimeDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".dll"))
+    .map((entry) => entry.name);
+  for (const name of dlls) {
+    writeFileWithManifest(
+      path.join(runtimeDir, name),
+      path.join(payloadDir, name),
+      manifest,
+      payloadDir
+    );
+  }
+  return dlls;
+}
+
 function main() {
   if (showHelp) {
     printHelpAndExit();
@@ -300,6 +322,15 @@ if (appExePath) {
     log(`Copied runtime directory: ${dirName}`);
   }
 
+  // Sherpa and ONNX DLLs are bundled as Tauri resources for updater layouts,
+  // but Windows resolves native dependencies beside the desktop executable.
+  // Stage them at the payload root so the custom installer extracts them next
+  // to openbitfun-desktop.exe.
+  const sherpaDlls = stageWindowsSherpaRuntime(PAYLOAD_DIR, manifest);
+  for (const name of sherpaDlls) {
+    log(`Staged Windows native runtime beside desktop executable: ${name}`);
+  }
+
   if (STRICT_PAYLOAD_VALIDATION) {
     try {
       validateRequiredPayloadFiles(PAYLOAD_DIR, manifest);
@@ -364,4 +395,5 @@ module.exports = {
   resolveCargoTargetDir,
   shouldCopySiblingRuntimeFile,
   validateRequiredPayloadFiles,
+  stageWindowsSherpaRuntime,
 };
