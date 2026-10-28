@@ -7,10 +7,7 @@ description = "OpenBitFun Desktop Application (Tauri)"
 
 [lib]
 name = "openbitfun_desktop_lib"
-# The desktop executable consumes this Rust library directly. No mobile or FFI
-# host consumes a static/shared library; producing those adds native codegen,
-# archives, and linking for artifacts that are never packaged.
-crate-type = ["rlib"]
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
 name = "openbitfun-desktop"
