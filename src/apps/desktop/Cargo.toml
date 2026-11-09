@@ -108,6 +108,7 @@ wry = { workspace = true }
 bitflags = { workspace = true }
 core-foundation = { workspace = true }
 core-graphics = { workspace = true }
+foreign-types = { workspace = true }
 dispatch = { workspace = true }
 libc = { workspace = true }
 objc2 = { workspace = true, features = ["exception"] }
