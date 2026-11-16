@@ -59,6 +59,7 @@ jobs:
           EOF
           codesign --force --options runtime --timestamp --sign "${APPLE_SIGNING_IDENTITY}" "${app_dir}"
           ditto -c -k --keepParent "${app_dir}" "${probe_dir}/NotaryProbe.zip"
+          codesign -dvvv "${app_dir}" 2>&1 | grep -E "TeamIdentifier|Authority=Developer ID Application"
 
       - name: Submit probe to Apple notarization
         shell: bash
